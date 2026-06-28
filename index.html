@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Euro Motors IT Inventory Management System — Enterprise asset tracking, analytics, and intelligent inventory management." />
+    <title>Euro Motors IT — Inventory Management System</title>
+    <!-- Anti-flash: apply theme before any paint -->
+    <script>
+      (function() {
+        var theme = localStorage.getItem('euromotors-theme') || 'dark';
+        if (theme === 'dark') {
+          document.documentElement.classList.add('dark');
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
