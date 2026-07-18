@@ -38,9 +38,16 @@ export function AuthProvider({ children }) {
         body: JSON.stringify({ email, password })
       });
       
-      const data = await response.json();
+      const text = await response.text();
+      let data;
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch (parseErr) {
+        throw new Error(`Invalid server response (${response.status}). Is the backend running?`);
+      }
+
       if (!response.ok) {
-        throw new Error(data.error || 'Login failed');
+        throw new Error(data.error || `Login failed with status ${response.status}`);
       }
       
       const authUser = data.user;
