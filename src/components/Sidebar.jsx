@@ -25,7 +25,7 @@ import {
 import { clsx } from 'clsx';
 import { useAuth } from '../context/AuthContext';
 
-export default function Sidebar({ isOpen, setIsOpen }) {
+export default function Sidebar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [isPinned, setIsPinned] = useState(false);
@@ -73,20 +73,12 @@ export default function Sidebar({ isOpen, setIsOpen }) {
 
   return (
     <>
-      {isOpen && (
-        <div 
-          className="fixed inset-0 bg-slate-900/50 z-20 md:hidden backdrop-blur-sm transition-opacity"
-          onClick={() => setIsOpen(false)}
-        />
-      )}
-
       <aside 
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         className={clsx(
-          "fixed md:static inset-y-0 left-0 z-30 bg-[#1e293b] text-slate-300 flex flex-col transition-all duration-300 ease-in-out",
-          isOpen ? "translate-x-0 w-64" : "-translate-x-full md:translate-x-0",
-          !isOpen && isExpanded ? "md:w-64" : (!isOpen && !isExpanded ? "md:w-20" : "")
+          "hidden md:flex md:flex-col inset-y-0 left-0 z-30 bg-[#1e293b] text-slate-300 transition-all duration-300 ease-in-out",
+          isExpanded ? "w-64" : "w-20"
         )}
       >
         <div className="flex items-center justify-between h-14 px-4 bg-slate-900/50 shrink-0 overflow-hidden">
@@ -108,9 +100,6 @@ export default function Sidebar({ isOpen, setIsOpen }) {
             >
               {isPinned ? <Pin className="w-4 h-4 text-blue-400" /> : <PinOff className="w-4 h-4" />}
             </button>
-            <button onClick={() => setIsOpen(false)} className="md:hidden p-1 hover:bg-slate-700 rounded-lg transition-colors">
-              <X className="w-5 h-5 text-slate-400" />
-            </button>
           </div>
         </div>
 
@@ -125,7 +114,6 @@ export default function Sidebar({ isOpen, setIsOpen }) {
                 key={item.name}
                 to={item.path}
                 title={!isExpanded ? item.name : undefined}
-                onClick={() => setIsOpen(false)}
                 className={({ isActive }) => clsx(
                   "relative flex items-center gap-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-300 group active:scale-[0.97] ease-out",
                   isExpanded ? "px-3" : "justify-center px-0",

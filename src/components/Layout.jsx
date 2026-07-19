@@ -1,24 +1,23 @@
-import { useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import CommandPalette from './CommandPalette';
+import MobileNav from './MobileNav';
 
 export default function Layout() {
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
       <CommandPalette />
       
-      {/* Sidebar */}
-      <Sidebar isOpen={isMobileMenuOpen} setIsOpen={setIsMobileMenuOpen} />
+      {/* Sidebar (Desktop Only) */}
+      <Sidebar />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 relative">
-        <Header onMenuClick={() => setIsMobileMenuOpen(true)} />
+      <div className="flex-1 flex flex-col min-w-0 relative pb-16 md:pb-0">
+        <Header />
         
         {/* Scrollable Main Area */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col bg-slate-50 dark:bg-slate-900 transition-colors duration-300 relative">
@@ -40,6 +39,9 @@ export default function Layout() {
           </footer>
         </div>
       </div>
+
+      {/* Mobile Navigation */}
+      <MobileNav />
     </div>
   );
 }
