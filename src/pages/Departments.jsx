@@ -197,11 +197,11 @@ export default function Departments() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {departments.length === 0 ? (
-          <div className="col-span-full py-12 text-center bg-white rounded-2xl border border-slate-100">
+          <div className="col-span-full py-12 text-center bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-700">
             <p className="text-slate-500">No departments configured.</p>
           </div>
         ) : departments.map(dept => (
-          <div key={dept.id} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow relative">
+          <div key={dept.id} className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md transition-shadow relative">
             <div className="absolute top-6 right-6 flex items-center gap-2">
               {canEdit && (
                 <div className="flex bg-slate-50 rounded-lg p-1 mr-2 opacity-50 hover:opacity-100 transition-opacity">

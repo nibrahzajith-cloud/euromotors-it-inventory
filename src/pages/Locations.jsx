@@ -197,11 +197,11 @@ export default function Locations() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {locations.length === 0 ? (
-          <div className="col-span-full py-12 text-center bg-white rounded-2xl border border-slate-100">
+          <div className="col-span-full py-12 text-center bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-700">
             <p className="text-slate-500">No locations configured.</p>
           </div>
         ) : locations.map(loc => (
-          <div key={loc.id} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow relative flex flex-col justify-between">
+          <div key={loc.id} className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md transition-shadow relative flex flex-col justify-between">
             <div>
               <div className="absolute top-6 right-6 flex items-center gap-2">
                 {canEdit && (
