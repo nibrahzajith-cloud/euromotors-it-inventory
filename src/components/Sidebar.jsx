@@ -81,12 +81,7 @@ export default function Sidebar() {
           isExpanded ? "w-64" : "w-20"
         )}
       >
-        <div className="flex items-center justify-between h-14 px-4 bg-slate-900/50 shrink-0 overflow-hidden">
-          <div className="flex items-center gap-2 text-white font-semibold text-lg tracking-tight whitespace-nowrap">
-            <span className={clsx("transition-opacity duration-300", !isExpanded ? "opacity-0 w-0 hidden" : "opacity-100")}>
-              Euro Motors IT
-            </span>
-          </div>
+        <div className="flex items-center justify-end h-14 px-4 bg-slate-900/50 shrink-0 overflow-hidden">
           <div className="flex items-center gap-2 shrink-0">
             <button 
               onClick={() => setIsPinned(!isPinned)} 
