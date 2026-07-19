@@ -77,7 +77,7 @@ export default function Sidebar() {
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         className={clsx(
-          "hidden md:flex md:flex-col inset-y-0 left-0 z-30 bg-gradient-to-b from-slate-900 to-slate-950 text-slate-300 border-r border-white/5 transition-all duration-300 ease-in-out",
+          "hidden md:flex md:flex-col inset-y-0 left-0 z-30 bg-black text-slate-300 border-r border-white/5 transition-all duration-300 ease-in-out",
           isExpanded ? "w-64" : "w-20"
         )}
       >
@@ -110,8 +110,8 @@ export default function Sidebar() {
                   "relative flex items-center gap-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-300 group active:scale-[0.97] ease-out",
                   isExpanded ? "px-3" : "justify-center px-0",
                   isActive 
-                    ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-900/40" 
-                    : "hover:bg-white/5 hover:text-white hover:translate-x-1"
+                    ? "bg-gradient-to-r from-blue-600/30 to-blue-600/5 text-blue-400 shadow-[inset_4px_0_0_0_#3b82f6] shadow-blue-900/40" 
+                    : "hover:bg-slate-800/60 hover:text-white hover:translate-x-1"
                 )}
               >
                 <div className={clsx(
