@@ -83,9 +83,6 @@ export default function Sidebar() {
       >
         <div className="flex items-center justify-between h-14 px-4 bg-slate-900/50 shrink-0 overflow-hidden">
           <div className="flex items-center gap-2 text-white font-semibold text-lg tracking-tight whitespace-nowrap">
-            <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shrink-0 p-0.5 overflow-hidden shadow-sm">
-              <img src="/logo.png" alt="Euro Motors" className="w-full h-full object-contain" />
-            </div>
             <span className={clsx("transition-opacity duration-300", !isExpanded ? "opacity-0 w-0 hidden" : "opacity-100")}>
               Euro Motors IT
             </span>
