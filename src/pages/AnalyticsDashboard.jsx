@@ -188,7 +188,7 @@ export default function AnalyticsDashboard() {
                <button onClick={() => setAutoRefresh(!autoRefresh)} className="ml-2 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300">Toggle</button>
             </div>
             <button 
-               onClick={() => navigate('/dashboard/deep/main')}
+               onClick={() => navigate('/reports')}
                className="px-4 py-2 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/10 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors dark:backdrop-blur-sm"
             >
                <History className="w-4 h-4 text-slate-500 dark:text-slate-400" />

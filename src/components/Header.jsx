@@ -57,12 +57,16 @@ export default function Header() {
       <div className="flex items-center gap-4 flex-1">
         
         {/* Search Bar */}
-        <div className="hidden sm:flex items-center bg-slate-100 dark:bg-white/[0.04] px-3 py-2 rounded-lg w-96 focus-within:ring-2 focus-within:ring-blue-500/50 border border-transparent dark:border-white/[0.06] transition-all">
-          <Search className="w-5 h-5 text-slate-400" />
+        <div 
+          onClick={() => window.dispatchEvent(new Event('open-command-palette'))}
+          className="hidden sm:flex items-center bg-slate-100 dark:bg-white/[0.04] px-3 py-2 rounded-lg w-96 hover:bg-slate-200 dark:hover:bg-white/[0.08] border border-transparent dark:border-white/[0.06] transition-all cursor-text group"
+        >
+          <Search className="w-5 h-5 text-slate-400 group-hover:text-slate-500 dark:group-hover:text-slate-300 transition-colors" />
           <input 
             type="text"
-            placeholder="Search assets, employees..." 
-            className="bg-transparent border-none outline-none ml-2 w-full text-sm placeholder:text-slate-400 text-slate-700 dark:text-slate-200"
+            readOnly
+            placeholder="Search assets, employees... (Press Ctrl+K)" 
+            className="bg-transparent border-none outline-none ml-2 w-full text-sm placeholder:text-slate-400 text-slate-700 dark:text-slate-200 cursor-text"
           />
         </div>
       </div>

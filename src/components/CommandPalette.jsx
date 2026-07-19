@@ -21,7 +21,7 @@ export default function CommandPalette() {
   const navigate = useNavigate();
   const inputRef = useRef(null);
 
-  // Toggle on Ctrl+K or Cmd+K
+  // Toggle on Ctrl+K or Cmd+K and custom event
   useEffect(() => {
     const handleKeyDown = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
@@ -33,8 +33,19 @@ export default function CommandPalette() {
         setIsOpen(false);
       }
     };
+
+    const handleCustomOpen = () => {
+      setIsOpen(true);
+      setQuery('');
+    };
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('open-command-palette', handleCustomOpen);
+    
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('open-command-palette', handleCustomOpen);
+    };
   }, [isOpen]);
 
   // Focus input when opened
