@@ -55,7 +55,20 @@ export default function Scanner() {
             <p className="text-slate-600 dark:text-slate-400">Redirecting to Asset {scanResult}...</p>
           </div>
         ) : (
-          <div id="reader" className="w-full overflow-hidden rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50"></div>
+          <div className="relative">
+            <div id="reader" className="w-full overflow-hidden rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50"></div>
+            {/* Added a pulsing indicator so users know they don't need to press a capture button */}
+            <div className="mt-6 flex flex-col items-center justify-center">
+              <div className="flex items-center gap-2 px-6 py-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-full font-semibold animate-pulse border border-blue-100 dark:border-blue-800/50">
+                <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Scanning Automatically...
+              </div>
+              <p className="text-xs text-slate-500 mt-3 font-medium">No capture button needed. Just hold the QR code in the box.</p>
+            </div>
+          </div>
         )}
       </div>
 

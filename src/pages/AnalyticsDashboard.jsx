@@ -103,8 +103,15 @@ const renderActiveShape = (props) => {
 
 export default function AnalyticsDashboard() {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
-  const [data, setData] = useState(null);
+  const [data, setData] = useState(() => {
+    try {
+      const cached = localStorage.getItem('analyticsDashboardCache');
+      return cached ? JSON.parse(cached) : null;
+    } catch (e) {
+      return null;
+    }
+  });
+  const [loading, setLoading] = useState(!data);
   const [activeIndex, setActiveIndex] = useState(0);
   const [autoRefresh, setAutoRefresh] = useState(true);
 
@@ -117,6 +124,7 @@ export default function AnalyticsDashboard() {
         });
         const result = await res.json();
         setData(result);
+        localStorage.setItem('analyticsDashboardCache', JSON.stringify(result));
       } catch (err) {
         console.error('Failed to fetch analytics:', err);
       } finally {
