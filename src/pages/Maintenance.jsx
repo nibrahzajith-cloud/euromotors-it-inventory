@@ -12,10 +12,17 @@ export default function Maintenance() {
   const { showToast } = useToast();
   const { confirm } = useConfirm();
   
-  const [logs, setLogs] = useState([]);
+  const [logs, setLogs] = useState(() => {
+    try {
+      const cached = localStorage.getItem('maintenanceCache');
+      return cached ? JSON.parse(cached) : [];
+    } catch (e) {
+      return [];
+    }
+  });
   const [assets, setAssets] = useState([]);
   
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(logs.length === 0);
   const [error, setError] = useState('');
   
   const [searchTerm, setSearchTerm] = useState('');
@@ -58,6 +65,7 @@ export default function Maintenance() {
 
       setAssets(astData);
       setLogs(mnData);
+      localStorage.setItem('maintenanceCache', JSON.stringify(mnData));
       setError('');
     } catch(err) {
       setError(err.message);

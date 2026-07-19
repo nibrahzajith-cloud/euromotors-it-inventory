@@ -54,8 +54,15 @@ export default function Locations() {
   const { confirm } = useConfirm();
   const navigate = useNavigate();
   
-  const [locations, setLocations] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [locations, setLocations] = useState(() => {
+    try {
+      const cached = localStorage.getItem('locationsCache');
+      return cached ? JSON.parse(cached) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+  const [loading, setLoading] = useState(locations.length === 0);
   const [error, setError] = useState('');
   const [hoveredBadge, setHoveredBadge] = useState({ id: null, type: null });
   
@@ -75,6 +82,7 @@ export default function Locations() {
       if (!res.ok) throw new Error('Failed to load locations');
       const data = await res.json();
       setLocations(data);
+      localStorage.setItem('locationsCache', JSON.stringify(data));
       setError('');
     } catch (err) {
       setError(err.message);

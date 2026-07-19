@@ -14,12 +14,19 @@ export default function Employees() {
   const { confirm } = useConfirm();
   const navigate = useNavigate();
   
-  const [employees, setEmployees] = useState([]);
+  const [employees, setEmployees] = useState(() => {
+    try {
+      const cached = localStorage.getItem('employeesCache');
+      return cached ? JSON.parse(cached) : [];
+    } catch (e) {
+      return [];
+    }
+  });
   const [departments, setDepartments] = useState([]);
   const [locations, setLocations] = useState([]);
   const [assets, setAssets] = useState([]);
   
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(employees.length === 0);
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchParams] = useSearchParams();
@@ -75,6 +82,7 @@ export default function Employees() {
       setDepartments(deptsData);
       setLocations(locsData);
       setAssets(assetsData);
+      localStorage.setItem('employeesCache', JSON.stringify(empsData));
       setError('');
     } catch (err) {
       setError(err.message);

@@ -17,12 +17,19 @@ export default function Assets() {
   const { showToast } = useToast();
   const { confirm } = useConfirm();
 
-  const [assets, setAssets] = useState([]);
+  const [assets, setAssets] = useState(() => {
+    try {
+      const cached = localStorage.getItem('assetsCache');
+      return cached ? JSON.parse(cached) : [];
+    } catch (e) {
+      return [];
+    }
+  });
   const [employees, setEmployees] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [locations, setLocations] = useState([]);
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(assets.length === 0);
   const [error, setError] = useState('');
 
   // Filtering States
@@ -62,6 +69,7 @@ export default function Assets() {
       setEmployees(empData);
       setDepartments(deptData);
       setLocations(locData);
+      localStorage.setItem('assetsCache', JSON.stringify(astData));
       setError('');
     } catch (err) {
       setError(err.message);

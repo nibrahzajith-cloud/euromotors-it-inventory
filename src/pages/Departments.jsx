@@ -54,8 +54,15 @@ export default function Departments() {
   const { confirm } = useConfirm();
   const navigate = useNavigate();
   
-  const [departments, setDepartments] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [departments, setDepartments] = useState(() => {
+    try {
+      const cached = localStorage.getItem('departmentsCache');
+      return cached ? JSON.parse(cached) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+  const [loading, setLoading] = useState(departments.length === 0);
   const [error, setError] = useState('');
   const [hoveredBadge, setHoveredBadge] = useState({ id: null, type: null });
   
@@ -75,6 +82,7 @@ export default function Departments() {
       if (!res.ok) throw new Error('Failed to load departments');
       const data = await res.json();
       setDepartments(data);
+      localStorage.setItem('departmentsCache', JSON.stringify(data));
       setError('');
     } catch (err) {
       setError(err.message);
