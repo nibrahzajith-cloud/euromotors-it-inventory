@@ -77,11 +77,11 @@ export default function Sidebar() {
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         className={clsx(
-          "hidden md:flex md:flex-col inset-y-0 left-0 z-30 bg-[#1e293b] text-slate-300 transition-all duration-300 ease-in-out",
+          "hidden md:flex md:flex-col inset-y-0 left-0 z-30 bg-black text-slate-300 border-r border-white/5 transition-all duration-300 ease-in-out",
           isExpanded ? "w-64" : "w-20"
         )}
       >
-        <div className="flex items-center justify-end h-14 px-4 bg-slate-900/50 shrink-0 overflow-hidden">
+        <div className="flex items-center justify-end h-14 px-4 bg-white/[0.02] shrink-0 overflow-hidden">
           <div className="flex items-center gap-2 shrink-0">
             <button 
               onClick={() => setIsPinned(!isPinned)} 
@@ -133,7 +133,7 @@ export default function Sidebar() {
           ))}
         </nav>
 
-        <div className="p-3 bg-slate-900/30 shrink-0 border-t border-slate-800 pointer-events-auto overflow-hidden">
+        <div className="p-3 bg-white/[0.02] shrink-0 border-t border-white/5 pointer-events-auto overflow-hidden">
           <button 
             onClick={handleLogout}
             title={!isExpanded ? 'Logout' : undefined}
