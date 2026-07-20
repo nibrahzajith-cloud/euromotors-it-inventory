@@ -84,17 +84,16 @@ export default function Scanner() {
         ) : (
           <div className="relative">
             {/* Header controls inside scanner frame */}
-            <div className="flex justify-between items-center mb-4">
-              <div className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                {facingMode === "environment" ? "Back Camera" : "Front Camera"}
-              </div>
+            <div className="flex justify-center items-center mb-6">
               <button 
                 onClick={toggleCamera}
                 disabled={isInitializing}
-                className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                className="group flex items-center gap-3 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-full text-sm font-semibold shadow-lg shadow-blue-500/30 transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed disabled:active:scale-100"
               >
-                <SwitchCamera className="w-4 h-4" />
-                Switch Camera
+                <div className="bg-white/20 p-1.5 rounded-full transition-transform group-hover:rotate-180 duration-500">
+                  <SwitchCamera className="w-4 h-4" />
+                </div>
+                <span>Switch to {facingMode === "environment" ? "Front" : "Back"} Camera</span>
               </button>
             </div>
 
