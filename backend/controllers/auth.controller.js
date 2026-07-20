@@ -47,7 +47,19 @@ exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
     
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({ 
+      where: { email },
+      select: { 
+        id: true, 
+        email: true, 
+        passwordHash: true, 
+        role: true, 
+        status: true, 
+        fullName: true, 
+        mustChangePassword: true 
+      }
+    });
+    
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
