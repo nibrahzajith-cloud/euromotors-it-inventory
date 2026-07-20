@@ -83,21 +83,7 @@ export default function Scanner() {
           </div>
         ) : (
           <div className="relative">
-            {/* Header controls inside scanner frame */}
-            <div className="flex justify-center items-center mb-6">
-              <button 
-                onClick={toggleCamera}
-                disabled={isInitializing}
-                className="group flex items-center gap-3 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-full text-sm font-semibold shadow-lg shadow-blue-500/30 transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed disabled:active:scale-100"
-              >
-                <div className="bg-white/20 p-1.5 rounded-full transition-transform group-hover:rotate-180 duration-500">
-                  <SwitchCamera className="w-4 h-4" />
-                </div>
-                <span>Switch to {facingMode === "environment" ? "Front" : "Back"} Camera</span>
-              </button>
-            </div>
-
-            <div className="relative rounded-2xl overflow-hidden border-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 aspect-square sm:aspect-video flex items-center justify-center">
+            <div className="relative rounded-2xl overflow-hidden border-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 aspect-square sm:aspect-video flex items-center justify-center group">
               {isInitializing && !error && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-50/80 dark:bg-slate-900/80 backdrop-blur-sm z-10">
                   <Loader2 className="w-8 h-8 text-blue-600 animate-spin mb-4" />
@@ -120,6 +106,18 @@ export default function Scanner() {
 
               {/* The actual scanner container */}
               <div id="reader" className="w-full h-full object-cover"></div>
+
+              {/* Professional Overlay Camera Switch Button */}
+              {!error && (
+                <button
+                  onClick={toggleCamera}
+                  disabled={isInitializing}
+                  title="Switch Camera"
+                  className="absolute bottom-4 right-4 z-20 flex items-center justify-center w-12 h-12 bg-black/40 hover:bg-black/60 backdrop-blur-md text-white rounded-full shadow-lg border border-white/20 transition-all active:scale-90 disabled:opacity-0 disabled:cursor-not-allowed group-hover:opacity-100 sm:opacity-100"
+                >
+                  <SwitchCamera className="w-5 h-5 transition-transform group-hover:rotate-180 duration-500" />
+                </button>
+              )}
             </div>
             
             <div className="mt-6 flex flex-col items-center justify-center">
