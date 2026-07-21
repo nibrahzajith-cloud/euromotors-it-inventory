@@ -95,15 +95,15 @@ export default function QrCodePage() {
           if (p > 0) pdf.addPage();
           const pageCodes = chunkedCodes[p];
           
-          const marginX = 12;
-          const marginY = 15;
-          const cellW = 37;
-          const cellH = 45;
+          const marginX = 11;
+          const marginY = 12;
+          const cellW = 31.5;
+          const cellH = 39;
           
           for (let i = 0; i < pageCodes.length; i++) {
              const code = pageCodes[i];
-             const row = Math.floor(i / 5);
-             const col = i % 5;
+             const row = Math.floor(i / 6);
+             const col = i % 6;
              
              const x = marginX + (col * cellW);
              const y = marginY + (row * cellH);
@@ -111,7 +111,7 @@ export default function QrCodePage() {
              // Box
              pdf.setDrawColor(226, 232, 240); // #e2e8f0
              pdf.setFillColor(255, 255, 255);
-             pdf.roundedRect(x, y, 32, 38, 3, 3, 'FD');
+             pdf.roundedRect(x, y, 28, 35, 3, 3, 'FD');
              
              // QR Code
              const qrContainer = document.getElementById(`pdf-qr-${code}`);
@@ -119,17 +119,17 @@ export default function QrCodePage() {
                 const qrCanvas = qrContainer.querySelector('canvas');
                 if (qrCanvas) {
                    const qrData = qrCanvas.toDataURL('image/png');
-                   pdf.addImage(qrData, 'PNG', x + 4, y + 4, 24, 24);
+                   pdf.addImage(qrData, 'PNG', x + 3.5, y + 4, 21, 21);
                 }
              }
              
              // Text
-             pdf.setFontSize(8);
+             pdf.setFontSize(7.5);
              pdf.setFont("monospace", "bold");
              pdf.setTextColor(15, 23, 42); // slate-800
              const textWidth = pdf.getStringUnitWidth(code) * pdf.internal.getFontSize() / pdf.internal.scaleFactor;
-             const textOffset = (32 - textWidth) / 2;
-             pdf.text(code, x + textOffset, y + 34);
+             const textOffset = (28 - textWidth) / 2;
+             pdf.text(code, x + textOffset, y + 31);
           }
        }
        
@@ -147,9 +147,9 @@ export default function QrCodePage() {
     window.print();
   };
 
-  // Helper to chunk selected codes into arrays of 30 for A4 pages (5 columns x 6 rows)
+  // Helper to chunk selected codes into arrays of 42 for A4 pages (6 columns x 7 rows)
   const chunkedCodes = [];
-  const itemsPerPage = 30;
+  const itemsPerPage = 42;
   const targetCodes = activeTab === 'bulk' ? selectedCodes : [generateInput.trim()];
   for (let i = 0; i < targetCodes.length; i += itemsPerPage) {
     chunkedCodes.push(targetCodes.slice(i, i + itemsPerPage));
@@ -285,7 +285,7 @@ export default function QrCodePage() {
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                    <div>
                      <h2 className="text-xl font-semibold text-slate-800 dark:text-white">Bulk A4 Generation</h2>
-                     <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">Select assets to generate 3x4 grid A4 pages for label printing.</p>
+                     <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">Select assets to generate 6x7 grid A4 pages for label printing.</p>
                    </div>
                    <div className="flex flex-wrap gap-2">
                       <button onClick={downloadA4Sheet} disabled={isDownloadingPdf} className="bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-medium hover:bg-slate-50 transition flex items-center gap-2 disabled:opacity-50">
@@ -360,17 +360,17 @@ export default function QrCodePage() {
       <div className="hidden print-visible">
          {chunkedCodes.map((pageAssets, pageIndex) => (
            <div key={pageIndex} className="a4-print-page">
-              <div className="grid grid-cols-5 grid-rows-6 gap-[4mm] h-full w-full px-[8mm] py-[10mm]">
+              <div className="grid grid-cols-6 grid-rows-7 gap-[2mm] h-full w-full px-[5mm] py-[5mm]">
                  {pageAssets.map(code => (
                     <div key={code} className="flex justify-center items-center">
-                       <div className="border border-slate-300 rounded-[8px] flex flex-col items-center justify-center p-[2mm] w-[32mm] h-[38mm] bg-white text-center">
-                          <QRCodeCanvas value={code} size={85} level="H" includeMargin={false} />
-                          <span className="mt-[2mm] font-bold font-mono text-black text-[9px] leading-none block w-full">{code}</span>
+                       <div className="border border-slate-300 rounded-[6px] flex flex-col items-center justify-center p-[2mm] w-[28mm] h-[35mm] bg-white text-center overflow-hidden">
+                          <QRCodeCanvas value={code} size={75} level="H" includeMargin={false} />
+                          <span className="mt-[2mm] font-bold font-mono text-black text-[8px] leading-none block w-full truncate">{code}</span>
                        </div>
                     </div>
                  ))}
                  {/* Empty placeholders to preserve grid structure if page isn't full */}
-                 {Array.from({ length: 30 - pageAssets.length }).map((_, i) => (
+                 {Array.from({ length: 42 - pageAssets.length }).map((_, i) => (
                     <div key={`empty-${i}`} className="flex justify-center items-center"></div>
                  ))}
               </div>

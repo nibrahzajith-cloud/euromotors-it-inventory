@@ -8,7 +8,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_jwt_key_for_euro_moto
 exports.register = async (req, res) => {
   try {
     const { fullName, email, password, role } = req.body;
-    
+
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
       return res.status(400).json({ error: 'Email already registered' });
@@ -46,20 +46,20 @@ exports.register = async (req, res) => {
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
-    
-    const user = await prisma.user.findUnique({ 
+
+    const user = await prisma.user.findUnique({
       where: { email },
-      select: { 
-        id: true, 
-        email: true, 
-        passwordHash: true, 
-        role: true, 
-        status: true, 
-        fullName: true, 
-        mustChangePassword: true 
+      select: {
+        id: true,
+        email: true,
+        passwordHash: true,
+        role: true,
+        status: true,
+        fullName: true,
+        mustChangePassword: true
       }
     });
-    
+
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
@@ -106,7 +106,7 @@ exports.getMe = async (req, res) => {
 exports.changePassword = async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
-    
+
     const user = await prisma.user.findUnique({ where: { id: req.user.id } });
     if (!user) return res.status(404).json({ error: 'User not found' });
 
