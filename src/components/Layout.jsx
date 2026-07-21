@@ -34,8 +34,13 @@ export default function Layout() {
             </motion.main>
           </AnimatePresence>
           
-          <footer className="py-4 text-center text-sm text-slate-500 dark:text-slate-400 mt-auto border-t border-slate-200 dark:border-slate-800 shrink-0 transition-colors duration-300">
-            Developed By: Nifraz Ajith, Ph.D
+          <footer className="py-6 text-center text-sm text-slate-500 dark:text-slate-400 mt-auto border-t border-slate-200 dark:border-slate-800 shrink-0 transition-colors duration-300">
+            <div className="flex flex-col md:flex-row items-center justify-center gap-1.5 md:gap-2">
+              <span className="font-medium">Developed By:</span>
+              <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 tracking-wide drop-shadow-sm">
+                Nibrahz Ajith, Ph.D
+              </span>
+            </div>
           </footer>
         </div>
       </div>

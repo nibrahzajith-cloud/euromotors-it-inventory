@@ -214,9 +214,12 @@ export default function Login() {
             <p className="text-xs text-slate-500 dark:text-slate-400">
               © {new Date().getFullYear()} Euro Motors (Private) Limited. All Rights Reserved.
             </p>
-            <p className="text-[10px] text-slate-400 dark:text-slate-500 font-medium uppercase tracking-wider">
-              Developed by : Nibrahz Ajith, Ph.D
-            </p>
+            <div className="text-[11px] font-medium uppercase tracking-wider flex items-center justify-center gap-1.5 mt-2">
+              <span className="text-slate-400 dark:text-slate-500">Developed by :</span>
+              <span className="font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 drop-shadow-sm">
+                Nibrahz Ajith, Ph.D
+              </span>
+            </div>
           </div>
         </div>
       </div>
