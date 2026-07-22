@@ -23,11 +23,34 @@ export default function Reports() {
   const [activeTab, setActiveTab] = useState('assets');
   const [searchTerm, setSearchTerm] = useState('');
 
-  const [assetsData, setAssetsData] = useState([]);
-  const [assignmentsData, setAssignmentsData] = useState([]);
-  const [maintenanceData, setMaintenanceData] = useState([]);
+  const [assetsData, setAssetsData] = useState(() => {
+    try {
+      const cached = localStorage.getItem('reportsAssetsCache');
+      return cached ? JSON.parse(cached) : [];
+    } catch (e) {
+      return [];
+    }
+  });
 
-  const [loading, setLoading] = useState(true);
+  const [assignmentsData, setAssignmentsData] = useState(() => {
+    try {
+      const cached = localStorage.getItem('reportsAssignmentsCache');
+      return cached ? JSON.parse(cached) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const [maintenanceData, setMaintenanceData] = useState(() => {
+    try {
+      const cached = localStorage.getItem('reportsMaintenanceCache');
+      return cached ? JSON.parse(cached) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const [loading, setLoading] = useState(assetsData.length === 0 && assignmentsData.length === 0 && maintenanceData.length === 0);
   const [error, setError] = useState('');
 
   const fetchData = async () => {
@@ -51,6 +74,11 @@ export default function Reports() {
       setAssetsData(ast);
       setAssignmentsData(asg);
       setMaintenanceData(mnt);
+      
+      localStorage.setItem('reportsAssetsCache', JSON.stringify(ast));
+      localStorage.setItem('reportsAssignmentsCache', JSON.stringify(asg));
+      localStorage.setItem('reportsMaintenanceCache', JSON.stringify(mnt));
+      
       setError('');
     } catch (err) {
       setError(err.message);
@@ -209,7 +237,7 @@ export default function Reports() {
       head: [reportHeaders],
       body: body,
       startY: 62,
-      styles: { fontSize: 8, cellPadding: 4 },
+      styles: { fontSize: 6.5, cellPadding: 2, overflow: 'linebreak' },
       headStyles: { fillColor: [15, 23, 42] },
       alternateRowStyles: { fillColor: [248, 250, 252] },
       margin: { top: 62, bottom: 20 },
