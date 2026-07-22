@@ -502,7 +502,7 @@ export default function AssetAssignment() {
         {/* Global Historical Matrix Table */}
         <div className={`bg-white dark:bg-slate-900/50 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden flex flex-col ${canCreateEdit && assignmentMode === 'standard' ? 'xl:col-span-2' : 'xl:col-span-3'}`}>
           <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-4">
-            <h2 className="text-lg font-semibold text-slate-800 dark:text-white w-full">Audit & Return Hub</h2>
+            <h2 className="text-lg font-semibold text-slate-800 dark:text-white w-full">Asset Assignment & Returns</h2>
             <div className="relative w-full sm:w-64">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input 
@@ -522,17 +522,19 @@ export default function AssetAssignment() {
                 <table className="w-full text-left text-sm text-slate-600 dark:text-slate-400">
                   <thead className="bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-medium border-b border-slate-100 dark:border-slate-700 whitespace-nowrap">
                     <tr>
-                      <th className="px-4 py-3">Hardware Logic</th>
-                      <th className="px-4 py-3">Identity Entity</th>
-                      <th className="px-4 py-3">Execution Timeline</th>
-                      <th className="px-4 py-3 text-center">Protocol State</th>
-                      {canCreateEdit && <th className="px-4 py-3 text-right">Overrides</th>}
+                      <th className="px-4 py-3">Asset</th>
+                      <th className="px-4 py-3">Assigned To</th>
+                      <th className="px-4 py-3 text-center">Current Status</th>
+                      <th className="px-4 py-3">Assigned On</th>
+                      <th className="px-4 py-3">Returned On</th>
+                      <th className="px-4 py-3">Current Location</th>
+                      {canCreateEdit && <th className="px-4 py-3 text-right">Actions</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {filteredAssignments.map((log) => {
-                      const deployedDate = new Date(log.assignedDate).toLocaleDateString();
-                      const returnedLogDate = log.returnedDate ? new Date(log.returnedDate).toLocaleDateString() : '--';
+                      const deployedDate = new Date(log.assignedDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+                      const returnedLogDate = log.returnedDate ? new Date(log.returnedDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
                       
                       return (
                         <tr key={log.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/50 transition-colors group">
@@ -551,30 +553,44 @@ export default function AssetAssignment() {
                              </div>
                           </td>
                           
-                          <td className="px-4 py-3.5 whitespace-nowrap">
-                             <div className="flex flex-col">
-                                <span className="text-slate-800 dark:text-slate-300"><span className="text-xs text-slate-400 font-mono w-6 inline-block">OUT</span> {deployedDate}</span>
-                                <span className={log.status === 'RETURNED' ? 'text-slate-600 dark:text-slate-500 mt-0.5' : 'text-slate-300 dark:text-slate-600 mt-0.5'}>
-                                   <span className="text-xs font-mono w-6 inline-block">IN</span> {returnedLogDate}
-                                </span>
-                             </div>
+                          <td className="px-4 py-3.5 text-center">
+                            <span className={`px-2.5 py-1.5 rounded-full text-xs font-medium flex items-center justify-center gap-1.5 w-max mx-auto ${
+                              log.status === 'ACTIVE' 
+                                ? 'bg-orange-50 text-orange-700 border border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-800/50 shadow-sm' 
+                                : 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50 shadow-sm'
+                            }`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${log.status === 'ACTIVE' ? 'bg-orange-500' : 'bg-emerald-500'}`}></span>
+                              {log.status === 'ACTIVE' ? 'Assigned to Employee' : 'Available (In Store)'}
+                            </span>
                           </td>
                           
-                          <td className="px-4 py-3.5 text-center">
-                            <span className={`px-2.5 py-1 rounded-full text-[10px] uppercase font-bold tracking-wider ${
-                              log.status === 'ACTIVE' ? 'bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800 shadow-sm' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
-                            }`}>
-                              {log.status === 'ACTIVE' ? 'DEPLOYED' : 'CHECKED IN'}
-                            </span>
+                          <td className="px-4 py-3.5 whitespace-nowrap text-slate-800 dark:text-slate-300">
+                             {deployedDate}
+                          </td>
+                          
+                          <td className="px-4 py-3.5 whitespace-nowrap">
+                             <span className={log.status === 'RETURNED' ? 'text-slate-800 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500'}>
+                                {returnedLogDate}
+                             </span>
+                          </td>
+                          
+                          <td className="px-4 py-3.5">
+                             <span className="font-medium text-slate-700 dark:text-slate-300">
+                                {log.status === 'ACTIVE' ? 'With Employee' : 'IT Store'}
+                             </span>
                           </td>
                           
                           {canCreateEdit && (
                             <td className="px-4 py-3.5 text-right whitespace-nowrap">
                                <div className="flex items-center justify-end gap-1">
-                                  {log.status === 'ACTIVE' && (
+                                  {log.status === 'ACTIVE' ? (
                                      <button onClick={() => handleReturn(log.id)} className="px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-blue-700 dark:hover:text-blue-400 hover:border-blue-200 dark:hover:border-blue-800 rounded-lg text-xs font-medium transition-colors shadow-sm flex items-center gap-1.5">
                                         <Undo2 className="w-3.5 h-3.5" />
-                                        Return
+                                        Return Asset
+                                     </button>
+                                  ) : (
+                                     <button className="px-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-transparent text-slate-400 dark:text-slate-500 rounded-lg text-xs font-medium cursor-default flex items-center gap-1.5">
+                                        View History
                                      </button>
                                   )}
                                   
