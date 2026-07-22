@@ -438,11 +438,11 @@ export default function AssetAssignment() {
       )}
 
       {/* Standard Form and History */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <div className="flex flex-col xl:flex-row gap-4 xl:gap-5">
         
         {/* Assignment Form Frame */}
         {canCreateEdit && assignmentMode === 'standard' && (
-          <div className="bg-white dark:bg-slate-900/50 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 xl:col-span-1 h-fit pb-8">
+          <div className="w-full xl:w-[30%] bg-white dark:bg-slate-900/50 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-5 h-fit pb-6 shrink-0">
             <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-6 flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
               <ArrowRightLeft className="w-5 h-5 text-blue-600" />
               Standard Check-Out
@@ -500,7 +500,7 @@ export default function AssetAssignment() {
         )}
 
         {/* Global Historical Matrix Table */}
-        <div className={`bg-white dark:bg-slate-900/50 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden flex flex-col ${canCreateEdit && assignmentMode === 'standard' ? 'xl:col-span-2' : 'xl:col-span-3'}`}>
+        <div className={`w-full bg-white dark:bg-slate-900/50 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden flex flex-col ${canCreateEdit && assignmentMode === 'standard' ? 'xl:w-[70%]' : 'xl:w-full'}`}>
           <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-4">
             <h2 className="text-lg font-semibold text-slate-800 dark:text-white w-full">Asset Assignment & Returns</h2>
             <div className="relative w-full sm:w-64">
@@ -509,105 +509,175 @@ export default function AssetAssignment() {
                 type="text" 
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
-                placeholder="Regex trace execution logs..."
+                placeholder="Search asset or employee"
                 className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-sm rounded-xl focus:ring-2 focus:ring-blue-500 block pl-9 p-2 outline-none w-full"
               />
             </div>
           </div>
 
-          <div className="overflow-x-auto flex-1 min-h-[500px]">
+          <div className="flex-1 min-h-[500px]">
              {filteredAssignments.length === 0 ? (
                 <div className="p-10 text-center text-slate-500 dark:text-slate-400 mt-10">No assignment records discovered scaling parameters.</div>
              ) : (
-                <table className="w-full text-left text-sm text-slate-600 dark:text-slate-400">
-                  <thead className="bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-medium border-b border-slate-100 dark:border-slate-700 whitespace-nowrap">
-                    <tr>
-                      <th className="px-4 py-3">Asset</th>
-                      <th className="px-4 py-3">Assigned To</th>
-                      <th className="px-4 py-3 text-center">Current Status</th>
-                      <th className="px-4 py-3">Assigned On</th>
-                      <th className="px-4 py-3">Returned On</th>
-                      <th className="px-4 py-3">Current Location</th>
-                      {canCreateEdit && <th className="px-4 py-3 text-right">Actions</th>}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                <>
+                  {/* Desktop Table View */}
+                  <div className="hidden lg:block w-full overflow-hidden">
+                    <table className="w-full text-left text-[13px] text-slate-600 dark:text-slate-400 table-fixed">
+                      <thead className="bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-medium border-b border-slate-100 dark:border-slate-700">
+                        <tr>
+                          <th className="px-2 py-2.5 w-[17%]">Asset</th>
+                          <th className="px-2 py-2.5 w-[17%]">Assigned To</th>
+                          <th className="px-2 py-2.5 w-[20%] text-center">Current Status</th>
+                          <th className="px-2 py-2.5 w-[12%]">Assigned On</th>
+                          <th className="px-2 py-2.5 w-[12%]">Returned On</th>
+                          <th className="px-2 py-2.5 w-[12%]">Current Location</th>
+                          {canCreateEdit && <th className="px-2 py-2.5 w-[10%] text-right">Actions</th>}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {filteredAssignments.map((log) => {
+                          const deployedDate = new Date(log.assignedDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+                          const returnedLogDate = log.returnedDate ? new Date(log.returnedDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+                          
+                          return (
+                            <tr key={log.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/50 transition-colors group align-middle">
+                              
+                              <td className="px-2 py-2.5">
+                                 <div className="flex flex-col">
+                                   <span className="font-bold text-slate-800 dark:text-white line-clamp-2">{log.asset?.assetCode || 'DELETED'}</span>
+                                   <span className="text-[11px] text-slate-500 mt-0.5 line-clamp-2 leading-tight">{log.asset?.model || 'Link Corrupted'}</span>
+                                 </div>
+                              </td>
+                              
+                              <td className="px-2 py-2.5">
+                                 <div className="flex flex-col">
+                                   <span className="font-medium text-slate-700 dark:text-slate-300 line-clamp-2 leading-tight">{log.employee?.fullName || 'Terminated User'}</span>
+                                   <span className="text-[11px] font-mono text-slate-400 mt-0.5 break-all">{log.employee?.employeeCode}</span>
+                                 </div>
+                              </td>
+                              
+                              <td className="px-2 py-2.5 text-center">
+                                <span className={`px-2 py-1 rounded-full text-[11px] font-medium flex items-center justify-center gap-1 w-max mx-auto ${
+                                  log.status === 'ACTIVE' 
+                                    ? 'bg-orange-50 text-orange-700 border border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-800/50 shadow-sm' 
+                                    : 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50 shadow-sm'
+                                }`}>
+                                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${log.status === 'ACTIVE' ? 'bg-orange-500' : 'bg-emerald-500'}`}></span>
+                                  <span className="truncate max-w-[100px] xl:max-w-none">{log.status === 'ACTIVE' ? 'Assigned to Employee' : 'Available (In Store)'}</span>
+                                </span>
+                              </td>
+                              
+                              <td className="px-2 py-2.5 text-slate-800 dark:text-slate-300">
+                                 {deployedDate}
+                              </td>
+                              
+                              <td className="px-2 py-2.5">
+                                 <span className={log.status === 'RETURNED' ? 'text-slate-800 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500'}>
+                                    {returnedLogDate}
+                                 </span>
+                              </td>
+                              
+                              <td className="px-2 py-2.5">
+                                 <span className="font-medium text-slate-700 dark:text-slate-300 line-clamp-2 leading-tight">
+                                    {log.status === 'ACTIVE' ? 'With Employee' : 'IT Store'}
+                                 </span>
+                              </td>
+                              
+                              {canCreateEdit && (
+                                <td className="px-2 py-2.5 text-right">
+                                   <div className="flex items-center justify-end gap-1">
+                                      {log.status === 'ACTIVE' ? (
+                                         <button onClick={() => handleReturn(log.id)} className="px-2 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-blue-700 dark:hover:text-blue-400 hover:border-blue-200 dark:hover:border-blue-800 rounded-md text-[11px] font-medium transition-colors shadow-sm flex items-center gap-1">
+                                            <Undo2 className="w-3.5 h-3.5 shrink-0" />
+                                            <span className="hidden xl:inline">Return Asset</span>
+                                            <span className="inline xl:hidden">Return</span>
+                                         </button>
+                                      ) : (
+                                         <button className="px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-transparent text-slate-400 dark:text-slate-500 rounded-md text-[11px] font-medium cursor-default flex items-center justify-center min-w-[50px]">
+                                            View
+                                         </button>
+                                      )}
+                                      
+                                      {canDelete && (
+                                         <button onClick={() => handleDelete(log.id)} className="p-1.5 text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors opacity-100 lg:opacity-0 group-hover:opacity-100 shrink-0">
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                         </button>
+                                      )}
+                                   </div>
+                                </td>
+                              )}
+
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Mobile Cards View */}
+                  <div className="block lg:hidden p-4 space-y-4 bg-slate-50/50 dark:bg-slate-900/20">
                     {filteredAssignments.map((log) => {
                       const deployedDate = new Date(log.assignedDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
                       const returnedLogDate = log.returnedDate ? new Date(log.returnedDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
                       
                       return (
-                        <tr key={log.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/50 transition-colors group">
-                          
-                          <td className="px-4 py-3.5">
-                             <div className="flex flex-col">
-                               <span className="font-bold text-slate-800 dark:text-white">{log.asset?.assetCode || 'DELETED'}</span>
-                               <span className="text-xs text-slate-500 mt-0.5">{log.asset?.model || 'Link Corrupted'}</span>
+                        <div key={`mobile-${log.id}`} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 shadow-sm flex flex-col gap-3">
+                          <div className="flex justify-between items-start gap-2">
+                             <div>
+                               <span className="font-bold text-slate-800 dark:text-white text-sm block">{log.asset?.assetCode || 'DELETED'}</span>
+                               <span className="text-xs text-slate-500">{log.asset?.model || 'Link Corrupted'}</span>
                              </div>
-                          </td>
+                             <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 shrink-0 ${
+                               log.status === 'ACTIVE' 
+                                 ? 'bg-orange-50 text-orange-700 border border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-800/50' 
+                                 : 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50'
+                             }`}>
+                               {log.status === 'ACTIVE' ? 'Assigned' : 'Available'}
+                             </span>
+                          </div>
                           
-                          <td className="px-4 py-3.5">
-                             <div className="flex flex-col">
-                               <span className="font-medium text-slate-700 dark:text-slate-300">{log.employee?.fullName || 'Terminated User'}</span>
-                               <span className="text-xs font-mono text-slate-400 mt-0.5">{log.employee?.employeeCode}</span>
+                          <div className="grid grid-cols-2 gap-y-3 gap-x-2 text-[13px] bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
+                             <div>
+                                <span className="text-slate-400 text-xs block mb-0.5">Assigned To</span>
+                                <span className="font-medium text-slate-700 dark:text-slate-300">{log.employee?.fullName || 'Terminated User'}</span>
                              </div>
-                          </td>
-                          
-                          <td className="px-4 py-3.5 text-center">
-                            <span className={`px-2.5 py-1.5 rounded-full text-xs font-medium flex items-center justify-center gap-1.5 w-max mx-auto ${
-                              log.status === 'ACTIVE' 
-                                ? 'bg-orange-50 text-orange-700 border border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-800/50 shadow-sm' 
-                                : 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800/50 shadow-sm'
-                            }`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${log.status === 'ACTIVE' ? 'bg-orange-500' : 'bg-emerald-500'}`}></span>
-                              {log.status === 'ACTIVE' ? 'Assigned to Employee' : 'Available (In Store)'}
-                            </span>
-                          </td>
-                          
-                          <td className="px-4 py-3.5 whitespace-nowrap text-slate-800 dark:text-slate-300">
-                             {deployedDate}
-                          </td>
-                          
-                          <td className="px-4 py-3.5 whitespace-nowrap">
-                             <span className={log.status === 'RETURNED' ? 'text-slate-800 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500'}>
-                                {returnedLogDate}
-                             </span>
-                          </td>
-                          
-                          <td className="px-4 py-3.5">
-                             <span className="font-medium text-slate-700 dark:text-slate-300">
-                                {log.status === 'ACTIVE' ? 'With Employee' : 'IT Store'}
-                             </span>
-                          </td>
+                             <div>
+                                <span className="text-slate-400 text-xs block mb-0.5">Location</span>
+                                <span className="font-medium text-slate-700 dark:text-slate-300">{log.status === 'ACTIVE' ? 'With Employee' : 'IT Store'}</span>
+                             </div>
+                             <div>
+                                <span className="text-slate-400 text-xs block mb-0.5">Assigned On</span>
+                                <span className="font-medium text-slate-700 dark:text-slate-300">{deployedDate}</span>
+                             </div>
+                             <div>
+                                <span className="text-slate-400 text-xs block mb-0.5">Returned On</span>
+                                <span className="font-medium text-slate-700 dark:text-slate-300">{returnedLogDate}</span>
+                             </div>
+                          </div>
                           
                           {canCreateEdit && (
-                            <td className="px-4 py-3.5 text-right whitespace-nowrap">
-                               <div className="flex items-center justify-end gap-1">
-                                  {log.status === 'ACTIVE' ? (
-                                     <button onClick={() => handleReturn(log.id)} className="px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-blue-700 dark:hover:text-blue-400 hover:border-blue-200 dark:hover:border-blue-800 rounded-lg text-xs font-medium transition-colors shadow-sm flex items-center gap-1.5">
-                                        <Undo2 className="w-3.5 h-3.5" />
-                                        Return Asset
-                                     </button>
-                                  ) : (
-                                     <button className="px-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-transparent text-slate-400 dark:text-slate-500 rounded-lg text-xs font-medium cursor-default flex items-center gap-1.5">
-                                        View History
-                                     </button>
-                                  )}
-                                  
-                                  {canDelete && (
-                                     <button onClick={() => handleDelete(log.id)} className="p-1.5 text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors ml-1 opacity-100 lg:opacity-0 group-hover:opacity-100">
-                                        <Trash2 className="w-4 h-4" />
-                                     </button>
-                                  )}
-                               </div>
-                            </td>
+                             <div className="pt-1 flex items-center gap-2">
+                                {log.status === 'ACTIVE' ? (
+                                   <button onClick={() => handleReturn(log.id)} className="flex-1 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-blue-700 dark:hover:text-blue-400 hover:border-blue-200 dark:hover:border-blue-800 rounded-lg text-xs font-medium transition-colors shadow-sm flex items-center justify-center gap-1.5">
+                                      <Undo2 className="w-3.5 h-3.5" /> Return Asset
+                                   </button>
+                                ) : (
+                                   <button className="flex-1 py-2 bg-slate-50 dark:bg-slate-900 border border-transparent text-slate-400 dark:text-slate-500 rounded-lg text-xs font-medium cursor-default flex items-center justify-center gap-1.5">
+                                      View History
+                                   </button>
+                                )}
+                                {canDelete && (
+                                   <button onClick={() => handleDelete(log.id)} className="p-2 text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors border border-transparent hover:border-red-100 dark:hover:border-red-900/30 shrink-0">
+                                      <Trash2 className="w-4 h-4" />
+                                   </button>
+                                )}
+                             </div>
                           )}
-
-                        </tr>
+                        </div>
                       );
                     })}
-                  </tbody>
-                </table>
+                  </div>
+                </>
              )}
           </div>
         </div>
