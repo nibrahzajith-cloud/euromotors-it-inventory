@@ -133,7 +133,7 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
              }
              
              if (!emp) {
-                 const newEmpCode = a.employeeCode || `EMP-${Date.now().toString().slice(-4)}-${Math.floor(Math.random()*100)}`;
+                 const newEmpCode = `EMP-${Date.now().toString().slice(-4)}-${Math.floor(Math.random()*100)}`;
                  emp = await prisma.employee.create({
                      data: {
                          employeeCode: newEmpCode,
@@ -149,7 +149,6 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
                  results.createdEmployees++;
              } else {
                  const updateData = { departmentId, locationId };
-                 if (a.employeeCode) updateData.employeeCode = a.employeeCode;
                  if (a.email) updateData.email = a.email;
                  if (a.phone) updateData.phone = a.phone;
                  if (a.designation) updateData.designation = a.designation;
@@ -165,7 +164,7 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
           }
 
           // 6. Auto-generate assetCode
-          const finalAssetCode = a.assetCode || `EM-IT-${Date.now().toString().slice(-5)}-${Math.floor(Math.random()*1000)}`;
+          const finalAssetCode = `EM-IT-${Date.now().toString().slice(-5)}-${Math.floor(Math.random()*1000)}`;
 
           // 7. Serial Number Resolution
           let finalSerial = a.serialNumber;
