@@ -323,7 +323,7 @@ export default function Employees() {
                   <tr key={emp.id} className="hover:bg-slate-50/70 transition-colors">
                     <td className="px-5 py-4">
                       <div className="flex flex-col">
-                        <span className="font-bold" style={{ color: '#000000' }}>{emp.fullName}</span>
+                        <span className="font-bold text-slate-800 dark:text-white">{emp.fullName}</span>
                         <span className="text-xs font-mono text-slate-500 mt-1">{emp.employeeCode}</span>
                         {emp.email && <span className="text-xs text-slate-500 flex items-center gap-1 mt-0.5"><Mail className="w-3 h-3"/> {emp.email}</span>}
                       </div>
