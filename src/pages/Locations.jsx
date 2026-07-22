@@ -142,21 +142,30 @@ export default function Locations() {
     }
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (loc) => {
     const confirmed = await confirm({
+      type: 'prompt',
       title: 'Delete Location',
-      message: 'Are you sure you want to delete this location?',
+      message: `Are you sure you want to delete this location? Type "${loc.name}" to confirm.`,
+      inputPlaceholder: loc.name,
       confirmText: 'Delete Location'
     });
-    if (!confirmed) return;
+    
+    if (confirmed !== loc.name) {
+      if (confirmed !== null && confirmed !== false) {
+        showToast('Confirmation code did not match. Deletion cancelled.', 'error');
+      }
+      return;
+    }
+
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/locations/${id}`, {
+      const res = await fetch(`${API_URL}/locations/${loc.id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('Failed to delete');
-      setLocations(locations.filter(l => l.id !== id));
+      setLocations(locations.filter(l => l.id !== loc.id));
       showToast('Location removed cleanly from matrix.', 'success');
     } catch (err) {
       showToast(err.message, 'error');
@@ -215,7 +224,7 @@ export default function Locations() {
                 {canEdit && (
                   <div className="flex bg-slate-50 rounded-lg p-1 mr-2 opacity-50 hover:opacity-100 transition-opacity">
                     <button onClick={() => openModal(loc)} className="p-1.5 text-slate-400 hover:text-blue-600 rounded-md hover:bg-white"><Edit className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => handleDelete(loc.id)} className="p-1.5 text-slate-400 hover:text-red-600 rounded-md hover:bg-white"><Trash2 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => handleDelete(loc)} className="p-1.5 text-slate-400 hover:text-red-600 rounded-md hover:bg-white"><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
                 )}
                 <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${loc.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>

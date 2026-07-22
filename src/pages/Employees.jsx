@@ -120,7 +120,7 @@ export default function Employees() {
     } else {
       setEditingEmp(null);
       setFormData({
-        employeeCode: '',
+        employeeCode: `EMP-${Date.now().toString().slice(-4)}-${Math.floor(Math.random()*100)}`,
         fullName: '',
         email: '',
         designation: '',
@@ -400,9 +400,8 @@ export default function Employees() {
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Employee Code *</label>
                   <input 
-                    required type="text" value={formData.employeeCode} onChange={e => setFormData({...formData, employeeCode: e.target.value})}
-                    placeholder="e.g. EMP-2023-01"
-                    className="w-full bg-slate-50 border border-slate-200 text-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 p-2.5 outline-none transition-all placeholder:text-slate-400"
+                    required type="text" value={formData.employeeCode} readOnly
+                    className="w-full bg-slate-100 border border-slate-200 text-slate-500 rounded-xl px-4 py-2.5 outline-none font-mono cursor-not-allowed"
                   />
                 </div>
                 

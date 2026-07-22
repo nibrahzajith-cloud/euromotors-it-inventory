@@ -142,21 +142,30 @@ export default function Departments() {
     }
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (dept) => {
     const confirmed = await confirm({
+      type: 'prompt',
       title: 'Delete Department',
-      message: 'Are you sure you want to delete this department?',
+      message: `Are you sure you want to delete this department? Type "${dept.name}" to confirm.`,
+      inputPlaceholder: dept.name,
       confirmText: 'Delete Department'
     });
-    if (!confirmed) return;
+    
+    if (confirmed !== dept.name) {
+      if (confirmed !== null && confirmed !== false) {
+        showToast('Confirmation code did not match. Deletion cancelled.', 'error');
+      }
+      return;
+    }
+
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/departments/${id}`, {
+      const res = await fetch(`${API_URL}/departments/${dept.id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('Failed to delete');
-      setDepartments(departments.filter(d => d.id !== id));
+      setDepartments(departments.filter(d => d.id !== dept.id));
       showToast('Department node wiped from registry.', 'success');
     } catch (err) {
       showToast(err.message, 'error');
@@ -214,7 +223,7 @@ export default function Departments() {
               {canEdit && (
                 <div className="flex bg-slate-50 rounded-lg p-1 mr-2 opacity-50 hover:opacity-100 transition-opacity">
                   <button onClick={() => openModal(dept)} className="p-1.5 text-slate-400 hover:text-blue-600 rounded-md hover:bg-white"><Edit className="w-3.5 h-3.5" /></button>
-                  <button onClick={() => handleDelete(dept.id)} className="p-1.5 text-slate-400 hover:text-red-600 rounded-md hover:bg-white"><Trash2 className="w-3.5 h-3.5" /></button>
+                  <button onClick={() => handleDelete(dept)} className="p-1.5 text-slate-400 hover:text-red-600 rounded-md hover:bg-white"><Trash2 className="w-3.5 h-3.5" /></button>
                 </div>
               )}
               <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${dept.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>

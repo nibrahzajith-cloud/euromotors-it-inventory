@@ -99,6 +99,11 @@ export default function AddAsset() {
                ipAddress: target.ipAddress || ''
              });
           }
+        } else {
+           setFormData(prev => ({
+             ...prev,
+             assetCode: `EM-IT-${Date.now().toString().slice(-5)}-${Math.floor(Math.random()*1000)}`
+           }));
         }
       } catch (err) {
          setSubmitError("Failed to initialize remote registries.");
@@ -229,7 +234,7 @@ export default function AddAsset() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Asset Code *</label>
-                <input required type="text" value={formData.assetCode} onChange={e => handleChange('assetCode', e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm" placeholder="e.g. AST-2024-001" />
+                <input required type="text" value={formData.assetCode} readOnly className="w-full bg-slate-100 border border-slate-200 text-slate-500 rounded-xl px-4 py-2.5 outline-none font-mono text-sm cursor-not-allowed" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Serial Number *</label>
@@ -356,16 +361,11 @@ export default function AddAsset() {
               Dashboard
             </Link>
             
-            {savedAssetCode ? (
+            {savedAssetCode && (
                <Link to={`/qr-code`} state={{ presetCode: savedAssetCode }} className="px-6 py-2.5 bg-green-50 text-green-700 border border-green-200 rounded-xl font-medium hover:bg-green-100 transition-colors flex items-center justify-center gap-2">
                  <QrCode className="w-4 h-4" />
                  View / Print QR Profile
                </Link>
-            ) : (
-               <button type="button" onClick={handleGenerateUID} className={`px-6 py-2.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-xl font-medium hover:bg-indigo-100 transition-all flex items-center justify-center gap-2 ${uidSuccess ? 'bg-green-50 text-green-700 border-green-200' : ''}`}>
-                 <QrCode className="w-4 h-4" />
-                 {uidSuccess ? 'Generated!' : 'Generate UID'}
-               </button>
             )}
 
             <button type="submit" className="px-8 py-2.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 shadow-sm shadow-blue-600/20">
