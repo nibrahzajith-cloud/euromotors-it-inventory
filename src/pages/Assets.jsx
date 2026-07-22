@@ -25,9 +25,30 @@ export default function Assets() {
       return [];
     }
   });
-  const [employees, setEmployees] = useState([]);
-  const [departments, setDepartments] = useState([]);
-  const [locations, setLocations] = useState([]);
+  const [employees, setEmployees] = useState(() => {
+    try {
+      const cached = localStorage.getItem('employeesCache');
+      return cached ? JSON.parse(cached) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+  const [departments, setDepartments] = useState(() => {
+    try {
+      const cached = localStorage.getItem('departmentsCache');
+      return cached ? JSON.parse(cached) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+  const [locations, setLocations] = useState(() => {
+    try {
+      const cached = localStorage.getItem('locationsCache');
+      return cached ? JSON.parse(cached) : [];
+    } catch (e) {
+      return [];
+    }
+  });
 
   const [loading, setLoading] = useState(assets.length === 0);
   const [error, setError] = useState('');
@@ -70,6 +91,9 @@ export default function Assets() {
       setDepartments(deptData);
       setLocations(locData);
       localStorage.setItem('assetsCache', JSON.stringify(astData));
+      localStorage.setItem('employeesCache', JSON.stringify(empData));
+      localStorage.setItem('departmentsCache', JSON.stringify(deptData));
+      localStorage.setItem('locationsCache', JSON.stringify(locData));
       setError('');
     } catch (err) {
       setError(err.message);

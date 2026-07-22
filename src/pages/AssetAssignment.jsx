@@ -75,11 +75,32 @@ export default function AssetAssignment() {
   const { showToast } = useToast();
   const { confirm } = useConfirm();
   
-  const [assets, setAssets] = useState([]);
-  const [employees, setEmployees] = useState([]);
-  const [assignments, setAssignments] = useState([]);
+  const [assets, setAssets] = useState(() => {
+    try {
+      const cached = localStorage.getItem('assetsCache');
+      return cached ? JSON.parse(cached) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+  const [employees, setEmployees] = useState(() => {
+    try {
+      const cached = localStorage.getItem('employeesCache');
+      return cached ? JSON.parse(cached) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+  const [assignments, setAssignments] = useState(() => {
+    try {
+      const cached = localStorage.getItem('assignmentsCache');
+      return cached ? JSON.parse(cached) : [];
+    } catch (e) {
+      return [];
+    }
+  });
   
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(assets.length === 0 && employees.length === 0 && assignments.length === 0);
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -130,6 +151,9 @@ export default function AssetAssignment() {
       setAssets(astData);
       setEmployees(empData);
       setAssignments(asgData);
+      localStorage.setItem('assetsCache', JSON.stringify(astData));
+      localStorage.setItem('employeesCache', JSON.stringify(empData));
+      localStorage.setItem('assignmentsCache', JSON.stringify(asgData));
       setError('');
     } catch (err) {
       setError(err.message);
