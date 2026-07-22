@@ -438,69 +438,75 @@ export default function AssetAssignment() {
       )}
 
       {/* Standard Form and History */}
-      <div className="flex flex-col xl:flex-row gap-4 xl:gap-5">
+      <div className="flex flex-col gap-6">
         
         {/* Assignment Form Frame */}
         {canCreateEdit && assignmentMode === 'standard' && (
-          <div className="w-full xl:w-[30%] bg-white dark:bg-slate-900/50 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-5 h-fit pb-6 shrink-0">
-            <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-6 flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div className="w-full bg-white dark:bg-slate-900/50 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-5 shrink-0">
+            <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
               <ArrowRightLeft className="w-5 h-5 text-blue-600" />
               Standard Check-Out
             </h2>
-            <form className="space-y-5" onSubmit={handleAssign}>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Target Personnel *</label>
-                <select 
-                  required value={employeeId} onChange={e => setEmployeeId(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 p-2.5 outline-none transition-all"
-                >
-                  <option value="" disabled>Select User Identity...</option>
-                  {employees.map(emp => (
-                    <option key={emp.id} value={emp.id}>{emp.employeeCode} - {emp.fullName}</option>
-                  ))}
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Hardware Asset *</label>
-                <select 
-                  required value={assetId} onChange={e => setAssetId(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 p-2.5 outline-none transition-all"
-                >
-                  <option value="" disabled>Select Stock Asset...</option>
-                  {availableAssets.map(ast => (
-                    <option key={ast.id} value={ast.id}>{ast.assetCode} - {ast.model}</option>
-                  ))}
-                </select>
-                {availableAssets.length === 0 && <p className="text-xs text-amber-500 font-medium mt-1.5">No devices available in system stock.</p>}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Execution Date</label>
-                <input 
-                  type="date" value={assignedDate} onChange={e => setAssignedDate(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 text-slate-700 dark:text-slate-200" 
-                />
+            <form className="flex flex-col gap-4" onSubmit={handleAssign}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Target Personnel *</label>
+                  <select 
+                    required value={employeeId} onChange={e => setEmployeeId(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 px-3 py-2 outline-none transition-all text-sm"
+                  >
+                    <option value="" disabled>Select User Identity...</option>
+                    {employees.map(emp => (
+                      <option key={emp.id} value={emp.id}>{emp.employeeCode} - {emp.fullName}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Hardware Asset *</label>
+                  <select 
+                    required value={assetId} onChange={e => setAssetId(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 px-3 py-2 outline-none transition-all text-sm"
+                  >
+                    <option value="" disabled>Select Stock Asset...</option>
+                    {availableAssets.map(ast => (
+                      <option key={ast.id} value={ast.id}>{ast.assetCode} - {ast.model}</option>
+                    ))}
+                  </select>
+                  {availableAssets.length === 0 && <p className="text-xs text-amber-500 font-medium mt-1">No devices available in stock.</p>}
+                </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Operation Remarks</label>
-                <textarea 
-                  value={remarks} onChange={e => setRemarks(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400" 
-                  rows="3" placeholder="Documentation / Condition State upon checkout..."
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Execution Date</label>
+                  <input 
+                    type="date" value={assignedDate} onChange={e => setAssignedDate(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-slate-700 dark:text-slate-200 text-sm" 
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Operation Remarks</label>
+                  <input 
+                    type="text" value={remarks} onChange={e => setRemarks(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400 text-sm" 
+                    placeholder="Documentation / Condition State..."
+                  />
+                </div>
               </div>
 
-              <button type="submit" disabled={availableAssets.length === 0} className="w-full bg-blue-600 text-white rounded-xl py-2.5 font-medium hover:bg-blue-700 transition-colors shadow-sm disabled:bg-slate-300 disabled:cursor-not-allowed">
-                Sign Out Physical Asset
-              </button>
+              <div className="flex justify-end mt-2">
+                <button type="submit" disabled={availableAssets.length === 0} className="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm disabled:bg-slate-300 disabled:cursor-not-allowed">
+                  Sign Out Physical Asset
+                </button>
+              </div>
             </form>
           </div>
         )}
 
         {/* Global Historical Matrix Table */}
-        <div className={`w-full bg-white dark:bg-slate-900/50 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden flex flex-col ${canCreateEdit && assignmentMode === 'standard' ? 'xl:w-[70%]' : 'xl:w-full'}`}>
+        <div className="w-full bg-white dark:bg-slate-900/50 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden flex flex-col">
           <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-4">
             <h2 className="text-lg font-semibold text-slate-800 dark:text-white w-full">Asset Assignment & Returns</h2>
             <div className="relative w-full sm:w-64">
@@ -515,15 +521,16 @@ export default function AssetAssignment() {
             </div>
           </div>
 
-          <div className="flex-1 min-h-[500px]">
+          <div className="flex-1">
              {filteredAssignments.length === 0 ? (
                 <div className="p-10 text-center text-slate-500 dark:text-slate-400 mt-10">No assignment records discovered scaling parameters.</div>
              ) : (
                 <>
                   {/* Desktop Table View */}
-                  <div className="hidden lg:block w-full overflow-hidden">
-                    <table className="w-full text-left text-[13px] text-slate-600 dark:text-slate-400 table-fixed">
-                      <thead className="bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-medium border-b border-slate-100 dark:border-slate-700">
+                  <div className="hidden lg:block w-full">
+                    <div className="max-h-[600px] overflow-y-auto custom-scrollbar">
+                      <table className="w-full text-left text-[13px] text-slate-600 dark:text-slate-400 table-fixed">
+                        <thead className="bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-medium border-b border-slate-100 dark:border-slate-700 sticky top-0 z-10 shadow-sm">
                         <tr>
                           <th className="px-2 py-2.5 w-[17%]">Asset</th>
                           <th className="px-2 py-2.5 w-[17%]">Assigned To</th>
@@ -612,6 +619,7 @@ export default function AssetAssignment() {
                         })}
                       </tbody>
                     </table>
+                    </div>
                   </div>
 
                   {/* Mobile Cards View */}
