@@ -409,11 +409,19 @@ export default function AssetAssignment() {
                   />
                 </div>
                 <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
-                  {filteredDroppableEmployees.slice(0, 15).map(emp => (
-                    <DroppableEmployee key={emp.id} employee={emp} />
-                  ))}
-                  {filteredDroppableEmployees.length > 15 && (
-                    <div className="text-center text-[10px] text-slate-400 font-bold uppercase mt-4">Keep typing to refine search...</div>
+                  {empSearch.trim().length === 0 ? (
+                    <div className="text-center text-slate-400 text-xs py-8">Type to search for an employee</div>
+                  ) : filteredDroppableEmployees.length === 0 ? (
+                    <div className="text-center text-slate-400 text-xs py-8">No matching employees found.</div>
+                  ) : (
+                    <>
+                      {filteredDroppableEmployees.slice(0, 15).map(emp => (
+                        <DroppableEmployee key={emp.id} employee={emp} />
+                      ))}
+                      {filteredDroppableEmployees.length > 15 && (
+                        <div className="text-center text-[10px] text-slate-400 font-bold uppercase mt-4">Keep typing to refine search...</div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
