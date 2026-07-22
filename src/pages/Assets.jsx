@@ -354,7 +354,7 @@ export default function Assets() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-5 py-4 font-medium text-slate-700 dark:text-slate-300">{empName}</td>
+                    <td className="px-5 py-4 font-medium" style={{ color: '#000000' }}>{empName}</td>
                     <td className="px-5 py-4">
                       <p className="text-slate-800 dark:text-slate-200">{locName}</p>
                       <p className="text-xs text-slate-500 dark:text-slate-400">{deptName}</p>

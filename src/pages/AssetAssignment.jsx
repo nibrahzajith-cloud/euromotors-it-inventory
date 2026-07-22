@@ -3,7 +3,7 @@ import { ArrowRightLeft, Search, Loader2, AlertCircle, Trash2, Undo2, MousePoint
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
-import { DndContext, useDraggable, useDroppable, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { DndContext, useDraggable, useDroppable, PointerSensor, useSensor, useSensors, DragOverlay } from '@dnd-kit/core';
 
 const _rawApi = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 const API_URL = _rawApi.endsWith('/api') ? _rawApi : `${_rawApi.replace(/\/$/, '')}/api`;
@@ -21,11 +21,24 @@ function DraggableAsset({ asset }) {
   };
 
   return (
-    <div ref={setNodeRef} style={style} {...listeners} {...attributes} className="p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl cursor-grab active:cursor-grabbing shadow-sm hover:border-blue-400 dark:hover:border-blue-500 transition-colors flex items-center gap-3">
+    <div ref={setNodeRef} style={style} {...listeners} {...attributes} className={`p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl cursor-grab active:cursor-grabbing shadow-sm hover:border-blue-400 dark:hover:border-blue-500 transition-colors flex items-center gap-3 ${isDragging ? 'opacity-50' : ''}`}>
       <GripVertical className="w-4 h-4 text-slate-400" />
       <div>
         <p className="font-bold text-sm text-slate-800 dark:text-white">{asset.assetCode}</p>
         <p className="text-xs text-slate-500 dark:text-slate-400">{asset.model}</p>
+      </div>
+    </div>
+  );
+}
+
+function DraggableAssetOverlay({ asset }) {
+  if (!asset) return null;
+  return (
+    <div className="p-3 bg-white dark:bg-slate-800 border border-blue-500 rounded-xl shadow-2xl flex items-center gap-3 scale-105 rotate-2 cursor-grabbing z-[100]">
+      <GripVertical className="w-4 h-4 text-blue-500" />
+      <div>
+        <p className="font-bold text-sm text-blue-700 dark:text-blue-300">{asset.assetCode}</p>
+        <p className="text-xs text-blue-500/70">{asset.model}</p>
       </div>
     </div>
   );
@@ -80,6 +93,7 @@ export default function AssetAssignment() {
   const [assignmentMode, setAssignmentMode] = useState('standard'); // 'standard' | 'dnd'
   const [empSearch, setEmpSearch] = useState('');
   const [astSearch, setAstSearch] = useState('');
+  const [activeId, setActiveId] = useState(null);
 
   const canCreateEdit = user?.role === 'ADMIN' || user?.role === 'IT_OFFICER';
   const canDelete = user?.role === 'ADMIN';
@@ -177,7 +191,16 @@ export default function AssetAssignment() {
     }
   };
 
+  const handleDragStart = (event) => {
+    setActiveId(event.active.id);
+  };
+
+  const handleDragCancel = () => {
+    setActiveId(null);
+  };
+
   const handleDragEnd = async (event) => {
+    setActiveId(null);
     const { active, over } = event;
     if (!over) return;
 
@@ -326,7 +349,12 @@ export default function AssetAssignment() {
             <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Drag Available Stock to Target Employee</p>
           </div>
           
-          <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+          <DndContext 
+            sensors={sensors} 
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            onDragCancel={handleDragCancel}
+          >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 h-[400px]">
               
               {/* Left Column: Draggable Assets */}
@@ -367,6 +395,12 @@ export default function AssetAssignment() {
               </div>
 
             </div>
+            
+            <DragOverlay>
+              {activeId ? (
+                <DraggableAssetOverlay asset={availableAssets.find(a => `asset-${a.id}` === activeId)} />
+              ) : null}
+            </DragOverlay>
           </DndContext>
         </div>
       )}

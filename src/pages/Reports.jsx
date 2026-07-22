@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react';
 import { FileText, Download, MonitorSmartphone, Wrench, ShieldAlert, Users, Search, Loader2, AlertCircle } from 'lucide-react';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 
@@ -144,28 +147,84 @@ export default function Reports() {
   const dynamicDataMap = generateReportData();
   const reportHeaders = dynamicDataMap.length > 0 ? Object.keys(dynamicDataMap[0]) : [];
 
-  const handleExportCSV = () => {
+  const handleExportExcel = () => {
     if (dynamicDataMap.length === 0) {
       showToast("Nothing to export under the current constraint filter.", "warning");
       return;
     }
 
-    const headerStr = reportHeaders.map(h => `"${h}"`).join(",");
-    const rowsStr = dynamicDataMap.map(row =>
-      reportHeaders.map(h => `"${(row[h] || '').toString().replace(/"/g, '""')}"`).join(",")
-    ).join("\n");
+    const reportName = `${reportTabs.find(t => t.id === activeTab)?.name || 'Report'} Analytics`;
+    const titleRow = [`Euro Motors`];
+    const titleRow2 = [reportName];
+    const dateRow = [`Generated: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`];
+    const filterRow = [`Applied Filters: ${searchTerm ? `Search: "${searchTerm}"` : 'None'}`];
+    const emptyRow = [];
+    
+    const excelData = [
+      titleRow,
+      titleRow2,
+      dateRow,
+      filterRow,
+      emptyRow,
+      reportHeaders,
+      ...dynamicDataMap.map(row => reportHeaders.map(h => row[h]))
+    ];
 
-    const csvContent = `${headerStr}\n${rowsStr}`;
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const ws = XLSX.utils.aoa_to_sheet(excelData);
+    const colWidths = reportHeaders.map(h => ({ wch: Math.max(h.length + 5, 15) }));
+    ws['!cols'] = colWidths;
+    
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Data");
+    
+    const filename = `Euro_Motors_${activeTab}_Report_${new Date().toISOString().split('T')[0]}.xlsx`;
+    XLSX.writeFile(wb, filename);
+  };
 
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", `IT_System_${activeTab}_Report_${new Date().toLocaleDateString().replace(/\//g, '-')}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link); // System export success
+  const handleExportPDF = () => {
+    if (dynamicDataMap.length === 0) {
+      showToast("Nothing to export under the current constraint filter.", "warning");
+      return;
+    }
+
+    const pdf = new jsPDF('landscape');
+    
+    pdf.setFontSize(18);
+    pdf.setTextColor(15, 23, 42); // slate-900
+    pdf.text("Euro Motors", 14, 22);
+    
+    pdf.setFontSize(14);
+    pdf.setTextColor(71, 85, 105); // slate-500
+    const reportName = `${reportTabs.find(t => t.id === activeTab)?.name || 'Report'} Analytics`;
+    pdf.text(reportName, 14, 32);
+
+    pdf.setFontSize(10);
+    pdf.text(`Generated: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`, 14, 42);
+    pdf.text(`Filters: ${searchTerm ? `"${searchTerm}"` : 'None'}`, 14, 48);
+    pdf.text(`Total Records: ${dynamicDataMap.length}`, 14, 54);
+
+    const body = dynamicDataMap.map(row => reportHeaders.map(h => row[h] || ''));
+
+    autoTable(pdf, {
+      head: [reportHeaders],
+      body: body,
+      startY: 62,
+      styles: { fontSize: 8, cellPadding: 4 },
+      headStyles: { fillColor: [15, 23, 42] },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      margin: { top: 62, bottom: 20 },
+      didDrawPage: function (data) {
+        pdf.setFontSize(8);
+        pdf.text(
+          `Page ${data.pageNumber}`,
+          data.settings.margin.left,
+          pdf.internal.pageSize.height - 10
+        );
+      }
+    });
+
+    const filename = `Euro_Motors_${activeTab}_Report_${new Date().toISOString().split('T')[0]}.pdf`;
+    pdf.save(filename);
   };
 
   if (loading) {
@@ -199,14 +258,24 @@ export default function Reports() {
           <h1 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-2">Reporting Analytics</h1>
           <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">Cross-referential tracking parameters globally across all matrices.</p>
         </div>
-        <button
-          onClick={handleExportCSV}
-          disabled={dynamicDataMap.length === 0}
-          className="flex items-center w-full md:w-auto justify-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-xl font-medium hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Download className="w-4 h-4" />
-          Export Live Table Output (CSV)
-        </button>
+        <div className="flex flex-col md:flex-row items-center gap-3 w-full md:w-auto">
+          <button
+            onClick={handleExportPDF}
+            disabled={dynamicDataMap.length === 0}
+            className="flex items-center w-full md:w-auto justify-center gap-2 bg-red-50 text-red-700 border border-red-200 px-4 py-2 rounded-xl font-medium hover:bg-red-100 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+          >
+            <FileText className="w-4 h-4" />
+            Download PDF
+          </button>
+          <button
+            onClick={handleExportExcel}
+            disabled={dynamicDataMap.length === 0}
+            className="flex items-center w-full md:w-auto justify-center gap-2 bg-green-50 text-green-700 border border-green-200 px-4 py-2 rounded-xl font-medium hover:bg-green-100 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+          >
+            <Download className="w-4 h-4" />
+            Download Excel
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col min-h-[600px] overflow-hidden">

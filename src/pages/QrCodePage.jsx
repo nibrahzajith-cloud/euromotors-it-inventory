@@ -357,7 +357,7 @@ export default function QrCodePage() {
       {/* ========================================= */}
       {/* NATIVE BROWSER PRINT CONTAINER (A4 GRID)  */}
       {/* ========================================= */}
-      <div className="hidden print-visible">
+      <div className="hidden print:block print-visible">
          {chunkedCodes.map((pageAssets, pageIndex) => (
            <div key={pageIndex} className="a4-print-page">
               <div className="grid grid-cols-7 grid-rows-8 gap-[1mm] h-full w-full px-[3mm] py-[3mm]">
