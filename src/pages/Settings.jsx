@@ -132,11 +132,11 @@ export default function Settings() {
   const handleDownloadExcelTemplate = async () => {
      const headers = ["assignmentType", "locationName", "departmentName", "employeeCode", "employeeName", "email", "phone", "designation", "employeeStatus", "deviceType", "model", "serialNumber", "assetCode", "processor", "ram", "storage", "operatingSystem", "vendor", "purchaseDate", "warrantyExpiryDate", "status", "brand", "condition", "remarks"];
      const sampleRows = [
-        ["EMPLOYEE", "Head Office", "IT", "EMP001", "John Silva", "john@euromotors.lk", "0771234567", "IT Executive", "ACTIVE", "Laptop", "Dell Latitude 5440", "DL001234", "LAP001", "Intel Core i5", "16GB", "512GB SSD", "Windows 11 Pro", "Dell", "2025-01-10", "2028-01-10", "ACTIVE", "Dell", "Excellent", "Assigned to employee"],
-        ["DEPARTMENT", "Head Office", "Finance", "", "", "", "", "", "", "Photocopier", "Canon IR 2630", "CN002345", "PH001", "", "", "", "", "Canon", "2024-03-15", "2027-03-15", "ACTIVE", "Canon", "Good", "Department shared asset"],
-        ["LOCATION", "Colombo Showroom", "", "", "", "", "", "", "", "Router", "Cisco ISR 1100", "CS003456", "RT001", "", "", "", "Cisco IOS", "Cisco", "2025-02-20", "2030-02-20", "ACTIVE", "Cisco", "Excellent", "Installed in showroom"],
-        ["SHARED", "Head Office", "Meeting Room", "", "", "", "", "", "", "Projector", "Epson EB-X06", "EP004567", "PJ001", "", "", "", "", "Epson", "2024-06-01", "2027-06-01", "ACTIVE", "Epson", "Good", "Shared meeting room asset"],
-        ["STORE", "Central Warehouse", "", "", "", "", "", "", "", "Laptop", "HP ProBook 450 G10", "HP005678", "ST001", "Intel Core i7", "16GB", "512GB SSD", "Windows 11 Pro", "HP", "2025-04-18", "2028-04-18", "IN_STOCK", "HP", "New", "Available in IT Store"]
+        ["EMPLOYEE", "Head Office", "IT", "EMP001", "John Silva", "john.silva@euromotors.lk", "0771234567", "IT Executive", "Active", "Laptop", "Dell Latitude 5450", "DL54501234", "LAP001", "Intel Core i5", "16GB", "512GB SSD", "Windows 11 Pro", "Dell", "2025-01-10", "2028-01-10", "Active", "Dell", "Excellent", "Assigned to employee"],
+        ["DEPARTMENT", "Head Office", "Finance", "", "", "", "", "", "", "Photocopier", "Canon IR 2630", "CN26304567", "PH001", "", "", "", "", "Canon", "2024-05-12", "2027-05-12", "Active", "Canon", "Good", "Finance department photocopier"],
+        ["LOCATION", "Kaduwela Showroom", "", "", "", "", "", "", "", "Router", "Cisco ISR 1100", "CS11001234", "RT001", "", "", "", "Cisco IOS", "Cisco", "2025-02-20", "2030-02-20", "Active", "Cisco", "Excellent", "Installed in showroom"],
+        ["SHARED", "Head Office", "Administration", "", "", "", "", "", "", "Projector", "Epson EB-X06", "EPX061234", "PJ001", "", "", "", "", "Epson", "2024-08-15", "2027-08-15", "Active", "Epson", "Good", "Shared meeting room projector"],
+        ["STORE", "Central Warehouse", "IT Store", "", "", "", "", "", "", "Laptop", "HP ProBook 450 G10", "HP4505678", "ST001", "Intel Core i7", "16GB", "512GB SSD", "Windows 11 Pro", "HP", "2025-04-18", "2028-04-18", "In Stock", "HP", "New", "Available in IT Store"]
      ];
 
      const workbook = new ExcelJS.Workbook();
@@ -162,6 +162,14 @@ export default function Settings() {
         worksheet.addRow(row);
      });
 
+     for (let i = 2; i <= 1000; i++) {
+        worksheet.getCell(`A${i}`).dataValidation = {
+           type: 'list',
+           allowBlank: false,
+           formulae: ['"EMPLOYEE,DEPARTMENT,LOCATION,SHARED,STORE"']
+        };
+     }
+
      worksheet.columns.forEach(column => {
         let maxLength = 0;
         column["eachCell"]({ includeEmpty: true }, (cell) => {
@@ -180,11 +188,11 @@ export default function Settings() {
   const handleDownloadCsvTemplate = () => {
      const headers = ["assignmentType", "locationName", "departmentName", "employeeCode", "employeeName", "email", "phone", "designation", "employeeStatus", "deviceType", "model", "serialNumber", "assetCode", "processor", "ram", "storage", "operatingSystem", "vendor", "purchaseDate", "warrantyExpiryDate", "status", "brand", "condition", "remarks"];
      const sampleRows = [
-        ["EMPLOYEE", "Head Office", "IT", "EMP001", "John Silva", "john@euromotors.lk", "0771234567", "IT Executive", "ACTIVE", "Laptop", "Dell Latitude 5440", "DL001234", "LAP001", "Intel Core i5", "16GB", "512GB SSD", "Windows 11 Pro", "Dell", "2025-01-10", "2028-01-10", "ACTIVE", "Dell", "Excellent", "Assigned to employee"],
-        ["DEPARTMENT", "Head Office", "Finance", "", "", "", "", "", "", "Photocopier", "Canon IR 2630", "CN002345", "PH001", "", "", "", "", "Canon", "2024-03-15", "2027-03-15", "ACTIVE", "Canon", "Good", "Department shared asset"],
-        ["LOCATION", "Colombo Showroom", "", "", "", "", "", "", "", "Router", "Cisco ISR 1100", "CS003456", "RT001", "", "", "", "Cisco IOS", "Cisco", "2025-02-20", "2030-02-20", "ACTIVE", "Cisco", "Excellent", "Installed in showroom"],
-        ["SHARED", "Head Office", "Meeting Room", "", "", "", "", "", "", "Projector", "Epson EB-X06", "EP004567", "PJ001", "", "", "", "", "Epson", "2024-06-01", "2027-06-01", "ACTIVE", "Epson", "Good", "Shared meeting room asset"],
-        ["STORE", "Central Warehouse", "", "", "", "", "", "", "", "Laptop", "HP ProBook 450 G10", "HP005678", "ST001", "Intel Core i7", "16GB", "512GB SSD", "Windows 11 Pro", "HP", "2025-04-18", "2028-04-18", "IN_STOCK", "HP", "New", "Available in IT Store"]
+        ["EMPLOYEE", "Head Office", "IT", "EMP001", "John Silva", "john.silva@euromotors.lk", "0771234567", "IT Executive", "Active", "Laptop", "Dell Latitude 5450", "DL54501234", "LAP001", "Intel Core i5", "16GB", "512GB SSD", "Windows 11 Pro", "Dell", "2025-01-10", "2028-01-10", "Active", "Dell", "Excellent", "Assigned to employee"],
+        ["DEPARTMENT", "Head Office", "Finance", "", "", "", "", "", "", "Photocopier", "Canon IR 2630", "CN26304567", "PH001", "", "", "", "", "Canon", "2024-05-12", "2027-05-12", "Active", "Canon", "Good", "Finance department photocopier"],
+        ["LOCATION", "Kaduwela Showroom", "", "", "", "", "", "", "", "Router", "Cisco ISR 1100", "CS11001234", "RT001", "", "", "", "Cisco IOS", "Cisco", "2025-02-20", "2030-02-20", "Active", "Cisco", "Excellent", "Installed in showroom"],
+        ["SHARED", "Head Office", "Administration", "", "", "", "", "", "", "Projector", "Epson EB-X06", "EPX061234", "PJ001", "", "", "", "", "Epson", "2024-08-15", "2027-08-15", "Active", "Epson", "Good", "Shared meeting room projector"],
+        ["STORE", "Central Warehouse", "IT Store", "", "", "", "", "", "", "Laptop", "HP ProBook 450 G10", "HP4505678", "ST001", "Intel Core i7", "16GB", "512GB SSD", "Windows 11 Pro", "HP", "2025-04-18", "2028-04-18", "In Stock", "HP", "New", "Available in IT Store"]
      ];
      let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\\n" + sampleRows.map(e => e.join(",")).join("\\n");
      const encodedUri = encodeURI(csvContent);
@@ -250,7 +258,7 @@ export default function Settings() {
                   <div className="text-sm text-slate-500 mb-4 space-y-2">
                      <div className="bg-blue-50 border border-blue-200 text-blue-800 px-3 py-2 rounded-lg text-xs font-medium mb-4">
                         <span className="block mb-1 font-bold">Important Note:</span>
-                        <p>Rows 2–6 in the downloaded templates are sample records for reference only. Delete these rows before importing your actual asset data.</p>
+                        <p>The sample rows are for reference only. Delete them before importing your actual asset data.</p>
                      </div>
                      <p>Upload a `.csv` mapping payload for smart organizational parsing. Valid columns:</p>
                      <div className="flex flex-wrap gap-1.5 pb-2">
