@@ -15,6 +15,7 @@ export default function Settings() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isImporting, setIsImporting] = useState(false);
   const [validationReport, setValidationReport] = useState(null);
+  const [selectedFileInfo, setSelectedFileInfo] = useState(null);
   
   const [assetCodePrefix, setAssetCodePrefix] = useState('AST');
   const [warrantyPeriod, setWarrantyPeriod] = useState(12);
@@ -107,27 +108,30 @@ export default function Settings() {
   };
 
   const downloadValidationReport = (report) => {
-      const csvContent = [
-          ['Error Type', 'Value', 'First Occurrence Row', 'First Context', 'Duplicate Row', 'Duplicate Context'],
-          ...report.map(r => [
-              `"${r.type}"`, 
-              `"${r.value}"`, 
-              r.firstRow, 
-              `"${r.asset1Context}"`, 
-              r.duplicateRow, 
-              `"${r.asset2Context}"`
-          ])
-      ].map(e => e.join(",")).join("\n");
-      
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement("a");
-      const url = URL.createObjectURL(blob);
-      link.setAttribute("href", url);
-      link.setAttribute("download", "Duplicate_Validation_Report.csv");
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+     if (!report || report.length === 0) return;
+     const headers = ["Row Number", "Column Name", "Current Value", "Suggested Fix"];
+     const csvRows = [headers.join(",")];
+     
+     report.forEach(err => {
+         const rowNum = err.duplicateRow || err.row || '';
+         const colName = err.type || err.column || '';
+         const curValue = (err.value || '').toString().replace(/,/g, '');
+         let fix = err.fix || '';
+         if (err.firstRow) {
+             fix = `Matches Row ${err.firstRow} (${err.asset1Context}). Must be unique.`;
+         }
+         fix = fix.replace(/,/g, '');
+         csvRows.push([rowNum, colName, curValue, fix].join(","));
+     });
+     
+     const csvContent = "data:text/csv;charset=utf-8," + csvRows.join("\\n");
+     const encodedUri = encodeURI(csvContent);
+     const link = document.createElement("a");
+     link.setAttribute("href", encodedUri);
+     link.setAttribute("download", "validation_error_report.csv");
+     document.body.appendChild(link);
+     link.click();
+     document.body.removeChild(link);
   };
 
   const handleFileUpload = async (e) => {
@@ -135,6 +139,23 @@ export default function Settings() {
     if (!file) return;
 
     setValidationReport(null);
+    setSelectedFileInfo(null);
+    setCsvData([]);
+
+    // We will save file size for later
+    const fileSizeStr = (file.size / 1024).toFixed(2) + ' KB';
+    
+    // Create a wrapper for processParsedAssets to also set the file info
+    const processAndSetFileInfo = (assets) => {
+        if (assets.length > 0) {
+            setSelectedFileInfo({
+                name: file.name,
+                size: fileSizeStr,
+                count: assets.length
+            });
+        }
+        processParsedAssets(assets);
+    };
 
     if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
       try {
@@ -162,7 +183,7 @@ export default function Settings() {
               parsedAssets.push(assetObj);
            }
         });
-        processParsedAssets(parsedAssets);
+        processAndSetFileInfo(parsedAssets);
       } catch (err) {
         showToast('Failed to parse Excel file', 'error');
       }
@@ -239,7 +260,7 @@ export default function Settings() {
          return;
       }
       
-      processParsedAssets(parsedAssets);
+      processAndSetFileInfo(parsedAssets);
     };
     reader.readAsText(file);
     e.target.value = null; // reset allowing same upload binding securely
@@ -423,72 +444,90 @@ export default function Settings() {
              Bulk Asset Initialization (CSV Pipeline)
           </h2>
           
-          <div className="space-y-4">
-            <div className="flex flex-col md:flex-row gap-4 items-start">
-               <div className="flex-1">
-                  <div className="text-sm text-slate-500 mb-4 space-y-2">
-                     <div className="bg-blue-50 border border-blue-200 text-blue-800 px-3 py-2 rounded-lg text-xs font-medium mb-4">
-                        <span className="block mb-1 font-bold">Important Note:</span>
-                        <p>The sample rows are for reference only. Delete them before importing your actual asset data.</p>
-                     </div>
-                     <p>Upload a `.csv` or `.xlsx` mapping payload for smart organizational parsing. Valid columns:</p>
-                     <div className="flex flex-wrap gap-1.5 pb-2">
-                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">assignmentType</span>
-                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">locationName</span>
-                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">departmentName</span>
-                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">employeeCode</span>
-                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">employeeName</span>
-                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">email</span>
-                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">phone</span>
-                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">designation</span>
-                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">employeeStatus</span>
-                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">deviceType</span>
-                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">model</span>
-                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">serialNumber</span>
-                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">assetCode</span>
-                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">processor</span>
-                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">ram</span>
-                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">storage</span>
-                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">operatingSystem</span>
-                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">vendor</span>
-                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">purchaseDate</span>
-                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">warrantyExpiryDate</span>
-                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">status</span>
-                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">brand</span>
-                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">condition</span>
-                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">remarks</span>
-                     </div>
-                     <div className="bg-amber-50 border border-amber-200 text-amber-800 px-3 py-2 rounded-lg text-xs font-medium">
-                        <span className="block mb-1"><strong>Required Rules based on assignmentType:</strong></span>
-                        <ul className="list-disc pl-4 space-y-0.5">
-                           <li><strong>EMPLOYEE</strong>: <code className="bg-amber-100 px-1 rounded">employeeCode</code> will be auto-generated if left blank.</li>
-                           <li><strong>DEPARTMENT</strong>: <code className="bg-amber-100 px-1 rounded">departmentName</code> is mandatory. Employee fields ignored.</li>
-                           <li><strong>LOCATION / STORE</strong>: <code className="bg-amber-100 px-1 rounded">locationName</code> is mandatory. Employee fields ignored.</li>
-                           <li><strong>SHARED</strong>: Either <code className="bg-amber-100 px-1 rounded">departmentName</code> or <code className="bg-amber-100 px-1 rounded">locationName</code> is mandatory. Employee fields ignored.</li>
-                        </ul>
-                     </div>
-                  </div>
-                  
-                  <div className="flex flex-wrap gap-4">
-                     <button onClick={handleDownloadExcelTemplate} className="cursor-pointer inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-green-50 border border-green-200 text-green-700 font-medium rounded-xl hover:bg-green-100 transition-colors shadow-sm">
-                        <FileText className="w-4 h-4 text-green-600" />
-                        Download Excel (.xlsx)
-                     </button>
-                     <button onClick={handleDownloadCsvTemplate} className="cursor-pointer inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-50 border border-blue-200 text-blue-700 font-medium rounded-xl hover:bg-blue-100 transition-colors shadow-sm">
-                        <FileText className="w-4 h-4 text-blue-600" />
-                        Download CSV (.csv)
-                     </button>
-                     <label className="cursor-pointer inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-slate-700 font-medium rounded-xl hover:bg-slate-50 transition-colors shadow-sm">
-                        <UploadCloud className="w-4 h-4 text-slate-400" />
-                        Select File (.csv, .xlsx)
-                        <input type="file" accept=".csv, .xlsx, .xls" onChange={handleFileUpload} className="hidden" />
-                     </label>
-                  </div>
+          <div className="space-y-6">
+            {/* STEP 1: Download Templates */}
+            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+               <h3 className="text-base font-bold text-slate-800 flex items-center gap-2 mb-4">
+                  <span className="bg-blue-100 text-blue-700 w-6 h-6 rounded-full flex items-center justify-center text-xs">1</span>
+                  Download Sample Template
+               </h3>
+               <div className="flex flex-wrap gap-4">
+                  <button onClick={handleDownloadExcelTemplate} className="cursor-pointer inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-green-50 border border-green-200 text-green-700 font-medium rounded-xl hover:bg-green-100 transition-colors shadow-sm">
+                     <FileText className="w-4 h-4 text-green-600" />
+                     Download Excel Template (.xlsx)
+                  </button>
+                  <button onClick={handleDownloadCsvTemplate} className="cursor-pointer inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-50 border border-blue-200 text-blue-700 font-medium rounded-xl hover:bg-blue-100 transition-colors shadow-sm">
+                     <FileText className="w-4 h-4 text-blue-600" />
+                     Download CSV Template (.csv)
+                  </button>
                </div>
             </div>
 
+            {/* STEP 2: Instructions */}
+            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+               <h3 className="text-base font-bold text-slate-800 flex items-center gap-2 mb-4">
+                  <span className="bg-blue-100 text-blue-700 w-6 h-6 rounded-full flex items-center justify-center text-xs">2</span>
+                  Read the Upload Instructions
+               </h3>
+               <div className="text-sm text-slate-600 space-y-2">
+                  <p>Follow these steps to ensure a successful upload:</p>
+                  <ol className="list-decimal pl-5 space-y-1">
+                     <li>Download the sample template above.</li>
+                     <li>Keep the column names exactly as they are in the header row. Do not modify or delete the header row.</li>
+                     <li>Fill in your asset information. Delete the sample rows before saving.</li>
+                     <li>Select the correct <strong>assignmentType</strong> (EMPLOYEE, DEPARTMENT, LOCATION, SHARED, STORE).</li>
+                     <li>Ensure the <strong>Asset Code</strong> is unique for every row.</li>
+                     <li>If a <strong>Serial Number</strong> is available, it must be unique across all records.</li>
+                     <li>Save the file as a CSV or Excel (.xlsx) file.</li>
+                     <li>Click "Select File" below to upload.</li>
+                     <li>Review any validation errors and correct them in your file before re-uploading.</li>
+                  </ol>
+               </div>
+            </div>
+
+            {/* STEP 3: Upload */}
+            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+               <h3 className="text-base font-bold text-slate-800 flex items-center gap-2 mb-4">
+                  <span className="bg-blue-100 text-blue-700 w-6 h-6 rounded-full flex items-center justify-center text-xs">3</span>
+                  Upload Your Completed File
+               </h3>
+               
+               {!selectedFileInfo && (
+                  <label className="cursor-pointer inline-flex items-center justify-center gap-2 px-6 py-3 bg-indigo-50 border border-indigo-200 text-indigo-700 font-medium rounded-xl hover:bg-indigo-100 transition-colors shadow-sm">
+                     <UploadCloud className="w-5 h-5 text-indigo-600" />
+                     Select File (.csv, .xlsx)
+                     <input type="file" accept=".csv, .xlsx, .xls" onChange={handleFileUpload} className="hidden" />
+                  </label>
+               )}
+
+               {selectedFileInfo && !isImporting && !importStatus && !validationReport && (
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+                     <div>
+                        <p className="text-sm text-slate-500 font-medium">Selected File:</p>
+                        <p className="text-lg font-bold text-slate-800">{selectedFileInfo.name}</p>
+                        <p className="text-sm text-slate-600">{selectedFileInfo.count} Records • {selectedFileInfo.size}</p>
+                     </div>
+                     <div className="flex gap-3">
+                        <button 
+                           onClick={() => { setSelectedFileInfo(null); setCsvData([]); }}
+                           className="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-100"
+                        >
+                           Cancel
+                        </button>
+                        <button 
+                           onClick={handleBulkImport}
+                           className="px-5 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 flex items-center gap-2 shadow-sm"
+                        >
+                           <Play className="w-4 h-4" /> Upload Assets
+                        </button>
+                     </div>
+                  </div>
+               )}
+            </div>
+
+            {/* VALIDATION REPORT */}
             {validationReport && (
-               <div className="mt-6 bg-red-50 border border-red-200 rounded-xl overflow-hidden shadow-sm animate-in fade-in duration-300">
+               <div className="bg-red-50 border border-red-200 rounded-xl overflow-hidden shadow-sm animate-in fade-in duration-300">
                   <div className="bg-red-100/50 px-4 py-3 border-b border-red-200 flex justify-between items-center">
                      <h3 className="text-red-800 font-bold flex items-center gap-2">
                         <AlertCircle className="w-5 h-5" /> 
@@ -505,24 +544,24 @@ export default function Settings() {
                      <table className="w-full text-sm text-left">
                         <thead className="bg-red-50 text-red-800 sticky top-0 shadow-sm">
                            <tr>
-                              <th className="px-4 py-2.5 font-semibold">Error Type</th>
-                              <th className="px-4 py-2.5 font-semibold">Value</th>
-                              <th className="px-4 py-2.5 font-semibold">First Occurrence</th>
-                              <th className="px-4 py-2.5 font-semibold">Duplicate</th>
+                              <th className="px-4 py-2.5 font-semibold">Row Number</th>
+                              <th className="px-4 py-2.5 font-semibold">Column Name</th>
+                              <th className="px-4 py-2.5 font-semibold">Current Value</th>
+                              <th className="px-4 py-2.5 font-semibold">Suggested Fix</th>
                            </tr>
                         </thead>
                         <tbody className="divide-y divide-red-100">
                            {validationReport.map((err, idx) => (
                               <tr key={idx} className="bg-white text-slate-700 hover:bg-red-50/30 transition-colors">
-                                 <td className="px-4 py-3 font-medium text-red-700">{err.type}</td>
+                                 <td className="px-4 py-3 font-bold text-red-700">Row {err.duplicateRow || err.row}</td>
+                                 <td className="px-4 py-3 font-medium">{err.type || err.column}</td>
                                  <td className="px-4 py-3 font-mono text-xs">{err.value}</td>
                                  <td className="px-4 py-3 text-xs">
-                                    <span className="font-bold text-slate-800">Row {err.firstRow}</span><br/>
-                                    <span className="text-slate-500">{err.asset1Context}</span>
-                                 </td>
-                                 <td className="px-4 py-3 text-xs">
-                                    <span className="font-bold text-red-700">Row {err.duplicateRow}</span><br/>
-                                    <span className="text-slate-500">{err.asset2Context}</span>
+                                    {err.firstRow ? (
+                                        <>Matches Row {err.firstRow} ({err.asset1Context}). Must be unique.</>
+                                    ) : (
+                                        err.fix
+                                    )}
                                  </td>
                               </tr>
                            ))}
@@ -533,11 +572,11 @@ export default function Settings() {
             )}
 
              {isImporting && (
-                <div className="mt-6 bg-white border border-slate-200 rounded-xl p-8 shadow-sm flex flex-col items-center justify-center space-y-5 animate-in fade-in duration-300">
+                 <div className="bg-white border border-slate-200 rounded-xl p-8 shadow-sm flex flex-col items-center justify-center space-y-5 animate-in fade-in duration-300">
                   <div className="flex flex-col items-center gap-2">
                     <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
-                    <span className="text-slate-800 font-bold text-lg">Initializing Asset Pipeline...</span>
-                    <span className="text-slate-500 text-sm">Processing {csvData.length} records. Please do not close this window.</span>
+                    <span className="text-slate-800 font-bold text-lg">Uploading Assets...</span>
+                    <span className="text-slate-500 text-sm">Processing {selectedFileInfo?.count || csvData.length} records. Please do not close this window.</span>
                   </div>
                   <div className="w-full max-w-md bg-slate-100 rounded-full h-4 overflow-hidden border border-slate-200 shadow-inner relative">
                     <div 
@@ -549,40 +588,6 @@ export default function Settings() {
                   <div className="text-indigo-700 font-bold">{uploadProgress}% Complete</div>
                 </div>
              )}
-
-            {csvData.length > 0 && !importStatus && !isImporting && (
-               <div className="mt-6 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                 <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex justify-between items-center">
-                    <span className="text-sm font-semibold text-slate-700">Preview Layout (First 4 Rows) - Total: {csvData.length} records parsed</span>
-                    <button 
-                       onClick={handleBulkImport}
-                       disabled={isImporting}
-                       className="px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
-                    >
-                       {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-                       {isImporting ? 'Processing Bounds...' : 'Start Integration Pipeline'}
-                    </button>
-                 </div>
-                 <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs text-slate-600">
-                       <thead className="bg-slate-50/50 text-slate-400 whitespace-nowrap">
-                          <tr>
-                             {Object.keys(csvData[0]).slice(0,6).map(h => <th key={h} className="px-4 py-2 font-medium">{h}</th>)}
-                             {Object.keys(csvData[0]).length > 6 && <th className="px-4 py-2 font-medium">...</th>}
-                          </tr>
-                       </thead>
-                       <tbody className="divide-y divide-slate-100">
-                          {csvData.slice(0, 4).map((row, i) => (
-                             <tr key={i} className="hover:bg-slate-50/50">
-                               {Object.keys(csvData[0]).slice(0,6).map(h => <td key={h} className="px-4 py-2">{row[h] || '-'}</td>)}
-                               {Object.keys(csvData[0]).length > 6 && <td className="px-4 py-2 italic text-slate-400">hidden bounds</td>}
-                             </tr>
-                          ))}
-                       </tbody>
-                    </table>
-                 </div>
-               </div>
-            )}
 
             {importStatus && (
                <div className={`mt-6 p-5 rounded-2xl border ${importStatus.fatal ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-200'}`}>

@@ -163,7 +163,10 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
        
        try {
           if (!a.deviceType) {
-             throw new Error("Missing required field (deviceType).");
+             const e = new Error("Please provide a valid device type (e.g., Laptop, Router).");
+             e.column = 'deviceType';
+             e.value = a.deviceType || '';
+             throw e;
           }
 
           const aType = a.assignmentType ? a.assignmentType.toUpperCase() : 'EMPLOYEE';
@@ -172,9 +175,24 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
              a.employeeCode = `EMP-${highestEmployeeSequence.toString().padStart(5, '0')}-001`;
              existingEmployeeCodes.add(a.employeeCode);
           }
-          if (aType === 'DEPARTMENT' && !a.departmentName) throw new Error("Department Name is mandatory for DEPARTMENT assignment type.");
-          if ((aType === 'LOCATION' || aType === 'STORE') && !a.locationName) throw new Error(`Location Name is mandatory for ${aType} assignment type.`);
-          if (aType === 'SHARED' && !a.departmentName && !a.locationName) throw new Error("Department or Location is mandatory for SHARED assignment type.");
+          if (aType === 'DEPARTMENT' && !a.departmentName) {
+             const e = new Error("Department Name is mandatory for DEPARTMENT assignment type.");
+             e.column = 'departmentName';
+             e.value = a.departmentName || '';
+             throw e;
+          }
+          if ((aType === 'LOCATION' || aType === 'STORE') && !a.locationName) {
+             const e = new Error(`Location Name is mandatory for ${aType} assignment type.`);
+             e.column = 'locationName';
+             e.value = a.locationName || '';
+             throw e;
+          }
+          if (aType === 'SHARED' && !a.departmentName && !a.locationName) {
+             const e = new Error("Department or Location is mandatory for SHARED assignment type.");
+             e.column = 'departmentName / locationName';
+             e.value = '';
+             throw e;
+          }
 
           // 1 & 2. Location and Department Resolution
           let locationId = null;
@@ -248,7 +266,10 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
 
           // Duplicate checks
           if (existingAssetCodes.has(finalAssetCode)) {
-              throw new Error(`Duplicate assetCode: ${finalAssetCode}`);
+              const e = new Error("This asset code already exists in the database.");
+              e.column = 'assetCode';
+              e.value = finalAssetCode;
+              throw e;
           }
           existingAssetCodes.add(finalAssetCode);
           
@@ -257,7 +278,10 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
           if (a.serialNumber && a.serialNumber.toString().trim() !== '' && a.serialNumber.toString().trim().toLowerCase() !== 'no serial') {
               finalSerial = a.serialNumber.toString().trim();
               if (existingSerialNumbers.has(finalSerial)) {
-                  throw new Error(`Duplicate Serial Number`);
+                  const e = new Error("This Serial Number already exists in the database.");
+                  e.column = 'serialNumber';
+                  e.value = finalSerial;
+                  throw e;
               }
               existingSerialNumbers.add(finalSerial);
           }
@@ -342,7 +366,21 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
           
        } catch (err) {
           results.skippedRows++;
-          results.errors.push(`Row ${rowNum}: ${err.message}`);
+          if (err.column) {
+              results.errors.push({
+                 row: rowNum,
+                 column: err.column,
+                 value: err.value,
+                 fix: err.message
+              });
+          } else {
+              results.errors.push({
+                 row: rowNum,
+                 column: 'System',
+                 value: '-',
+                 fix: err.message
+              });
+          }
        }
     }
 
