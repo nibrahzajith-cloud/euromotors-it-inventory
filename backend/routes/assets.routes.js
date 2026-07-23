@@ -45,6 +45,22 @@ router.post('/', authorize(['ADMIN', 'IT_OFFICER']), async (req, res) => {
     }
     if (payload.serialNumber) payload.serialNumber = payload.serialNumber.trim();
     
+    // AssignmentType Validation
+    const aType = payload.assignmentType || 'EMPLOYEE';
+    if (aType === 'DEPARTMENT') {
+      if (!payload.departmentId) return res.status(400).json({ error: 'Department is mandatory for DEPARTMENT assignment type.' });
+      payload.assignedEmployeeId = null;
+    } else if (aType === 'LOCATION') {
+      if (!payload.locationId) return res.status(400).json({ error: 'Location is mandatory for LOCATION assignment type.' });
+      payload.assignedEmployeeId = null;
+    } else if (aType === 'SHARED') {
+      if (!payload.departmentId && !payload.locationId) return res.status(400).json({ error: 'Department or Location is required for SHARED assignment type.' });
+      payload.assignedEmployeeId = null;
+    } else if (aType === 'STORE') {
+      if (!payload.locationId) return res.status(400).json({ error: 'Location is mandatory for STORE assignment type.' });
+      payload.assignedEmployeeId = null;
+    }
+    
     const record = await prisma.asset.create({ data: payload });
 
     // Log Audit
@@ -103,6 +119,12 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
              throw new Error("Missing required fields (deviceType or model).");
           }
 
+          const aType = a.assignmentType ? a.assignmentType.toUpperCase() : 'EMPLOYEE';
+          if (aType === 'EMPLOYEE' && !a.employeeCode) throw new Error("Employee Code is mandatory for EMPLOYEE assignment type.");
+          if (aType === 'DEPARTMENT' && !a.departmentName) throw new Error("Department Name is mandatory for DEPARTMENT assignment type.");
+          if ((aType === 'LOCATION' || aType === 'STORE') && !a.locationName) throw new Error(`Location Name is mandatory for ${aType} assignment type.`);
+          if (aType === 'SHARED' && !a.departmentName && !a.locationName) throw new Error("Department or Location is mandatory for SHARED assignment type.");
+
           // 1 & 2. Location and Department Resolution
           let locationId = null;
           if (a.locationName) {
@@ -126,23 +148,14 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
 
           // 3 & 4. Employee Resolution
           let employeeId = null;
-          if (a.employeeName && a.employeeName.trim() !== '') {
-             let emp = null;
-             
-             if (a.employeeCode) emp = await prisma.employee.findUnique({ where: { employeeCode: a.employeeCode } });
-             if (!emp && a.email) emp = await prisma.employee.findFirst({ where: { email: a.email } });
-             if (!emp) {
-                 const matchCriteria = { fullName: a.employeeName };
-                 if (locationId) matchCriteria.locationId = locationId;
-                 emp = await prisma.employee.findFirst({ where: matchCriteria });
-             }
+          if (aType === 'EMPLOYEE' && a.employeeCode) {
+             let emp = await prisma.employee.findUnique({ where: { employeeCode: a.employeeCode } });
              
              if (!emp) {
-                 const newEmpCode = await generateEmployeeCode(prisma);
                  emp = await prisma.employee.create({
                      data: {
-                         employeeCode: newEmpCode,
-                         fullName: a.employeeName,
+                         employeeCode: a.employeeCode,
+                         fullName: a.employeeName || 'Unknown',
                          email: a.email || null,
                          phone: a.phone || null,
                          designation: a.designation || null,
@@ -154,6 +167,7 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
                  results.createdEmployees++;
              } else {
                  const updateData = { departmentId, locationId };
+                 if (a.employeeName) updateData.fullName = a.employeeName;
                  if (a.email) updateData.email = a.email;
                  if (a.phone) updateData.phone = a.phone;
                  if (a.designation) updateData.designation = a.designation;
@@ -219,7 +233,8 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
              ipAddress: a.ipAddress || null,
              departmentId,
              locationId,
-             assignedEmployeeId: employeeId
+             assignedEmployeeId: employeeId,
+             assignmentType: aType
           };
 
           const newAsset = await prisma.asset.create({ data: createData });
@@ -292,7 +307,24 @@ router.put('/:id', authorize(['ADMIN', 'IT_OFFICER']), async (req, res) => {
     const oldRecord = await prisma.asset.findUnique({ where: { id: req.params.id } });
     if (!oldRecord) return res.status(404).json({ error: 'Asset not found' });
 
-    const record = await prisma.asset.update({ where: { id: req.params.id }, data: req.body });
+    const payload = req.body;
+    const aType = payload.assignmentType || oldRecord.assignmentType;
+    
+    if (aType === 'DEPARTMENT') {
+      if (!payload.departmentId && !oldRecord.departmentId) return res.status(400).json({ error: 'Department is mandatory for DEPARTMENT assignment type.' });
+      payload.assignedEmployeeId = null;
+    } else if (aType === 'LOCATION') {
+      if (!payload.locationId && !oldRecord.locationId) return res.status(400).json({ error: 'Location is mandatory for LOCATION assignment type.' });
+      payload.assignedEmployeeId = null;
+    } else if (aType === 'SHARED') {
+      if (!payload.departmentId && !oldRecord.departmentId && !payload.locationId && !oldRecord.locationId) return res.status(400).json({ error: 'Department or Location is required for SHARED assignment type.' });
+      payload.assignedEmployeeId = null;
+    } else if (aType === 'STORE') {
+      if (!payload.locationId && !oldRecord.locationId) return res.status(400).json({ error: 'Location is mandatory for STORE assignment type.' });
+      payload.assignedEmployeeId = null;
+    }
+    
+    const record = await prisma.asset.update({ where: { id: req.params.id }, data: payload });
 
     // Log Audit
     await logAudit({

@@ -29,30 +29,64 @@ router.post('/', authorize(['ADMIN', 'IT_OFFICER']), async (req, res) => {
       return res.status(400).json({ error: `Cannot assign asset. Current status is ${asset.status}.` });
     }
 
-    const employee = await prisma.employee.findUnique({ 
-       where: { id: req.body.employeeId },
-       include: { department: true, location: true }
-    });
-    if (!employee) return res.status(404).json({ error: 'Employee not found' });
-
-    const record = await prisma.assetAssignment.create({ data: req.body });
+    const aType = req.body.assignmentType || asset.assignmentType || 'EMPLOYEE';
+    let employee = null;
+    let record = null;
+    let dept = null;
+    let loc = null;
     
-    // Update asset status
-    await prisma.asset.update({
-      where: { id: req.body.assetId },
-      data: { status: 'ASSIGNED', assignedEmployeeId: req.body.employeeId }
-    });
+    if (aType === 'EMPLOYEE') {
+      employee = await prisma.employee.findUnique({ 
+         where: { id: req.body.employeeId },
+         include: { department: true, location: true }
+      });
+      if (!employee) return res.status(404).json({ error: 'Employee not found' });
+      
+      record = await prisma.assetAssignment.create({ 
+        data: {
+          assetId: req.body.assetId,
+          employeeId: req.body.employeeId,
+          remarks: req.body.remarks || null
+        }
+      });
+      
+      await prisma.asset.update({
+        where: { id: req.body.assetId },
+        data: { 
+          status: 'ASSIGNED', 
+          assignedEmployeeId: req.body.employeeId,
+          assignmentType: 'EMPLOYEE'
+        }
+      });
+    } else {
+      if (req.body.departmentId) {
+        dept = await prisma.department.findUnique({ where: { id: req.body.departmentId } });
+      }
+      if (req.body.locationId) {
+        loc = await prisma.location.findUnique({ where: { id: req.body.locationId } });
+      }
+      
+      await prisma.asset.update({
+        where: { id: req.body.assetId },
+        data: {
+          status: 'ASSIGNED',
+          assignmentType: aType,
+          departmentId: req.body.departmentId || asset.departmentId,
+          locationId: req.body.locationId || asset.locationId,
+          assignedEmployeeId: null
+        }
+      });
+    }
 
     // Log Audit
     await logAudit({
       req,
       action: 'ASSIGN',
       module: 'ASSIGNMENTS',
-      entityType: 'ASSIGNMENT',
-      entityId: record.id,
+      entityType: 'ASSET',
+      entityId: asset.id,
       entityCode: asset.assetCode,
-      newValue: record,
-      description: `Asset ${asset.assetCode} assigned to ${employee.fullName}`
+      description: `Asset ${asset.assetCode} assigned (${aType})`
     });
 
     // Log Timeline
@@ -61,20 +95,22 @@ router.post('/', authorize(['ADMIN', 'IT_OFFICER']), async (req, res) => {
       assetCode: asset.assetCode,
       eventType: 'ASSIGNED',
       title: 'Asset Assigned',
-      description: `Assigned to ${employee.fullName} (${employee.employeeCode})`,
+      description: aType === 'EMPLOYEE' 
+        ? `Assigned to ${employee.fullName} (${employee.employeeCode})`
+        : `Assigned as ${aType} ` + (dept ? `to ${dept.name}` : '') + (loc ? ` at ${loc.name}` : ''),
       oldStatus: 'AVAILABLE',
       newStatus: 'ASSIGNED',
-      employeeId: employee.id,
-      employeeName: employee.fullName,
-      departmentId: employee.departmentId,
-      departmentName: employee.department?.name,
-      locationId: employee.locationId,
-      locationName: employee.location?.name,
+      employeeId: employee?.id,
+      employeeName: employee?.fullName,
+      departmentId: employee?.departmentId || req.body.departmentId,
+      departmentName: employee?.department?.name || dept?.name,
+      locationId: employee?.locationId || req.body.locationId,
+      locationName: employee?.location?.name || loc?.name,
       performedById: req.user.id,
       performedByName: req.user.fullName
     });
 
-    res.status(201).json(record);
+    res.status(201).json(record || { message: 'Asset assigned successfully.' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

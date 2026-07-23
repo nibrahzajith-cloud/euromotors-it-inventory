@@ -583,10 +583,14 @@ export default function AssetProfile() {
                   </div>
                   <div className="flex items-center justify-between border-t border-slate-50 dark:border-slate-700 pt-4 mt-4">
                     <div className="flex flex-col">
-                      <span className="text-xs text-slate-400 dark:text-slate-500 font-medium uppercase tracking-wider mb-1">Assigned To</span>
+                      <span className="text-xs text-slate-400 dark:text-slate-500 font-medium uppercase tracking-wider mb-1">Assigned To ({asset.assignmentType || 'EMPLOYEE'})</span>
                       <span className="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                         <User className="w-3.5 h-3.5 text-slate-400" />
-                        {asset.assignedEmployee?.fullName || 'Not Assigned'}
+                        {(!asset.assignmentType || asset.assignmentType === 'EMPLOYEE') ? (asset.assignedEmployee?.fullName || 'Not Assigned') :
+                         asset.assignmentType === 'DEPARTMENT' ? (asset.department?.name || 'Not Assigned') :
+                         (asset.assignmentType === 'LOCATION' || asset.assignmentType === 'STORE') ? (asset.location?.name || 'Not Assigned') :
+                         asset.assignmentType === 'SHARED' ? (asset.department?.name || asset.location?.name || 'Not Assigned') :
+                         'Not Assigned'}
                       </span>
                     </div>
                   </div>

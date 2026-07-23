@@ -132,6 +132,7 @@ export default function AddAsset() {
     locationId: '',
     departmentId: '',
     assignedEmployeeId: '',
+    assignmentType: 'EMPLOYEE',
     remarks: '',
     macAddress: '',
     ipAddress: ''
@@ -179,6 +180,7 @@ export default function AddAsset() {
                warrantyStatus: target.warrantyStatus || 'Active',
                warrantyExpiryDate: target.warrantyExpiryDate ? target.warrantyExpiryDate.split('T')[0] : '',
                status: target.status || 'AVAILABLE',
+               assignmentType: target.assignmentType || 'EMPLOYEE',
                locationId: target.locationId || '',
                departmentId: target.departmentId || '',
                assignedEmployeeId: target.assignedEmployeeId || '',
@@ -380,6 +382,17 @@ export default function AddAsset() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               
               <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Assignment Type</label>
+                <select value={formData.assignmentType} onChange={e => handleChange('assignmentType', e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-teal-500">
+                   <option value="EMPLOYEE">Employee Asset</option>
+                   <option value="DEPARTMENT">Department Asset</option>
+                   <option value="LOCATION">Location Asset</option>
+                   <option value="SHARED">Shared Asset</option>
+                   <option value="STORE">Store Asset</option>
+                </select>
+              </div>
+              
+              <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Current Status</label>
                 <select value={formData.status} onChange={e => handleChange('status', e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-teal-500">
                    <option value="AVAILABLE">Available</option>
@@ -405,14 +418,16 @@ export default function AddAsset() {
                 </select>
               </div>
 
-              <div className="md:col-span-3 border-t border-slate-200 pt-5 mt-2">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Direct Employee Allocation</label>
-                <EmployeeSearchDropdown
-                  employees={employees}
-                  value={formData.assignedEmployeeId}
-                  onChange={(val) => handleChange('assignedEmployeeId', val)}
-                />
-              </div>
+              {formData.assignmentType === 'EMPLOYEE' && (
+                <div className="md:col-span-3 border-t border-slate-200 pt-5 mt-2 transition-all">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Direct Employee Allocation</label>
+                  <EmployeeSearchDropdown
+                    employees={employees}
+                    value={formData.assignedEmployeeId}
+                    onChange={(val) => handleChange('assignedEmployeeId', val)}
+                  />
+                </div>
+              )}
 
             </div>
           </div>

@@ -24,6 +24,14 @@ enum AssetStatus {
   RETIRED
 }
 
+enum AssignmentType {
+  EMPLOYEE
+  DEPARTMENT
+  LOCATION
+  SHARED
+  STORE
+}
+
 enum AssignmentStatus {
   ACTIVE
   RETURNED
@@ -111,6 +119,7 @@ model Asset {
   warrantyExpiryDate DateTime?
   condition          String
   status             AssetStatus @default(AVAILABLE)
+  assignmentType     AssignmentType @default(EMPLOYEE)
   
   macAddress         String?
   ipAddress          String?

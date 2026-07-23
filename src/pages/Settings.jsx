@@ -116,6 +116,26 @@ export default function Settings() {
          setIsImporting(false);
       }
   };
+
+  const handleDownloadTemplate = () => {
+     const headers = ["assignmentType", "locationName", "departmentName", "employeeCode", "employeeName", "email", "phone", "designation", "employeeStatus", "deviceType", "model", "serialNumber", "purchaseDate", "warrantyExpiryDate"];
+     const sampleRows = [
+        ["EMPLOYEE", "New York HQ", "Engineering", "EMP-001", "John Doe", "john@example.com", "555-1234", "Senior Dev", "ACTIVE", "Laptop", "MacBook Pro 16", "SERIAL-123", "2023-01-15", "2026-01-15"],
+        ["DEPARTMENT", "", "HR", "", "", "", "", "", "", "Printer", "HP LaserJet Pro", "SERIAL-456", "2022-05-10", "2025-05-10"],
+        ["LOCATION", "London Office", "", "", "", "", "", "", "", "Router", "Cisco ISR", "SERIAL-789", "2023-08-20", "2028-08-20"],
+        ["SHARED", "New York HQ", "Marketing", "", "", "", "", "", "", "Projector", "Epson Pro", "SERIAL-321", "2023-11-05", "2025-11-05"],
+        ["STORE", "Warehouse A", "", "", "", "", "", "", "", "Laptop", "Dell XPS 15", "SERIAL-999", "2024-02-01", "2027-02-01"]
+     ];
+     let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\\n" + sampleRows.map(e => e.join(",")).join("\\n");
+     const encodedUri = encodeURI(csvContent);
+     const link = document.createElement("a");
+     link.setAttribute("href", encodedUri);
+     link.setAttribute("download", "asset_bulk_import_template.csv");
+     document.body.appendChild(link);
+     link.click();
+     document.body.removeChild(link);
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div>
@@ -170,8 +190,10 @@ export default function Settings() {
                   <div className="text-sm text-slate-500 mb-4 space-y-2">
                      <p>Upload a `.csv` mapping payload for smart organizational parsing. Valid columns:</p>
                      <div className="flex flex-wrap gap-1.5 pb-2">
+                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">assignmentType</span>
                          <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">locationName</span>
                          <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">departmentName</span>
+                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">employeeCode</span>
                          <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">employeeName</span>
                          <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">email</span>
                          <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">phone</span>
@@ -184,19 +206,27 @@ export default function Settings() {
                          <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">warrantyExpiryDate</span>
                      </div>
                      <div className="bg-amber-50 border border-amber-200 text-amber-800 px-3 py-2 rounded-lg text-xs font-medium">
-                        <span className="block mb-1"><strong>Required for Employee Creation:</strong></span>
+                        <span className="block mb-1"><strong>Required Rules based on assignmentType:</strong></span>
                         <ul className="list-disc pl-4 space-y-0.5">
-                           <li><code className="bg-amber-100 px-1 rounded">locationName</code> maps to the Staff's <strong>Base Location</strong>.</li>
-                           <li><code className="bg-amber-100 px-1 rounded">departmentName</code> maps to the Staff's <strong>Department Assignment</strong>.</li>
+                           <li><strong>EMPLOYEE</strong>: <code className="bg-amber-100 px-1 rounded">employeeCode</code> is mandatory.</li>
+                           <li><strong>DEPARTMENT</strong>: <code className="bg-amber-100 px-1 rounded">departmentName</code> is mandatory. Employee fields ignored.</li>
+                           <li><strong>LOCATION / STORE</strong>: <code className="bg-amber-100 px-1 rounded">locationName</code> is mandatory. Employee fields ignored.</li>
+                           <li><strong>SHARED</strong>: Either <code className="bg-amber-100 px-1 rounded">departmentName</code> or <code className="bg-amber-100 px-1 rounded">locationName</code> is mandatory. Employee fields ignored.</li>
                         </ul>
                      </div>
                   </div>
                   
-                  <label className="cursor-pointer inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-slate-700 font-medium rounded-xl hover:bg-slate-50 transition-colors shadow-sm">
-                     <FileText className="w-4 h-4 text-slate-400" />
-                     Select CSV File
-                     <input type="file" accept=".csv" onChange={handleFileUpload} className="hidden" />
-                  </label>
+                  <div className="flex gap-4">
+                     <button onClick={handleDownloadTemplate} className="cursor-pointer inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-50 border border-blue-200 text-blue-700 font-medium rounded-xl hover:bg-blue-100 transition-colors shadow-sm">
+                        <FileText className="w-4 h-4 text-blue-600" />
+                        Download Template
+                     </button>
+                     <label className="cursor-pointer inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-slate-700 font-medium rounded-xl hover:bg-slate-50 transition-colors shadow-sm">
+                        <UploadCloud className="w-4 h-4 text-slate-400" />
+                        Select CSV File
+                        <input type="file" accept=".csv" onChange={handleFileUpload} className="hidden" />
+                     </label>
+                  </div>
                </div>
             </div>
 

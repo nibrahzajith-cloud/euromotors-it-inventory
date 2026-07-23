@@ -99,13 +99,18 @@ export default function AssetAssignment() {
       return [];
     }
   });
+  const [departments, setDepartments] = useState([]);
+  const [locations, setLocations] = useState([]);
   
   const [loading, setLoading] = useState(assets.length === 0 && employees.length === 0 && assignments.length === 0);
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
 
   // Form State
+  const [assignmentType, setAssignmentType] = useState('EMPLOYEE');
   const [employeeId, setEmployeeId] = useState('');
+  const [departmentId, setDepartmentId] = useState('');
+  const [locationId, setLocationId] = useState('');
   const [assetId, setAssetId] = useState('');
   const [assignedDate, setAssignedDate] = useState(new Date().toISOString().split('T')[0]);
   const [remarks, setRemarks] = useState('');
@@ -134,23 +139,29 @@ export default function AssetAssignment() {
       
       const headers = { 'Authorization': `Bearer ${token}` };
 
-      const [astRes, empRes, asgRes] = await Promise.all([
+      const [astRes, empRes, asgRes, deptRes, locRes] = await Promise.all([
         fetch(`${API_URL}/assets`, { headers }),
         fetch(`${API_URL}/employees`, { headers }),
-        fetch(`${API_URL}/assignments`, { headers })
+        fetch(`${API_URL}/assignments`, { headers }),
+        fetch(`${API_URL}/departments`, { headers }),
+        fetch(`${API_URL}/locations`, { headers })
       ]);
 
       if (!astRes.ok || !empRes.ok || !asgRes.ok) {
         throw new Error('Failed to synchronize deployment endpoints');
       }
 
-      const [astData, empData, asgData] = await Promise.all([
-        astRes.json(), empRes.json(), asgRes.json()
+      const [astData, empData, asgData, deptData, locData] = await Promise.all([
+        astRes.json(), empRes.json(), asgRes.json(),
+        deptRes.ok ? deptRes.json() : Promise.resolve([]),
+        locRes.ok ? locRes.json() : Promise.resolve([])
       ]);
 
       setAssets(astData);
       setEmployees(empData);
       setAssignments(asgData);
+      setDepartments(deptData);
+      setLocations(locData);
       localStorage.setItem('assetsCache', JSON.stringify(astData));
       localStorage.setItem('employeesCache', JSON.stringify(empData));
       localStorage.setItem('assignmentsCache', JSON.stringify(asgData));
@@ -194,14 +205,22 @@ export default function AssetAssignment() {
 
   const handleAssign = async (e) => {
     e.preventDefault();
-    if (!assetId || !employeeId) {
-       showToast("Asset and Employee bounds must be fulfilled.", "warning");
+    if (!assetId) {
+       showToast("Asset must be selected.", "warning");
+       return;
+    }
+    
+    if (assignmentType === 'EMPLOYEE' && !employeeId) {
+       showToast("Employee bounds must be fulfilled.", "warning");
        return;
     }
 
     const payload = {
       assetId,
-      employeeId,
+      assignmentType,
+      employeeId: assignmentType === 'EMPLOYEE' ? employeeId : undefined,
+      departmentId: assignmentType !== 'EMPLOYEE' ? departmentId : undefined,
+      locationId: assignmentType !== 'EMPLOYEE' ? locationId : undefined,
       assignedDate: new Date(assignedDate).toISOString(),
       status: 'ACTIVE',
       remarks
@@ -211,7 +230,10 @@ export default function AssetAssignment() {
     if (success) {
       setAssetId('');
       setEmployeeId('');
+      setDepartmentId('');
+      setLocationId('');
       setRemarks('');
+      showToast('Asset assigned successfully.', 'success');
     }
   };
 
@@ -450,17 +472,106 @@ export default function AssetAssignment() {
             <form className="flex flex-col gap-4" onSubmit={handleAssign}>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Target Personnel *</label>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Assignment Type *</label>
                   <select 
-                    required value={employeeId} onChange={e => setEmployeeId(e.target.value)}
+                    required value={assignmentType} onChange={e => setAssignmentType(e.target.value)}
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 px-3 py-2 outline-none transition-all text-sm"
                   >
-                    <option value="" disabled>Select User Identity...</option>
-                    {employees.map(emp => (
-                      <option key={emp.id} value={emp.id}>{emp.employeeCode} - {emp.fullName}</option>
-                    ))}
+                    <option value="EMPLOYEE">Employee Asset</option>
+                    <option value="DEPARTMENT">Department Asset</option>
+                    <option value="LOCATION">Location Asset</option>
+                    <option value="SHARED">Shared Asset</option>
+                    <option value="STORE">Store Asset</option>
                   </select>
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Hardware Asset *</label>
+                  <select 
+                    required value={assetId} onChange={e => setAssetId(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 px-3 py-2 outline-none transition-all text-sm"
+                  >
+                    <option value="" disabled>Select Stock Asset...</option>
+                    {availableAssets.map(ast => (
+                      <option key={ast.id} value={ast.id}>{ast.assetCode} - {ast.model}</option>
+                    ))}
+                  </select>
+                  {availableAssets.length === 0 && <p className="text-xs text-amber-500 font-medium mt-1">No devices available in stock.</p>}
+                </div>
+
+                {assignmentType === 'EMPLOYEE' && (
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Target Personnel *</label>
+                    <select 
+                      required value={employeeId} onChange={e => setEmployeeId(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 px-3 py-2 outline-none transition-all text-sm"
+                    >
+                      <option value="" disabled>Select User Identity...</option>
+                      {employees.map(emp => (
+                        <option key={emp.id} value={emp.id}>{emp.employeeCode} - {emp.fullName}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                
+                {assignmentType === 'DEPARTMENT' && (
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Target Department *</label>
+                    <select 
+                      required value={departmentId} onChange={e => setDepartmentId(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 px-3 py-2 outline-none transition-all text-sm"
+                    >
+                      <option value="" disabled>Select Department...</option>
+                      {departments.map(dept => (
+                        <option key={dept.id} value={dept.id}>{dept.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {(assignmentType === 'LOCATION' || assignmentType === 'STORE') && (
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Target Location *</label>
+                    <select 
+                      required value={locationId} onChange={e => setLocationId(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 px-3 py-2 outline-none transition-all text-sm"
+                    >
+                      <option value="" disabled>Select Location...</option>
+                      {locations.map(loc => (
+                        <option key={loc.id} value={loc.id}>{loc.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                
+                {assignmentType === 'SHARED' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Target Department</label>
+                      <select 
+                        value={departmentId} onChange={e => setDepartmentId(e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 px-3 py-2 outline-none transition-all text-sm"
+                      >
+                        <option value="">Select Department...</option>
+                        {departments.map(dept => (
+                          <option key={dept.id} value={dept.id}>{dept.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Target Location</label>
+                      <select 
+                        value={locationId} onChange={e => setLocationId(e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 px-3 py-2 outline-none transition-all text-sm"
+                      >
+                        <option value="">Select Location...</option>
+                        {locations.map(loc => (
+                          <option key={loc.id} value={loc.id}>{loc.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
+                )}
                 
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Hardware Asset *</label>
