@@ -86,10 +86,16 @@ export default function Settings() {
         parsedAssets.push(assetObj);
       }
       
-      // Filter out the sample rows by checking if assetCode belongs to the known samples
-      const sampleAssetCodes = ['LAP001', 'PH001', 'RT001', 'PJ001', 'ST001'];
+      // Safely filter out the exact sample rows provided in the template
       const originalCount = parsedAssets.length;
-      parsedAssets = parsedAssets.filter(row => !sampleAssetCodes.includes(row.assetCode));
+      parsedAssets = parsedAssets.filter(row => {
+         if (row.assetCode === 'LAP001' && row.employeeName === 'John Silva') return false;
+         if (row.assetCode === 'PH001' && row.model === 'Canon IR 2630') return false;
+         if (row.assetCode === 'RT001' && row.model === 'Cisco ISR 1100') return false;
+         if (row.assetCode === 'PJ001' && row.model === 'Epson EB-X06') return false;
+         if (row.assetCode === 'ST001' && row.model === 'HP ProBook 450 G10') return false;
+         return true;
+      });
       
       if (parsedAssets.length < originalCount) {
          showToast(`Automatically removed ${originalCount - parsedAssets.length} sample records from the upload.`, 'success');

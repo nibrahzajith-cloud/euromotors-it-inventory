@@ -161,7 +161,7 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
                          designation: a.designation || null,
                          departmentId,
                          locationId,
-                         status: a.employeeStatus || 'ACTIVE'
+                         status: a.employeeStatus ? a.employeeStatus.toUpperCase() : 'ACTIVE'
                      }
                  });
                  results.createdEmployees++;
@@ -171,7 +171,7 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
                  if (a.email) updateData.email = a.email;
                  if (a.phone) updateData.phone = a.phone;
                  if (a.designation) updateData.designation = a.designation;
-                 if (a.employeeStatus) updateData.status = a.employeeStatus;
+                 if (a.employeeStatus) updateData.status = a.employeeStatus.toUpperCase();
 
                  emp = await prisma.employee.update({
                      where: { id: emp.id },
