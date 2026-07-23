@@ -201,6 +201,10 @@ export default function Employees() {
   };
 
   const handleDelete = async (id) => {
+    if (user?.role !== 'ADMIN') {
+      showToast('Action Restricted: Please ask Super Admin to delete this entry.', 'error');
+      return;
+    }
     const input = await confirm({
       type: 'prompt',
       title: 'Delete Employee',
@@ -227,6 +231,10 @@ export default function Employees() {
   };
 
   const handleBulkDelete = async () => {
+    if (user?.role !== 'ADMIN') {
+      showToast('Action Restricted: Please ask Super Admin to delete these entries.', 'error');
+      return;
+    }
     const input = await confirm({
       type: 'prompt',
       title: 'Bulk Delete',
@@ -466,11 +474,9 @@ export default function Employees() {
                             <Edit className="w-4 h-4" />
                           </button>
                         )}
-                        {canDelete && (
-                          <button onClick={() => handleDelete(emp.id)} className="p-1.5 text-slate-400 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors" title="Delete Employee">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
+                        <button onClick={() => handleDelete(emp.id)} className="p-1.5 text-slate-400 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors" title="Delete Employee">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                         {!canCreateEdit && <span className="text-xs text-slate-400 dark:text-slate-500">View Only</span>}
                       </div>
                     </td>

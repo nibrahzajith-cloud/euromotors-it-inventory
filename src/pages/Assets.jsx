@@ -120,6 +120,10 @@ export default function Assets() {
   }, [searchParams]);
 
   const handleDelete = async (id) => {
+    if (user?.role !== 'ADMIN') {
+      showToast('Action Restricted: Please ask Super Admin to delete this entry.', 'error');
+      return;
+    }
     const input = await confirm({
       type: 'prompt',
       title: 'Delete Asset',
@@ -151,6 +155,10 @@ export default function Assets() {
   };
 
   const handleBulkDelete = async () => {
+    if (user?.role !== 'ADMIN') {
+      showToast('Action Restricted: Please ask Super Admin to delete these entries.', 'error');
+      return;
+    }
     const input = await confirm({
       type: 'prompt',
       title: 'Bulk Delete',
@@ -412,11 +420,9 @@ export default function Assets() {
                             <Edit className="w-4 h-4" />
                           </button>
                         )}
-                        {canDelete && (
-                          <button onClick={() => handleDelete(asset.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-slate-700 rounded-lg transition-colors">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
+                        <button onClick={() => handleDelete(asset.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-slate-700 rounded-lg transition-colors">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </td>
                   </tr>
