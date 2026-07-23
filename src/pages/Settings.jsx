@@ -12,6 +12,7 @@ export default function Settings() {
   
   const [csvData, setCsvData] = useState([]);
   const [importStatus, setImportStatus] = useState(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [isImporting, setIsImporting] = useState(false);
   
   const [assetCodePrefix, setAssetCodePrefix] = useState('AST');
@@ -149,22 +150,51 @@ export default function Settings() {
       if(!csvData || csvData.length === 0) return;
       setIsImporting(true);
       setImportStatus(null);
+      setUploadProgress(0);
       
       try {
          const token = localStorage.getItem('token');
-         const res = await fetch(`${API_URL}/assets/bulk`, {
-             method: 'POST',
-             headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-             },
-             body: JSON.stringify({ assets: csvData })
-         });
+         const chunkSize = 100;
+         const totalChunks = Math.ceil(csvData.length / chunkSize);
          
-         const data = await res.json();
-         if (!res.ok) throw new Error(data.error || 'Server rejected CSV pipeline');
+         let aggregatedResults = {
+           totalRows: 0,
+           createdLocations: 0,
+           createdDepartments: 0,
+           createdEmployees: 0,
+           updatedEmployees: 0,
+           createdAssets: 0,
+           errors: []
+         };
 
-         setImportStatus(data);
+         for (let i = 0; i < totalChunks; i++) {
+            const chunk = csvData.slice(i * chunkSize, (i + 1) * chunkSize);
+            const res = await fetch(`${API_URL}/assets/bulk`, {
+                method: 'POST',
+                headers: {
+                   'Authorization': `Bearer ${token}`,
+                   'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ assets: chunk })
+            });
+            
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Server rejected CSV pipeline');
+
+            aggregatedResults.totalRows += data.totalRows || 0;
+            aggregatedResults.createdLocations += data.createdLocations || 0;
+            aggregatedResults.createdDepartments += data.createdDepartments || 0;
+            aggregatedResults.createdEmployees += data.createdEmployees || 0;
+            aggregatedResults.updatedEmployees += data.updatedEmployees || 0;
+            aggregatedResults.createdAssets += data.createdAssets || 0;
+            if (data.errors && data.errors.length > 0) {
+                aggregatedResults.errors.push(...data.errors);
+            }
+            
+            setUploadProgress(Math.round(((i + 1) / totalChunks) * 100));
+         }
+
+         setImportStatus(aggregatedResults);
       } catch (err) {
          setImportStatus({ fatal: err.message });
       } finally {
@@ -359,7 +389,25 @@ export default function Settings() {
                </div>
             </div>
 
-            {csvData.length > 0 && !importStatus && (
+             {isImporting && (
+                <div className="mt-6 bg-white border border-slate-200 rounded-xl p-8 shadow-sm flex flex-col items-center justify-center space-y-5 animate-in fade-in duration-300">
+                  <div className="flex flex-col items-center gap-2">
+                    <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+                    <span className="text-slate-800 font-bold text-lg">Initializing Asset Pipeline...</span>
+                    <span className="text-slate-500 text-sm">Processing {csvData.length} records. Please do not close this window.</span>
+                  </div>
+                  <div className="w-full max-w-md bg-slate-100 rounded-full h-4 overflow-hidden border border-slate-200 shadow-inner relative">
+                    <div 
+                      className="bg-gradient-to-r from-indigo-500 to-purple-500 h-full rounded-full transition-all duration-300 ease-out flex items-center justify-end pr-2"
+                      style={{ width: `${Math.max(uploadProgress, 2)}%` }}
+                    >
+                    </div>
+                  </div>
+                  <div className="text-indigo-700 font-bold">{uploadProgress}% Complete</div>
+                </div>
+             )}
+
+            {csvData.length > 0 && !importStatus && !isImporting && (
                <div className="mt-6 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
                  <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex justify-between items-center">
                     <span className="text-sm font-semibold text-slate-700">Preview Layout (First 4 Rows) - Total: {csvData.length} records parsed</span>
