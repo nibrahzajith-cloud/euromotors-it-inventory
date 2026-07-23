@@ -201,12 +201,17 @@ export default function Employees() {
   };
 
   const handleDelete = async (id) => {
-    const confirmed = await confirm({
+    const input = await confirm({
+      type: 'prompt',
       title: 'Delete Employee',
-      message: 'Are you sure you want to permanently delete this employee?',
+      message: 'Are you sure you want to permanently delete this employee? Type "DELETE" to confirm.',
+      inputPlaceholder: 'DELETE',
       confirmText: 'Delete Employee'
     });
-    if (!confirmed) return;
+    if (input !== 'DELETE') {
+      if (input !== null) showToast('Deletion cancelled. You must type "DELETE".', 'info');
+      return;
+    }
     try {
       const token = localStorage.getItem('token');
       const res = await fetch(`${API_URL}/employees/${id}`, {
@@ -222,12 +227,17 @@ export default function Employees() {
   };
 
   const handleBulkDelete = async () => {
-    const confirmed = await confirm({
+    const input = await confirm({
+      type: 'prompt',
       title: 'Bulk Delete',
-      message: `Are you sure you want to permanently delete ${selectedIds.size} employees?`,
+      message: `Are you sure you want to permanently delete ${selectedIds.size} employees? Type "DELETE" to confirm.`,
+      inputPlaceholder: 'DELETE',
       confirmText: 'Delete All'
     });
-    if (!confirmed) return;
+    if (input !== 'DELETE') {
+      if (input !== null) showToast('Deletion cancelled. You must type "DELETE".', 'info');
+      return;
+    }
     
     try {
       const token = localStorage.getItem('token');

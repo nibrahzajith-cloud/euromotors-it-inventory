@@ -120,12 +120,17 @@ export default function Assets() {
   }, [searchParams]);
 
   const handleDelete = async (id) => {
-    const confirmed = await confirm({
+    const input = await confirm({
+      type: 'prompt',
       title: 'Delete Asset',
-      message: 'Are you absolutely sure you want to delete this asset?',
+      message: 'Are you absolutely sure you want to delete this asset? This action is irreversible. Type "DELETE" to confirm.',
+      inputPlaceholder: 'DELETE',
       confirmText: 'Delete Asset'
     });
-    if (!confirmed) return;
+    if (input !== 'DELETE') {
+      if (input !== null) showToast('Deletion cancelled. You must type "DELETE".', 'info');
+      return;
+    }
     try {
       const token = localStorage.getItem('token');
       const res = await fetch(`${API_URL}/assets/${id}`, {
@@ -146,12 +151,17 @@ export default function Assets() {
   };
 
   const handleBulkDelete = async () => {
-    const confirmed = await confirm({
+    const input = await confirm({
+      type: 'prompt',
       title: 'Bulk Delete',
-      message: `Are you sure you want to delete ${selectedIds.size} assets? This action is irreversible.`,
+      message: `Are you sure you want to delete ${selectedIds.size} assets? This action is irreversible. Type "DELETE" to confirm.`,
+      inputPlaceholder: 'DELETE',
       confirmText: 'Delete All'
     });
-    if (!confirmed) return;
+    if (input !== 'DELETE') {
+      if (input !== null) showToast('Deletion cancelled. You must type "DELETE".', 'info');
+      return;
+    }
     
     // In a real implementation we would call a bulk DELETE API
     // For now we simulate sequential deletion
