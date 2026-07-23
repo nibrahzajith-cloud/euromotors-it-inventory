@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, UploadCloud, AlertCircle, CheckCircle2, FileText, Loader2, Play } from 'lucide-react';
+import { Save, UploadCloud, AlertCircle, CheckCircle2, FileText, Loader2, Play, Download } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
@@ -14,6 +14,7 @@ export default function Settings() {
   const [importStatus, setImportStatus] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isImporting, setIsImporting] = useState(false);
+  const [validationReport, setValidationReport] = useState(null);
   
   const [assetCodePrefix, setAssetCodePrefix] = useState('AST');
   const [warrantyPeriod, setWarrantyPeriod] = useState(12);
@@ -97,14 +98,43 @@ export default function Settings() {
       if (parsedAssets.length < originalCount) {
          showToast(`Automatically removed ${originalCount - parsedAssets.length} sample records from the upload.`, 'success');
       }
-
+      if (parsedAssets.length === 0) {
+         showToast('No valid data rows found to import.', 'warning');
+         return;
+      }
       setCsvData(parsedAssets);
       setImportStatus(null); // reset UI block
+  };
+
+  const downloadValidationReport = (report) => {
+      const csvContent = [
+          ['Error Type', 'Value', 'First Occurrence Row', 'First Context', 'Duplicate Row', 'Duplicate Context'],
+          ...report.map(r => [
+              `"${r.type}"`, 
+              `"${r.value}"`, 
+              r.firstRow, 
+              `"${r.asset1Context}"`, 
+              r.duplicateRow, 
+              `"${r.asset2Context}"`
+          ])
+      ].map(e => e.join(",")).join("\n");
+      
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", "Duplicate_Validation_Report.csv");
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
   };
 
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+
+    setValidationReport(null);
 
     if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
       try {
@@ -161,22 +191,52 @@ export default function Settings() {
       }
 
       // Pre-flight check for duplicates in the file itself
-      const codesInFile = new Set();
-      const serialsInFile = new Set();
+      const codesInFile = new Map();
+      const serialsInFile = new Map();
+      let fileErrors = [];
+
       for (let i = 0; i < parsedAssets.length; i++) {
          const asset = parsedAssets[i];
+         const rowNum = i + 2; // +1 for header, +1 for 1-index
+         const getContext = () => `${asset.deviceType || 'Unknown'} - ${asset.assignmentType === 'EMPLOYEE' ? asset.employeeName || asset.employeeCode : asset.departmentName || asset.locationName || 'Unknown'}`;
+
          if (asset.assetCode) {
             if (codesInFile.has(asset.assetCode)) {
-               return showToast(`Error: The uploaded CSV contains duplicate assetCode '${asset.assetCode}' on row ${i + 2}. Fix the file and try again.`, 'error');
+               const first = codesInFile.get(asset.assetCode);
+               fileErrors.push({
+                   type: 'Duplicate Asset Code',
+                   value: asset.assetCode,
+                   firstRow: first.rowNum,
+                   duplicateRow: rowNum,
+                   asset1Context: first.context,
+                   asset2Context: getContext()
+               });
+            } else {
+               codesInFile.set(asset.assetCode, { rowNum, context: getContext() });
             }
-            codesInFile.add(asset.assetCode);
          }
          if (asset.serialNumber && asset.serialNumber.trim() !== '' && asset.serialNumber.trim().toLowerCase() !== 'no serial') {
             if (serialsInFile.has(asset.serialNumber)) {
-               return showToast(`Error: The uploaded CSV contains duplicate Serial Number '${asset.serialNumber}' on row ${i + 2}. Fix the file and try again.`, 'error');
+               const first = serialsInFile.get(asset.serialNumber);
+               fileErrors.push({
+                   type: 'Duplicate Serial Number',
+                   value: asset.serialNumber,
+                   firstRow: first.rowNum,
+                   duplicateRow: rowNum,
+                   asset1Context: first.context,
+                   asset2Context: getContext()
+               });
+            } else {
+               serialsInFile.set(asset.serialNumber, { rowNum, context: getContext() });
             }
-            serialsInFile.add(asset.serialNumber);
          }
+      }
+
+      if (fileErrors.length > 0) {
+         setValidationReport(fileErrors);
+         showToast(`Validation Failed: Found ${fileErrors.length} duplicates in your file.`, 'error');
+         e.target.value = null;
+         return;
       }
       
       processParsedAssets(parsedAssets);
@@ -426,6 +486,51 @@ export default function Settings() {
                   </div>
                </div>
             </div>
+
+            {validationReport && (
+               <div className="mt-6 bg-red-50 border border-red-200 rounded-xl overflow-hidden shadow-sm animate-in fade-in duration-300">
+                  <div className="bg-red-100/50 px-4 py-3 border-b border-red-200 flex justify-between items-center">
+                     <h3 className="text-red-800 font-bold flex items-center gap-2">
+                        <AlertCircle className="w-5 h-5" /> 
+                        Validation Failed: {validationReport.length} Duplicates Found
+                     </h3>
+                     <button 
+                        onClick={() => downloadValidationReport(validationReport)}
+                        className="px-3 py-1.5 bg-white text-red-700 border border-red-200 rounded-lg hover:bg-red-50 flex items-center gap-2 text-sm font-semibold shadow-sm transition-colors"
+                     >
+                        <Download className="w-4 h-4" /> Download Report
+                     </button>
+                  </div>
+                  <div className="overflow-x-auto max-h-80 overflow-y-auto">
+                     <table className="w-full text-sm text-left">
+                        <thead className="bg-red-50 text-red-800 sticky top-0 shadow-sm">
+                           <tr>
+                              <th className="px-4 py-2.5 font-semibold">Error Type</th>
+                              <th className="px-4 py-2.5 font-semibold">Value</th>
+                              <th className="px-4 py-2.5 font-semibold">First Occurrence</th>
+                              <th className="px-4 py-2.5 font-semibold">Duplicate</th>
+                           </tr>
+                        </thead>
+                        <tbody className="divide-y divide-red-100">
+                           {validationReport.map((err, idx) => (
+                              <tr key={idx} className="bg-white text-slate-700 hover:bg-red-50/30 transition-colors">
+                                 <td className="px-4 py-3 font-medium text-red-700">{err.type}</td>
+                                 <td className="px-4 py-3 font-mono text-xs">{err.value}</td>
+                                 <td className="px-4 py-3 text-xs">
+                                    <span className="font-bold text-slate-800">Row {err.firstRow}</span><br/>
+                                    <span className="text-slate-500">{err.asset1Context}</span>
+                                 </td>
+                                 <td className="px-4 py-3 text-xs">
+                                    <span className="font-bold text-red-700">Row {err.duplicateRow}</span><br/>
+                                    <span className="text-slate-500">{err.asset2Context}</span>
+                                 </td>
+                              </tr>
+                           ))}
+                        </tbody>
+                     </table>
+                  </div>
+               </div>
+            )}
 
              {isImporting && (
                 <div className="mt-6 bg-white border border-slate-200 rounded-xl p-8 shadow-sm flex flex-col items-center justify-center space-y-5 animate-in fade-in duration-300">
