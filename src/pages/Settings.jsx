@@ -62,9 +62,62 @@ export default function Settings() {
       return ret;
   }
 
-  const handleFileUpload = (e) => {
+  const processParsedAssets = (parsedAssets) => {
+      const originalCount = parsedAssets.length;
+      parsedAssets = parsedAssets.filter(row => {
+         if (row.assetCode === 'LAP001' && row.employeeName === 'John Silva') return false;
+         if (row.assetCode === 'PH001' && row.model === 'Canon IR 2630') return false;
+         if (row.assetCode === 'RT001' && row.model === 'Cisco ISR 1100') return false;
+         if (row.assetCode === 'PJ001' && row.model === 'Epson EB-X06') return false;
+         if (row.assetCode === 'ST001' && row.model === 'HP ProBook 450 G10') return false;
+         return true;
+      });
+      
+      if (parsedAssets.length < originalCount) {
+         showToast(`Automatically removed ${originalCount - parsedAssets.length} sample records from the upload.`, 'success');
+      }
+
+      setCsvData(parsedAssets);
+      setImportStatus(null); // reset UI block
+  };
+
+  const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+
+    if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(arrayBuffer);
+        const worksheet = workbook.getWorksheet(1);
+        
+        let parsedAssets = [];
+        let headers = [];
+        
+        worksheet.eachRow((row, rowNumber) => {
+           if (rowNumber === 1) {
+              headers = row.values.slice(1).map(h => h ? h.toString().trim() : '');
+           } else {
+              const assetObj = {};
+              headers.forEach((h, index) => {
+                 let val = row.values[index + 1];
+                 if (val === undefined || val === '') val = null;
+                 else if (val && typeof val === 'object' && val.text) val = val.text;
+                 else if (val && val instanceof Date) val = val.toISOString().split('T')[0];
+                 else val = val.toString().trim();
+                 assetObj[h] = val;
+              });
+              parsedAssets.push(assetObj);
+           }
+        });
+        processParsedAssets(parsedAssets);
+      } catch (err) {
+        showToast('Failed to parse Excel file', 'error');
+      }
+      e.target.value = null;
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -86,23 +139,7 @@ export default function Settings() {
         parsedAssets.push(assetObj);
       }
       
-      // Safely filter out the exact sample rows provided in the template
-      const originalCount = parsedAssets.length;
-      parsedAssets = parsedAssets.filter(row => {
-         if (row.assetCode === 'LAP001' && row.employeeName === 'John Silva') return false;
-         if (row.assetCode === 'PH001' && row.model === 'Canon IR 2630') return false;
-         if (row.assetCode === 'RT001' && row.model === 'Cisco ISR 1100') return false;
-         if (row.assetCode === 'PJ001' && row.model === 'Epson EB-X06') return false;
-         if (row.assetCode === 'ST001' && row.model === 'HP ProBook 450 G10') return false;
-         return true;
-      });
-      
-      if (parsedAssets.length < originalCount) {
-         showToast(`Automatically removed ${originalCount - parsedAssets.length} sample records from the upload.`, 'success');
-      }
-
-      setCsvData(parsedAssets);
-      setImportStatus(null); // reset UI block
+      processParsedAssets(parsedAssets);
     };
     reader.readAsText(file);
     e.target.value = null; // reset allowing same upload binding securely
@@ -266,7 +303,7 @@ export default function Settings() {
                         <span className="block mb-1 font-bold">Important Note:</span>
                         <p>The sample rows are for reference only. Delete them before importing your actual asset data.</p>
                      </div>
-                     <p>Upload a `.csv` mapping payload for smart organizational parsing. Valid columns:</p>
+                     <p>Upload a `.csv` or `.xlsx` mapping payload for smart organizational parsing. Valid columns:</p>
                      <div className="flex flex-wrap gap-1.5 pb-2">
                          <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">assignmentType</span>
                          <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">locationName</span>
@@ -315,8 +352,8 @@ export default function Settings() {
                      </button>
                      <label className="cursor-pointer inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-slate-700 font-medium rounded-xl hover:bg-slate-50 transition-colors shadow-sm">
                         <UploadCloud className="w-4 h-4 text-slate-400" />
-                        Select CSV File
-                        <input type="file" accept=".csv" onChange={handleFileUpload} className="hidden" />
+                        Select File (.csv, .xlsx)
+                        <input type="file" accept=".csv, .xlsx, .xls" onChange={handleFileUpload} className="hidden" />
                      </label>
                   </div>
                </div>
