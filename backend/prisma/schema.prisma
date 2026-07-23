@@ -107,8 +107,8 @@ model Asset {
   assetCode          String      @unique 
   deviceType         String
   brand              String?
-  model              String
-  serialNumber       String      @unique
+  model              String?
+  serialNumber       String?     @unique
   processor          String?
   ram                String?
   storage            String?

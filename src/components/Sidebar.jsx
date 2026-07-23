@@ -20,7 +20,8 @@ import {
   Pin,
   PinOff,
   Camera,
-  Ticket
+  Ticket,
+  Database
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useAuth } from '../context/AuthContext';
@@ -62,6 +63,7 @@ export default function Sidebar() {
     },
     { name: 'Reports', path: '/reports', icon: FileText, roles: ['ADMIN', 'IT_OFFICER'] },
     { name: 'Audit Logs', path: '/audit-logs', icon: History, roles: ['ADMIN'] },
+    { name: 'Database', path: '/database', icon: Database, roles: ['ADMIN'] },
     { name: 'User Management', path: '/users', icon: ShieldCheck, roles: ['ADMIN'] },
     { name: 'Settings', path: '/settings', icon: Settings, roles: ['ADMIN'] },
   ];

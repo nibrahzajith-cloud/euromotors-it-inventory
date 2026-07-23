@@ -16,6 +16,7 @@ import Users from './pages/Users';
 import QrCodePage from './pages/QrCodePage';
 import ChangePassword from './pages/ChangePassword';
 import AuditLogs from './pages/AuditLogs';
+import Database from './pages/Database';
 import AnalyticsDashboard from './pages/AnalyticsDashboard';
 import Scanner from './pages/Scanner';
 import Tickets from './pages/Tickets';
@@ -79,6 +80,7 @@ const AppRoutes = () => {
         <Route path="settings" element={<ProtectedRoute allowedRoles={['ADMIN']}><Settings /></ProtectedRoute>} />
         <Route path="users" element={<ProtectedRoute allowedRoles={['ADMIN']}><Users /></ProtectedRoute>} />
         <Route path="audit-logs" element={<ProtectedRoute allowedRoles={['ADMIN']}><AuditLogs /></ProtectedRoute>} />
+        <Route path="database" element={<ProtectedRoute allowedRoles={['ADMIN']}><Database /></ProtectedRoute>} />
       </Route>
     </Routes>
   );

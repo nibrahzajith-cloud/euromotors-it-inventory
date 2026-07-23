@@ -44,6 +44,12 @@ router.post('/', authorize(['ADMIN', 'IT_OFFICER']), async (req, res) => {
       payload.assetCode = await generateAssetCode(prisma);
     }
     if (payload.serialNumber) payload.serialNumber = payload.serialNumber.trim();
+
+    if (!payload.deviceType) return res.status(400).json({ error: 'Device Type is mandatory.' });
+    const REQUIRES_MODEL = ['Laptop', 'Desktop', 'Tablet', 'Phone', 'Server', 'Router', 'Switch', 'Printer', 'Photocopier'];
+    if (REQUIRES_MODEL.includes(payload.deviceType) && !payload.model) {
+      return res.status(400).json({ error: `Model is mandatory for device type: ${payload.deviceType}` });
+    }
     
     // AssignmentType Validation
     const aType = payload.assignmentType || 'EMPLOYEE';
@@ -110,13 +116,29 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
        errors: []
     };
 
+    // Pre-fetch data for caching to drastically speed up bulk insert
+    const locations = await prisma.location.findMany();
+    const departments = await prisma.department.findMany();
+    const employees = await prisma.employee.findMany();
+
+    const locationMap = new Map(locations.map(l => [l.name, l]));
+    const departmentMap = new Map(departments.map(d => [d.name, d]));
+    const employeeMap = new Map(employees.map(e => [e.employeeCode, e]));
+    
+    const existingAssetCodes = new Set((await prisma.asset.findMany({ select: { assetCode: true } })).map(a => a.assetCode));
+    const existingSerialNumbers = new Set((await prisma.asset.findMany({ where: { serialNumber: { not: null } }, select: { serialNumber: true } })).map(a => a.serialNumber));
+
     for (let i = 0; i < assets.length; i++) {
        const a = assets[i];
        const rowNum = i + 1;
        
        try {
-          if (!a.deviceType || !a.model) {
-             throw new Error("Missing required fields (deviceType or model).");
+          if (!a.deviceType) {
+             throw new Error("Missing required field (deviceType).");
+          }
+          const REQUIRES_MODEL = ['Laptop', 'Desktop', 'Tablet', 'Phone', 'Server', 'Router', 'Switch', 'Printer', 'Photocopier'];
+          if (REQUIRES_MODEL.includes(a.deviceType) && !a.model) {
+             throw new Error(`Model is mandatory for device type: ${a.deviceType}`);
           }
 
           const aType = a.assignmentType ? a.assignmentType.toUpperCase() : 'EMPLOYEE';
@@ -130,9 +152,10 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
           // 1 & 2. Location and Department Resolution
           let locationId = null;
           if (a.locationName) {
-             let loc = await prisma.location.findUnique({ where: { name: a.locationName } });
+             let loc = locationMap.get(a.locationName);
              if (!loc) {
                  loc = await prisma.location.create({ data: { name: a.locationName, status: 'ACTIVE' } });
+                 locationMap.set(a.locationName, loc);
                  results.createdLocations++;
              }
              locationId = loc.id;
@@ -140,9 +163,10 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
 
           let departmentId = null;
           if (a.departmentName) {
-             let dept = await prisma.department.findUnique({ where: { name: a.departmentName } });
+             let dept = departmentMap.get(a.departmentName);
              if (!dept) {
                  dept = await prisma.department.create({ data: { name: a.departmentName, status: 'ACTIVE' } });
+                 departmentMap.set(a.departmentName, dept);
                  results.createdDepartments++;
              }
              departmentId = dept.id;
@@ -151,7 +175,7 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
           // 3 & 4. Employee Resolution
           let employeeId = null;
           if (aType === 'EMPLOYEE' && a.employeeCode) {
-             let emp = await prisma.employee.findUnique({ where: { employeeCode: a.employeeCode } });
+             let emp = employeeMap.get(a.employeeCode);
              
              if (!emp) {
                  emp = await prisma.employee.create({
@@ -166,6 +190,7 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
                          status: a.employeeStatus ? a.employeeStatus.toUpperCase() : 'ACTIVE'
                      }
                  });
+                 employeeMap.set(a.employeeCode, emp);
                  results.createdEmployees++;
              } else {
                  const updateData = { departmentId, locationId };
@@ -179,6 +204,7 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
                      where: { id: emp.id },
                      data: updateData
                  });
+                 employeeMap.set(a.employeeCode, emp);
                  results.updatedEmployees++;
              }
              employeeId = emp.id;
@@ -192,18 +218,21 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
               finalAssetCode = finalAssetCode.trim();
           }
 
-          // 7. Serial Number Resolution
-          let finalSerial = a.serialNumber;
-          if (!finalSerial || finalSerial.trim().toLowerCase() === 'no serial') {
-              finalSerial = `NO-SERIAL-ROW-${rowNum}-${Math.floor(Math.random()*1000)}`;
-          }
-
           // Duplicate checks
-          const existingCode = await prisma.asset.findUnique({ where: { assetCode: finalAssetCode } });
-          if (existingCode) throw new Error(`Duplicate assetCode: ${finalAssetCode}`);
+          if (existingAssetCodes.has(finalAssetCode)) {
+              throw new Error(`Duplicate assetCode: ${finalAssetCode}`);
+          }
+          existingAssetCodes.add(finalAssetCode);
           
-          const existingSerial = await prisma.asset.findUnique({ where: { serialNumber: finalSerial } });
-          if (existingSerial) throw new Error(`Duplicate Serial Number`);
+          // 7. Serial Number Resolution
+          let finalSerial = null;
+          if (a.serialNumber && a.serialNumber.trim().toLowerCase() !== 'no serial') {
+              finalSerial = a.serialNumber.trim();
+              if (existingSerialNumbers.has(finalSerial)) {
+                  throw new Error(`Duplicate Serial Number`);
+              }
+              existingSerialNumbers.add(finalSerial);
+          }
 
           // 5. Status determination
           const finalStatus = employeeId ? 'ASSIGNED' : 'AVAILABLE';
@@ -310,6 +339,15 @@ router.put('/:id', authorize(['ADMIN', 'IT_OFFICER']), async (req, res) => {
     if (!oldRecord) return res.status(404).json({ error: 'Asset not found' });
 
     const payload = req.body;
+    const dType = payload.deviceType || oldRecord.deviceType;
+    const REQUIRES_MODEL = ['Laptop', 'Desktop', 'Tablet', 'Phone', 'Server', 'Router', 'Switch', 'Printer', 'Photocopier'];
+    if (REQUIRES_MODEL.includes(dType)) {
+      const finalModel = payload.model !== undefined ? payload.model : oldRecord.model;
+      if (!finalModel) {
+        return res.status(400).json({ error: `Model is mandatory for device type: ${dType}` });
+      }
+    }
+
     const aType = payload.assignmentType || oldRecord.assignmentType;
     
     if (aType === 'DEPARTMENT') {

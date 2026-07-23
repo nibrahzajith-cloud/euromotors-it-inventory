@@ -31,6 +31,7 @@ const auditLogsRoutes = require('./routes/auditLogs.routes');
 const dashboardRoutes = require('./routes/dashboard.routes');
 const uploadsRoutes = require('./routes/uploads.routes');
 const ticketsRoutes = require('./routes/tickets.routes');
+const databaseRoutes = require('./routes/database.routes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRoutes);
@@ -45,6 +46,7 @@ app.use('/api/audit-logs', auditLogsRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/uploads', uploadsRoutes);
 app.use('/api/tickets', ticketsRoutes);
+app.use('/api/database', databaseRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
