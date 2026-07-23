@@ -85,25 +85,19 @@ export default function Settings() {
       return ret;
   }
 
-  const processParsedAssets = (parsedAssets) => {
-      const originalCount = parsedAssets.length;
-      parsedAssets = parsedAssets.filter(row => {
-         if (row.assetCode === 'LAP001' && row.employeeName === 'John Silva') return false;
-         if (row.assetCode === 'PH001' && row.model === 'Canon IR 2630') return false;
-         if (row.assetCode === 'RT001' && row.model === 'Cisco ISR 1100') return false;
-         if (row.assetCode === 'PJ001' && row.model === 'Epson EB-X06') return false;
-         if (row.assetCode === 'ST001' && row.model === 'HP ProBook 450 G10') return false;
-         return true;
-      });
-      
-      if (parsedAssets.length < originalCount) {
-         showToast(`Automatically removed ${originalCount - parsedAssets.length} sample records from the upload.`, 'success');
-      }
+  const processParsedAssets = (parsedAssets, file) => {
       if (parsedAssets.length === 0) {
          showToast('No valid data rows found to import.', 'warning');
          return;
       }
       setCsvData(parsedAssets);
+      if (file) {
+          setSelectedFileInfo({
+              name: file.name,
+              size: (file.size / 1024).toFixed(2) + ' KB',
+              count: parsedAssets.length
+          });
+      }
       setImportStatus(null); // reset UI block
   };
 
@@ -142,21 +136,6 @@ export default function Settings() {
     setSelectedFileInfo(null);
     setCsvData([]);
 
-    // We will save file size for later
-    const fileSizeStr = (file.size / 1024).toFixed(2) + ' KB';
-    
-    // Create a wrapper for processParsedAssets to also set the file info
-    const processAndSetFileInfo = (assets) => {
-        if (assets.length > 0) {
-            setSelectedFileInfo({
-                name: file.name,
-                size: fileSizeStr,
-                count: assets.length
-            });
-        }
-        processParsedAssets(assets);
-    };
-
     if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
       try {
         const arrayBuffer = await file.arrayBuffer();
@@ -183,7 +162,7 @@ export default function Settings() {
               parsedAssets.push(assetObj);
            }
         });
-        processAndSetFileInfo(parsedAssets);
+        processParsedAssets(parsedAssets, file);
       } catch (err) {
         showToast('Failed to parse Excel file', 'error');
       }
@@ -260,7 +239,7 @@ export default function Settings() {
          return;
       }
       
-      processAndSetFileInfo(parsedAssets);
+      processParsedAssets(parsedAssets, file);
     };
     reader.readAsText(file);
     e.target.value = null; // reset allowing same upload binding securely
@@ -386,11 +365,13 @@ export default function Settings() {
         ["SHARED", "Head Office", "Administration", "", "", "", "", "", "", "Projector", "Epson EB-X06", "EPX061234", "PJ001", "", "", "", "", "Epson", "2024-08-15", "2027-08-15", "Active", "Epson", "Good", "Shared meeting room projector"],
         ["STORE", "Central Warehouse", "IT Store", "", "", "", "", "", "", "Laptop", "HP ProBook 450 G10", "HP4505678", "ST001", "Intel Core i7", "16GB", "512GB SSD", "Windows 11 Pro", "HP", "2025-04-18", "2028-04-18", "In Stock", "HP", "New", "Available in IT Store"]
      ];
-     let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\\n" + sampleRows.map(e => e.join(",")).join("\\n");
-     const encodedUri = encodeURI(csvContent);
+     const csvContent = headers.join(",") + "\n" + sampleRows.map(e => e.join(",")).join("\n");
+     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
      const link = document.createElement("a");
-     link.setAttribute("href", encodedUri);
+     const url = URL.createObjectURL(blob);
+     link.setAttribute("href", url);
      link.setAttribute("download", "asset_bulk_import_template.csv");
+     link.style.visibility = 'hidden';
      document.body.appendChild(link);
      link.click();
      document.body.removeChild(link);
