@@ -1,17 +1,24 @@
 import { useState } from 'react';
 import { Database as DatabaseIcon, AlertTriangle, Trash2, History } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
+import { useConfirm } from '../context/ConfirmContext';
 
 const _rawApi = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 const API_URL = _rawApi.endsWith('/api') ? _rawApi : `${_rawApi.replace(/\/$/, '')}/api`;
 
 export default function Database() {
   const { showToast } = useToast();
+  const { confirm } = useConfirm();
   const [isResetting, setIsResetting] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
 
   const handleClearActivity = async () => {
-    if (!window.confirm("Are you sure you want to clear all Audit Logs and Asset Timelines? This cannot be undone.")) return;
+    const isConfirmed = await confirm({
+      title: 'Clear Activity Logs',
+      message: 'Are you sure you want to clear all Audit Logs and Asset Timelines? This cannot be undone.',
+      confirmText: 'Clear Logs'
+    });
+    if (!isConfirmed) return;
     
     setIsClearing(true);
     try {
@@ -33,9 +40,14 @@ export default function Database() {
   };
 
   const handleResetDatabase = async () => {
-    if (!window.confirm("WARNING: This will delete ALL Inventory Data including Assets, Employees, Locations, Departments, and Logs! User accounts will remain. Type 'CONFIRM' to proceed.")) return;
+    const confirmText = await confirm({
+      type: 'prompt',
+      title: 'Wipe Database',
+      message: "WARNING: This will delete ALL Inventory Data including Assets, Employees, Locations, Departments, and Logs! User accounts will remain. Type 'CONFIRM' to proceed.",
+      inputPlaceholder: "Type 'CONFIRM'",
+      confirmText: 'Wipe Database'
+    });
     
-    const confirmText = window.prompt("Type 'CONFIRM' to reset the database:");
     if (confirmText !== 'CONFIRM') {
       showToast("Database reset cancelled.", 'info');
       return;
