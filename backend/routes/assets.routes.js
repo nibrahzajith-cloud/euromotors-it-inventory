@@ -120,7 +120,9 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
           }
 
           const aType = a.assignmentType ? a.assignmentType.toUpperCase() : 'EMPLOYEE';
-          if (aType === 'EMPLOYEE' && !a.employeeCode) throw new Error("Employee Code is mandatory for EMPLOYEE assignment type.");
+          if (aType === 'EMPLOYEE' && !a.employeeCode) {
+             a.employeeCode = await generateEmployeeCode(prisma);
+          }
           if (aType === 'DEPARTMENT' && !a.departmentName) throw new Error("Department Name is mandatory for DEPARTMENT assignment type.");
           if ((aType === 'LOCATION' || aType === 'STORE') && !a.locationName) throw new Error(`Location Name is mandatory for ${aType} assignment type.`);
           if (aType === 'SHARED' && !a.departmentName && !a.locationName) throw new Error("Department or Location is mandatory for SHARED assignment type.");

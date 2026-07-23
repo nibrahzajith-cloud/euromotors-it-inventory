@@ -333,7 +333,7 @@ export default function Settings() {
                      <div className="bg-amber-50 border border-amber-200 text-amber-800 px-3 py-2 rounded-lg text-xs font-medium">
                         <span className="block mb-1"><strong>Required Rules based on assignmentType:</strong></span>
                         <ul className="list-disc pl-4 space-y-0.5">
-                           <li><strong>EMPLOYEE</strong>: <code className="bg-amber-100 px-1 rounded">employeeCode</code> is mandatory.</li>
+                           <li><strong>EMPLOYEE</strong>: <code className="bg-amber-100 px-1 rounded">employeeCode</code> will be auto-generated if left blank.</li>
                            <li><strong>DEPARTMENT</strong>: <code className="bg-amber-100 px-1 rounded">departmentName</code> is mandatory. Employee fields ignored.</li>
                            <li><strong>LOCATION / STORE</strong>: <code className="bg-amber-100 px-1 rounded">locationName</code> is mandatory. Employee fields ignored.</li>
                            <li><strong>SHARED</strong>: Either <code className="bg-amber-100 px-1 rounded">departmentName</code> or <code className="bg-amber-100 px-1 rounded">locationName</code> is mandatory. Employee fields ignored.</li>
