@@ -102,6 +102,7 @@ router.post('/', authorize(['ADMIN', 'IT_OFFICER']), async (req, res) => {
 router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
   try {
     const assets = req.body.assets;
+    const rowOffset = req.body.rowOffset || 2;
     if (!Array.isArray(assets)) return res.status(400).json({ error: 'Payload must contain assets array.' });
 
     let results = {
@@ -158,7 +159,7 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
 
     for (let i = 0; i < assets.length; i++) {
        const a = assets[i];
-       const rowNum = i + 1;
+       const rowNum = rowOffset + i;
        
        try {
           if (!a.deviceType) {

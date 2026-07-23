@@ -50,16 +50,36 @@ export default function Settings() {
      }
   };
 
-  function parseCSVLine(text) {
-      let ret = [], val = '', quote = false;
+  function parseCSV(text) {
+      let ret = [];
+      let row = [];
+      let val = '';
+      let quote = false;
       for (let i = 0; i < text.length; i++) {
           let cc = text[i], nc = text[i+1];
-          if (cc === '"' && quote && nc === '"') { val += '"'; i++; }
-          else if (cc === '"') { quote = !quote; }
-          else if (cc === ',' && !quote) { ret.push(val.trim()); val = ''; }
-          else { val += cc; }
+          if (cc === '"' && quote && nc === '"') { 
+              val += '"'; 
+              i++; 
+          } else if (cc === '"') { 
+              quote = !quote; 
+          } else if (cc === ',' && !quote) { 
+              row.push(val.trim()); 
+              val = ''; 
+          } else if (cc === '\n' && !quote) {
+              row.push(val.trim());
+              ret.push(row);
+              row = [];
+              val = '';
+          } else if (cc === '\r' && !quote) {
+              // ignore \r
+          } else { 
+              val += cc; 
+          }
       }
-      ret.push(val.trim());
+      if (val || row.length > 0) {
+          row.push(val.trim());
+          ret.push(row);
+      }
       return ret;
   }
 
@@ -123,21 +143,40 @@ export default function Settings() {
     const reader = new FileReader();
     reader.onload = (event) => {
       const text = event.target.result;
-      const rows = text.split('\n').map(r => r.trim()).filter(r => r);
+      const rows = parseCSV(text).filter(r => r.length > 1 || (r.length === 1 && r[0] !== ''));
       if(rows.length < 2) return showToast('Invalid CSV: requires header row and data.', 'error');
       
-      const headers = parseCSVLine(rows[0]);
+      const headers = rows[0];
       let parsedAssets = [];
       
       for (let i = 1; i < rows.length; i++) {
-        const values = parseCSVLine(rows[i]);
+        const values = rows[i];
         const assetObj = {};
         headers.forEach((h, index) => {
           let val = values[index];
-          if (val === '') val = null;
+          if (val === '' || val === undefined) val = null;
           assetObj[h] = val;
         });
         parsedAssets.push(assetObj);
+      }
+
+      // Pre-flight check for duplicates in the file itself
+      const codesInFile = new Set();
+      const serialsInFile = new Set();
+      for (let i = 0; i < parsedAssets.length; i++) {
+         const asset = parsedAssets[i];
+         if (asset.assetCode) {
+            if (codesInFile.has(asset.assetCode)) {
+               return showToast(`Error: The uploaded CSV contains duplicate assetCode '${asset.assetCode}' on row ${i + 2}. Fix the file and try again.`, 'error');
+            }
+            codesInFile.add(asset.assetCode);
+         }
+         if (asset.serialNumber && asset.serialNumber.trim() !== '' && asset.serialNumber.trim().toLowerCase() !== 'no serial') {
+            if (serialsInFile.has(asset.serialNumber)) {
+               return showToast(`Error: The uploaded CSV contains duplicate Serial Number '${asset.serialNumber}' on row ${i + 2}. Fix the file and try again.`, 'error');
+            }
+            serialsInFile.add(asset.serialNumber);
+         }
       }
       
       processParsedAssets(parsedAssets);
@@ -169,13 +208,12 @@ export default function Settings() {
 
          for (let i = 0; i < totalChunks; i++) {
             const chunk = csvData.slice(i * chunkSize, (i + 1) * chunkSize);
+            const rowOffset = (i * chunkSize) + 2; // +2 because Excel rows start at 1 and Row 1 is header
+
             const res = await fetch(`${API_URL}/assets/bulk`, {
-                method: 'POST',
-                headers: {
-                   'Authorization': `Bearer ${token}`,
-                   'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ assets: chunk })
+               method: 'POST',
+               headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+               body: JSON.stringify({ assets: chunk, rowOffset })
             });
             
             const data = await res.json();
