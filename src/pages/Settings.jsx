@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Save, UploadCloud, AlertCircle, CheckCircle2, FileText, Loader2, Play } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 
 const _rawApi = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 const API_URL = _rawApi.endsWith('/api') ? _rawApi : `${_rawApi.replace(/\/$/, '')}/api`;
@@ -71,7 +73,7 @@ export default function Settings() {
       if(rows.length < 2) return showToast('Invalid CSV: requires header row and data.', 'error');
       
       const headers = parseCSVLine(rows[0]);
-      const parsedAssets = [];
+      let parsedAssets = [];
       
       for (let i = 1; i < rows.length; i++) {
         const values = parseCSVLine(rows[i]);
@@ -83,6 +85,16 @@ export default function Settings() {
         });
         parsedAssets.push(assetObj);
       }
+      
+      // Filter out the sample rows by checking if assetCode belongs to the known samples
+      const sampleAssetCodes = ['LAP001', 'PH001', 'RT001', 'PJ001', 'ST001'];
+      const originalCount = parsedAssets.length;
+      parsedAssets = parsedAssets.filter(row => !sampleAssetCodes.includes(row.assetCode));
+      
+      if (parsedAssets.length < originalCount) {
+         showToast(`Automatically removed ${originalCount - parsedAssets.length} sample records from the upload.`, 'success');
+      }
+
       setCsvData(parsedAssets);
       setImportStatus(null); // reset UI block
     };
@@ -117,14 +129,62 @@ export default function Settings() {
       }
   };
 
-  const handleDownloadTemplate = () => {
-     const headers = ["assignmentType", "locationName", "departmentName", "employeeCode", "employeeName", "email", "phone", "designation", "employeeStatus", "deviceType", "model", "serialNumber", "purchaseDate", "warrantyExpiryDate"];
+  const handleDownloadExcelTemplate = async () => {
+     const headers = ["assignmentType", "locationName", "departmentName", "employeeCode", "employeeName", "email", "phone", "designation", "employeeStatus", "deviceType", "model", "serialNumber", "assetCode", "processor", "ram", "storage", "operatingSystem", "vendor", "purchaseDate", "warrantyExpiryDate", "status", "brand", "condition", "remarks"];
      const sampleRows = [
-        ["EMPLOYEE", "New York HQ", "Engineering", "EMP-001", "John Doe", "john@example.com", "555-1234", "Senior Dev", "ACTIVE", "Laptop", "MacBook Pro 16", "SERIAL-123", "2023-01-15", "2026-01-15"],
-        ["DEPARTMENT", "", "HR", "", "", "", "", "", "", "Printer", "HP LaserJet Pro", "SERIAL-456", "2022-05-10", "2025-05-10"],
-        ["LOCATION", "London Office", "", "", "", "", "", "", "", "Router", "Cisco ISR", "SERIAL-789", "2023-08-20", "2028-08-20"],
-        ["SHARED", "New York HQ", "Marketing", "", "", "", "", "", "", "Projector", "Epson Pro", "SERIAL-321", "2023-11-05", "2025-11-05"],
-        ["STORE", "Warehouse A", "", "", "", "", "", "", "", "Laptop", "Dell XPS 15", "SERIAL-999", "2024-02-01", "2027-02-01"]
+        ["EMPLOYEE", "Head Office", "IT", "EMP001", "John Silva", "john@euromotors.lk", "0771234567", "IT Executive", "ACTIVE", "Laptop", "Dell Latitude 5440", "DL001234", "LAP001", "Intel Core i5", "16GB", "512GB SSD", "Windows 11 Pro", "Dell", "2025-01-10", "2028-01-10", "ACTIVE", "Dell", "Excellent", "Assigned to employee"],
+        ["DEPARTMENT", "Head Office", "Finance", "", "", "", "", "", "", "Photocopier", "Canon IR 2630", "CN002345", "PH001", "", "", "", "", "Canon", "2024-03-15", "2027-03-15", "ACTIVE", "Canon", "Good", "Department shared asset"],
+        ["LOCATION", "Colombo Showroom", "", "", "", "", "", "", "", "Router", "Cisco ISR 1100", "CS003456", "RT001", "", "", "", "Cisco IOS", "Cisco", "2025-02-20", "2030-02-20", "ACTIVE", "Cisco", "Excellent", "Installed in showroom"],
+        ["SHARED", "Head Office", "Meeting Room", "", "", "", "", "", "", "Projector", "Epson EB-X06", "EP004567", "PJ001", "", "", "", "", "Epson", "2024-06-01", "2027-06-01", "ACTIVE", "Epson", "Good", "Shared meeting room asset"],
+        ["STORE", "Central Warehouse", "", "", "", "", "", "", "", "Laptop", "HP ProBook 450 G10", "HP005678", "ST001", "Intel Core i7", "16GB", "512GB SSD", "Windows 11 Pro", "HP", "2025-04-18", "2028-04-18", "IN_STOCK", "HP", "New", "Available in IT Store"]
+     ];
+
+     const workbook = new ExcelJS.Workbook();
+     const worksheet = workbook.addWorksheet('Asset Import Template');
+
+     worksheet.views = [ { state: 'frozen', ySplit: 1 } ];
+
+     const headerRow = worksheet.addRow(headers);
+     
+     headerRow.eachCell((cell, colNumber) => {
+       cell.fill = {
+         type: 'pattern',
+         pattern: 'solid',
+         fgColor: { argb: 'FF2563EB' } // Tailwind blue-600
+       };
+       cell.font = {
+         color: { argb: 'FFFFFFFF' },
+         bold: true
+       };
+     });
+
+     sampleRows.forEach(row => {
+        worksheet.addRow(row);
+     });
+
+     worksheet.columns.forEach(column => {
+        let maxLength = 0;
+        column["eachCell"]({ includeEmpty: true }, (cell) => {
+           let columnLength = cell.value ? cell.value.toString().length : 10;
+           if (columnLength > maxLength) {
+              maxLength = columnLength;
+           }
+        });
+        column.width = maxLength < 10 ? 10 : maxLength + 2;
+     });
+
+     const buffer = await workbook.xlsx.writeBuffer();
+     saveAs(new Blob([buffer]), 'asset_bulk_import_template.xlsx');
+  };
+
+  const handleDownloadCsvTemplate = () => {
+     const headers = ["assignmentType", "locationName", "departmentName", "employeeCode", "employeeName", "email", "phone", "designation", "employeeStatus", "deviceType", "model", "serialNumber", "assetCode", "processor", "ram", "storage", "operatingSystem", "vendor", "purchaseDate", "warrantyExpiryDate", "status", "brand", "condition", "remarks"];
+     const sampleRows = [
+        ["EMPLOYEE", "Head Office", "IT", "EMP001", "John Silva", "john@euromotors.lk", "0771234567", "IT Executive", "ACTIVE", "Laptop", "Dell Latitude 5440", "DL001234", "LAP001", "Intel Core i5", "16GB", "512GB SSD", "Windows 11 Pro", "Dell", "2025-01-10", "2028-01-10", "ACTIVE", "Dell", "Excellent", "Assigned to employee"],
+        ["DEPARTMENT", "Head Office", "Finance", "", "", "", "", "", "", "Photocopier", "Canon IR 2630", "CN002345", "PH001", "", "", "", "", "Canon", "2024-03-15", "2027-03-15", "ACTIVE", "Canon", "Good", "Department shared asset"],
+        ["LOCATION", "Colombo Showroom", "", "", "", "", "", "", "", "Router", "Cisco ISR 1100", "CS003456", "RT001", "", "", "", "Cisco IOS", "Cisco", "2025-02-20", "2030-02-20", "ACTIVE", "Cisco", "Excellent", "Installed in showroom"],
+        ["SHARED", "Head Office", "Meeting Room", "", "", "", "", "", "", "Projector", "Epson EB-X06", "EP004567", "PJ001", "", "", "", "", "Epson", "2024-06-01", "2027-06-01", "ACTIVE", "Epson", "Good", "Shared meeting room asset"],
+        ["STORE", "Central Warehouse", "", "", "", "", "", "", "", "Laptop", "HP ProBook 450 G10", "HP005678", "ST001", "Intel Core i7", "16GB", "512GB SSD", "Windows 11 Pro", "HP", "2025-04-18", "2028-04-18", "IN_STOCK", "HP", "New", "Available in IT Store"]
      ];
      let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\\n" + sampleRows.map(e => e.join(",")).join("\\n");
      const encodedUri = encodeURI(csvContent);
@@ -188,6 +248,10 @@ export default function Settings() {
             <div className="flex flex-col md:flex-row gap-4 items-start">
                <div className="flex-1">
                   <div className="text-sm text-slate-500 mb-4 space-y-2">
+                     <div className="bg-blue-50 border border-blue-200 text-blue-800 px-3 py-2 rounded-lg text-xs font-medium mb-4">
+                        <span className="block mb-1 font-bold">Important Note:</span>
+                        <p>Rows 2–6 in the downloaded templates are sample records for reference only. Delete these rows before importing your actual asset data.</p>
+                     </div>
                      <p>Upload a `.csv` mapping payload for smart organizational parsing. Valid columns:</p>
                      <div className="flex flex-wrap gap-1.5 pb-2">
                          <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">assignmentType</span>
@@ -202,8 +266,18 @@ export default function Settings() {
                          <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">deviceType</span>
                          <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">model</span>
                          <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">serialNumber</span>
+                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">assetCode</span>
+                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">processor</span>
+                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">ram</span>
+                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">storage</span>
+                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">operatingSystem</span>
+                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">vendor</span>
                          <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">purchaseDate</span>
                          <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">warrantyExpiryDate</span>
+                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">status</span>
+                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">brand</span>
+                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">condition</span>
+                         <span className="font-mono text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">remarks</span>
                      </div>
                      <div className="bg-amber-50 border border-amber-200 text-amber-800 px-3 py-2 rounded-lg text-xs font-medium">
                         <span className="block mb-1"><strong>Required Rules based on assignmentType:</strong></span>
@@ -216,10 +290,14 @@ export default function Settings() {
                      </div>
                   </div>
                   
-                  <div className="flex gap-4">
-                     <button onClick={handleDownloadTemplate} className="cursor-pointer inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-50 border border-blue-200 text-blue-700 font-medium rounded-xl hover:bg-blue-100 transition-colors shadow-sm">
+                  <div className="flex flex-wrap gap-4">
+                     <button onClick={handleDownloadExcelTemplate} className="cursor-pointer inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-green-50 border border-green-200 text-green-700 font-medium rounded-xl hover:bg-green-100 transition-colors shadow-sm">
+                        <FileText className="w-4 h-4 text-green-600" />
+                        Download Excel (.xlsx)
+                     </button>
+                     <button onClick={handleDownloadCsvTemplate} className="cursor-pointer inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-50 border border-blue-200 text-blue-700 font-medium rounded-xl hover:bg-blue-100 transition-colors shadow-sm">
                         <FileText className="w-4 h-4 text-blue-600" />
-                        Download Template
+                        Download CSV (.csv)
                      </button>
                      <label className="cursor-pointer inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-slate-700 font-medium rounded-xl hover:bg-slate-50 transition-colors shadow-sm">
                         <UploadCloud className="w-4 h-4 text-slate-400" />
