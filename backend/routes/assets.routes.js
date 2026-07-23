@@ -345,7 +345,18 @@ router.delete('/:id', authorize(['ADMIN']), async (req, res) => {
     const oldRecord = await prisma.asset.findUnique({ where: { id: req.params.id } });
     if (!oldRecord) return res.status(404).json({ error: 'Asset not found' });
 
-    await prisma.asset.delete({ where: { id: req.params.id } });
+    // Manual cascade delete
+    await prisma.$transaction([
+      prisma.assetAssignment.deleteMany({ where: { assetId: req.params.id } }),
+      prisma.maintenanceLog.deleteMany({ where: { assetId: req.params.id } }),
+      prisma.assetTimeline.deleteMany({ where: { assetId: req.params.id } }),
+      prisma.assetDocument.deleteMany({ where: { assetId: req.params.id } }),
+      prisma.supportTicket.updateMany({
+        where: { assetId: req.params.id },
+        data: { assetId: null }
+      }),
+      prisma.asset.delete({ where: { id: req.params.id } })
+    ]);
 
     // Log Audit
     await logAudit({

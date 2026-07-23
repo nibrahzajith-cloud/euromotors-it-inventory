@@ -49,7 +49,16 @@ router.put('/:id', authorize(['ADMIN', 'IT_OFFICER']), async (req, res) => {
 // Only Admin can delete
 router.delete('/:id', authorize(['ADMIN']), async (req, res) => {
   try {
-    await prisma.employee.delete({ where: { id: req.params.id } });
+    // Manual cascade delete
+    await prisma.$transaction([
+      prisma.asset.updateMany({
+        where: { assignedEmployeeId: req.params.id },
+        data: { assignedEmployeeId: null, status: 'AVAILABLE' }
+      }),
+      prisma.assetAssignment.deleteMany({ where: { employeeId: req.params.id } }),
+      prisma.supportTicket.deleteMany({ where: { employeeId: req.params.id } }),
+      prisma.employee.delete({ where: { id: req.params.id } })
+    ]);
     res.json({ message: 'Deleted' });
   } catch (err) {
     res.status(500).json({ error: err.message });

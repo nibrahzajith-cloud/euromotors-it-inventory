@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Search, Plus, Mail, Loader2, AlertCircle, Edit, Trash2, X, Phone, Briefcase, MapPin, MonitorSmartphone, ExternalLink } from 'lucide-react';
+import { Search, Plus, Mail, Loader2, AlertCircle, Edit, Trash2, X, Phone, Briefcase, MapPin, MonitorSmartphone, ExternalLink, XSquare } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -55,6 +56,9 @@ export default function Employees() {
 
   // Asset picker modal state
   const [assetPickerModal, setAssetPickerModal] = useState({ open: false, empName: '', assets: [] });
+
+  // Bulk Selection
+  const [selectedIds, setSelectedIds] = useState(new Set());
 
   const canCreateEdit = user?.role === 'ADMIN' || user?.role === 'IT_OFFICER';
   const canDelete = user?.role === 'ADMIN';
@@ -217,6 +221,34 @@ export default function Employees() {
     }
   };
 
+  const handleBulkDelete = async () => {
+    const confirmed = await confirm({
+      title: 'Bulk Delete',
+      message: `Are you sure you want to permanently delete ${selectedIds.size} employees?`,
+      confirmText: 'Delete All'
+    });
+    if (!confirmed) return;
+    
+    try {
+      const token = localStorage.getItem('token');
+      let successCount = 0;
+      
+      for (const id of selectedIds) {
+        const res = await fetch(`${API_URL}/employees/${id}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) successCount++;
+      }
+      
+      await fetchData();
+      setSelectedIds(new Set());
+      showToast(`Successfully deleted ${successCount} employees.`, 'success');
+    } catch (err) {
+      showToast('Failed to delete some employees.', 'error');
+    }
+  };
+
   // --- Assigned Assets Badge Click Logic ---
   const getAssignedAssets = (emp) => {
     const direct = assets.filter(a => a.assignedEmployeeId === emp.id);
@@ -254,6 +286,23 @@ export default function Employees() {
 
     return textMatch && locationMatch && departmentMatch;
   });
+
+  const toggleSelection = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (selectedIds.size === filteredEmployees.length && filteredEmployees.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredEmployees.map(emp => emp.id)));
+    }
+  };
 
   if (loading) {
     return (
@@ -323,6 +372,14 @@ export default function Employees() {
           <table className="w-full text-left text-sm text-slate-600 dark:text-slate-400">
             <thead className="bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-300 font-medium whitespace-nowrap">
               <tr>
+                <th className="px-5 py-4 w-12">
+                  <input 
+                    type="checkbox" 
+                    checked={filteredEmployees.length > 0 && selectedIds.size === filteredEmployees.length}
+                    onChange={toggleAll}
+                    className="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500"
+                  />
+                </th>
                 <th className="px-5 py-4">Employee</th>
                 <th className="px-5 py-4">Department & Role</th>
                 <th className="px-5 py-4">Base Location</th>
@@ -343,7 +400,15 @@ export default function Employees() {
                 const loc = locations.find(l => l.id === emp.locationId);
                 
                 return (
-                  <tr key={emp.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50 transition-colors">
+                  <tr key={emp.id} className={`hover:bg-slate-50/70 dark:hover:bg-slate-800/50 transition-colors ${selectedIds.has(emp.id) ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}>
+                    <td className="px-5 py-4 w-12">
+                      <input 
+                        type="checkbox" 
+                        checked={selectedIds.has(emp.id)}
+                        onChange={() => toggleSelection(emp.id)}
+                        className="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500"
+                      />
+                    </td>
                     <td className="px-5 py-4">
                       <div className="flex flex-col">
                         <span className="font-bold text-slate-800 dark:text-white">{emp.fullName}</span>
@@ -580,6 +645,40 @@ export default function Employees() {
           </div>
         </div>
       )}
+
+      {/* Floating Bulk Action Bar */}
+      <AnimatePresence>
+        {selectedIds.size > 0 && (
+          <motion.div 
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-6 z-50 border border-slate-800"
+          >
+            <div className="flex items-center gap-2">
+              <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-xs font-bold">{selectedIds.size}</span>
+              <span className="font-semibold text-sm">Employees Selected</span>
+            </div>
+            
+            <div className="h-6 w-px bg-slate-700"></div>
+            
+            <div className="flex items-center gap-3">
+              <button 
+                className="text-sm font-medium hover:text-red-400 transition-colors flex items-center gap-1.5"
+                onClick={handleBulkDelete}
+              >
+                <Trash2 className="w-4 h-4" /> Delete All
+              </button>
+              <button 
+                className="text-sm font-medium hover:text-slate-300 transition-colors flex items-center gap-1.5"
+                onClick={() => setSelectedIds(new Set())}
+              >
+                <XSquare className="w-4 h-4" /> Clear
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
