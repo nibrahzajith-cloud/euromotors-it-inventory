@@ -125,8 +125,36 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
     const departmentMap = new Map(departments.map(d => [d.name, d]));
     const employeeMap = new Map(employees.map(e => [e.employeeCode, e]));
     
-    const existingAssetCodes = new Set((await prisma.asset.findMany({ select: { assetCode: true } })).map(a => a.assetCode));
+    const existingAssetCodesArray = (await prisma.asset.findMany({ select: { assetCode: true } })).map(a => a.assetCode);
+    const existingAssetCodes = new Set(existingAssetCodesArray);
+    
+    const settings = await prisma.systemSettings.findUnique({ where: { id: 'global' } });
+    const assetPrefix = settings?.assetCodePrefix || 'AST';
+
+    let highestAssetSequence = 0;
+    const assetRegex = new RegExp(`^${assetPrefix}-(\\d+)-001$`);
+    existingAssetCodesArray.forEach(code => {
+        const match = code.match(assetRegex);
+        if (match) {
+            const num = parseInt(match[1], 10);
+            if (num > highestAssetSequence) highestAssetSequence = num;
+        }
+    });
+
     const existingSerialNumbers = new Set((await prisma.asset.findMany({ where: { serialNumber: { not: null } }, select: { serialNumber: true } })).map(a => a.serialNumber));
+
+    const existingEmployeeCodesArray = (await prisma.employee.findMany({ select: { employeeCode: true } })).map(e => e.employeeCode);
+    const existingEmployeeCodes = new Set(existingEmployeeCodesArray);
+    
+    let highestEmployeeSequence = 0;
+    const empRegex = new RegExp(`^EMP-(\\d+)-001$`);
+    existingEmployeeCodesArray.forEach(code => {
+        const match = code.match(empRegex);
+        if (match) {
+            const num = parseInt(match[1], 10);
+            if (num > highestEmployeeSequence) highestEmployeeSequence = num;
+        }
+    });
 
     for (let i = 0; i < assets.length; i++) {
        const a = assets[i];
@@ -136,14 +164,12 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
           if (!a.deviceType) {
              throw new Error("Missing required field (deviceType).");
           }
-          const REQUIRES_MODEL = ['Laptop', 'Desktop', 'Tablet', 'Phone', 'Server', 'Router', 'Switch', 'Printer', 'Photocopier'];
-          if (REQUIRES_MODEL.includes(a.deviceType) && !a.model) {
-             throw new Error(`Model is mandatory for device type: ${a.deviceType}`);
-          }
 
           const aType = a.assignmentType ? a.assignmentType.toUpperCase() : 'EMPLOYEE';
           if (aType === 'EMPLOYEE' && !a.employeeCode) {
-             a.employeeCode = await generateEmployeeCode(prisma);
+             highestEmployeeSequence++;
+             a.employeeCode = `EMP-${highestEmployeeSequence.toString().padStart(5, '0')}-001`;
+             existingEmployeeCodes.add(a.employeeCode);
           }
           if (aType === 'DEPARTMENT' && !a.departmentName) throw new Error("Department Name is mandatory for DEPARTMENT assignment type.");
           if ((aType === 'LOCATION' || aType === 'STORE') && !a.locationName) throw new Error(`Location Name is mandatory for ${aType} assignment type.`);
@@ -212,8 +238,9 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
 
           // 6. Auto-generate assetCode
           let finalAssetCode = a.assetCode;
-          if (!finalAssetCode) {
-              finalAssetCode = await generateAssetCode(prisma);
+          if (!finalAssetCode || finalAssetCode.trim() === '') {
+              highestAssetSequence++;
+              finalAssetCode = `${assetPrefix}-${highestAssetSequence.toString().padStart(5, '0')}-001`;
           } else {
               finalAssetCode = finalAssetCode.trim();
           }
@@ -226,8 +253,8 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
           
           // 7. Serial Number Resolution
           let finalSerial = null;
-          if (a.serialNumber && a.serialNumber.trim().toLowerCase() !== 'no serial') {
-              finalSerial = a.serialNumber.trim();
+          if (a.serialNumber && a.serialNumber.toString().trim() !== '' && a.serialNumber.toString().trim().toLowerCase() !== 'no serial') {
+              finalSerial = a.serialNumber.toString().trim();
               if (existingSerialNumbers.has(finalSerial)) {
                   throw new Error(`Duplicate Serial Number`);
               }
