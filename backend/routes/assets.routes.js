@@ -3,6 +3,7 @@ const router = express.Router();
 const prisma = require('../prismaClient');
 const { authenticate, authorize } = require('../middleware/auth.middleware');
 const { logAudit, logAssetTimeline } = require('../utils/logger');
+const { generateAssetCode, generateEmployeeCode } = require('../utils/codeGenerator');
 
 router.use(authenticate);
 
@@ -37,7 +38,11 @@ router.get('/code/:code', async (req, res) => {
 router.post('/', authorize(['ADMIN', 'IT_OFFICER']), async (req, res) => {
   try {
     const payload = req.body;
-    if (payload.assetCode) payload.assetCode = payload.assetCode.trim();
+    if (payload.assetCode) {
+      payload.assetCode = payload.assetCode.trim();
+    } else {
+      payload.assetCode = await generateAssetCode(prisma);
+    }
     if (payload.serialNumber) payload.serialNumber = payload.serialNumber.trim();
     
     const record = await prisma.asset.create({ data: payload });
@@ -133,7 +138,7 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
              }
              
              if (!emp) {
-                 const newEmpCode = `EMP-${Date.now().toString().slice(-4)}-${Math.floor(Math.random()*100)}`;
+                 const newEmpCode = await generateEmployeeCode(prisma);
                  emp = await prisma.employee.create({
                      data: {
                          employeeCode: newEmpCode,
@@ -164,7 +169,12 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
           }
 
           // 6. Auto-generate assetCode
-          const finalAssetCode = `EM-IT-${Date.now().toString().slice(-5)}-${Math.floor(Math.random()*1000)}`;
+          let finalAssetCode = a.assetCode;
+          if (!finalAssetCode) {
+              finalAssetCode = await generateAssetCode(prisma);
+          } else {
+              finalAssetCode = finalAssetCode.trim();
+          }
 
           // 7. Serial Number Resolution
           let finalSerial = a.serialNumber;

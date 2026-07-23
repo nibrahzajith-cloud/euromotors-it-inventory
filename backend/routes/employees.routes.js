@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../prismaClient');
 const { authenticate, authorize } = require('../middleware/auth.middleware');
+const { generateEmployeeCode } = require('../utils/codeGenerator');
 
 router.use(authenticate);
 
@@ -25,7 +26,11 @@ router.get('/', async (req, res) => {
 // Admin and IT Officer can modify
 router.post('/', authorize(['ADMIN', 'IT_OFFICER']), async (req, res) => {
   try {
-    const record = await prisma.employee.create({ data: req.body });
+    const payload = { ...req.body };
+    if (!payload.employeeCode) {
+      payload.employeeCode = await generateEmployeeCode(prisma);
+    }
+    const record = await prisma.employee.create({ data: payload });
     res.status(201).json(record);
   } catch (err) {
     res.status(500).json({ error: err.message });
