@@ -1,8 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prismaClient');
-const { authorize } = require('../middleware/auth.middleware');
+const { authenticate, authorize } = require('../middleware/auth.middleware');
 const { logAudit } = require('../utils/logger');
+
+router.use(authenticate);
 
 // DELETE /api/database/reset-all
 router.delete('/reset-all', authorize(['ADMIN']), async (req, res) => {
