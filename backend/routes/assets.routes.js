@@ -287,7 +287,7 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
           }
 
           // 5. Status determination
-          const finalStatus = employeeId ? 'ASSIGNED' : 'AVAILABLE';
+          const finalStatus = (aType === 'STORE' || (!employeeId && !departmentId && !locationId)) ? 'AVAILABLE' : 'ASSIGNED';
 
           const parseSafeDate = (dt) => {
              if (!dt) return null;
@@ -359,6 +359,31 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
                newStatus: 'ASSIGNED',
                employeeId: emp?.id,
                employeeName: emp?.fullName,
+               performedById: req.user.id,
+               performedByName: req.user.fullName
+             });
+          } else if (departmentId || locationId) {
+             let targetName = '';
+             if (departmentId && locationId) {
+                 const dept = departmentMap.get(a.departmentName);
+                 const loc = locationMap.get(a.locationName);
+                 targetName = `Department: ${dept?.name}, Location: ${loc?.name}`;
+             } else if (departmentId) {
+                 const dept = departmentMap.get(a.departmentName);
+                 targetName = `Department: ${dept?.name}`;
+             } else if (locationId) {
+                 const loc = locationMap.get(a.locationName);
+                 targetName = `Location: ${loc?.name}`;
+             }
+             
+             await logAssetTimeline({
+               assetId: newAsset.id,
+               assetCode: newAsset.assetCode,
+               eventType: 'ASSIGNED',
+               title: 'Asset Assigned (Bulk)',
+               description: `Automatically assigned to ${targetName} during ingestion.`,
+               oldStatus: 'AVAILABLE',
+               newStatus: 'ASSIGNED',
                performedById: req.user.id,
                performedByName: req.user.fullName
              });

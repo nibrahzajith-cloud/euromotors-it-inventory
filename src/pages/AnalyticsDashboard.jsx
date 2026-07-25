@@ -152,10 +152,32 @@ export default function AnalyticsDashboard() {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-50 dark:bg-[#0f172a]">
-        <div className="flex flex-col items-center space-y-4">
-          <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-blue-500 dark:text-blue-400 font-bold uppercase tracking-widest text-xs animate-pulse">Loading Analytics...</p>
+      <div className="min-h-screen bg-slate-50 dark:bg-[#0f172a] p-4 md:p-8 space-y-8">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-2">
+            <div className="h-8 w-64 bg-slate-200 dark:bg-slate-700 rounded-lg animate-pulse" />
+            <div className="h-4 w-96 bg-slate-200 dark:bg-slate-700 rounded-lg animate-pulse" />
+          </div>
+          <div className="flex gap-3">
+             <div className="h-10 w-32 bg-slate-200 dark:bg-slate-700 rounded-lg animate-pulse" />
+             <div className="h-10 w-32 bg-slate-200 dark:bg-slate-700 rounded-lg animate-pulse" />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+           {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
+             <div key={i} className="bg-white dark:bg-slate-800 rounded-2xl p-5 border border-slate-200 dark:border-slate-700 h-32 animate-pulse">
+                <div className="flex justify-between items-start mb-4">
+                   <div className="w-10 h-10 rounded-xl bg-slate-200 dark:bg-slate-700" />
+                   <div className="w-16 h-6 rounded-full bg-slate-200 dark:bg-slate-700" />
+                </div>
+                <div className="w-24 h-4 bg-slate-200 dark:bg-slate-700 rounded mb-2" />
+                <div className="w-16 h-8 bg-slate-200 dark:bg-slate-700 rounded" />
+             </div>
+           ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+           <div className="lg:col-span-8 h-[400px] bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 animate-pulse" />
+           <div className="lg:col-span-4 h-[400px] bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 animate-pulse" />
         </div>
       </div>
     );
@@ -198,13 +220,15 @@ export default function AnalyticsDashboard() {
         </div>
 
         {/* KPI Section */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           <KPICard title="Total Assets" value={data.summary.totalAssets.value} trend={`+${data.summary.totalAssets.trend} wk`} type="up" icon={MonitorSmartphone} colorClass="bg-blue-100 text-blue-600 dark:bg-blue-600" glowColor="rgba(59, 130, 246, 0.4)" onClick={() => navigate('/assets')} />
-          <KPICard title="Assigned" value={data.summary.assigned.value} trend={`+${data.summary.assigned.trend} day`} type="up" icon={UserCheck} colorClass="bg-indigo-100 text-indigo-600 dark:bg-indigo-600" glowColor="rgba(79, 70, 229, 0.4)" onClick={() => navigate('/assets?status=ASSIGNED')} />
-          <KPICard title="Available" value={data.summary.available.value} trend={`+${data.summary.available.trend} rtr`} type="up" icon={CheckCircle2} colorClass="bg-emerald-100 text-emerald-600 dark:bg-emerald-600" glowColor="rgba(16, 185, 129, 0.4)" onClick={() => navigate('/assets?status=AVAILABLE')} />
+          <KPICard title="In Store" value={data.summary.available.value} trend={`+${data.summary.available.trend} rtr`} type="up" icon={Server} colorClass="bg-emerald-100 text-emerald-600 dark:bg-emerald-600" glowColor="rgba(16, 185, 129, 0.4)" onClick={() => navigate('/assets?status=AVAILABLE')} />
+          <KPICard title="Staff Assigned" value={data.summary.assigned.value} trend={`+${data.summary.assigned.trend} day`} type="up" icon={UserCheck} colorClass="bg-indigo-100 text-indigo-600 dark:bg-indigo-600" glowColor="rgba(79, 70, 229, 0.4)" onClick={() => navigate('/assets?status=ASSIGNED')} />
+          <KPICard title="Dept Assigned" value={data.summary.department?.value || 0} trend={`+${data.summary.department?.trend || 0} mnt`} type="up" icon={Building2} colorClass="bg-purple-100 text-purple-600 dark:bg-purple-600" glowColor="rgba(147, 51, 234, 0.4)" onClick={() => navigate('/assets?status=ASSIGNED')} />
+          <KPICard title="Location Bound" value={data.summary.location?.value || 0} trend={`+${data.summary.location?.trend || 0} mnt`} type="neutral" icon={MapPin} colorClass="bg-cyan-100 text-cyan-600 dark:bg-cyan-600" glowColor="rgba(6, 182, 212, 0.4)" onClick={() => navigate('/assets?status=ASSIGNED')} />
+          <KPICard title="Shared Pool" value={data.summary.shared?.value || 0} trend={`+${data.summary.shared?.trend || 0} mnt`} type="neutral" icon={Activity} colorClass="bg-pink-100 text-pink-600 dark:bg-pink-600" glowColor="rgba(236, 72, 153, 0.4)" onClick={() => navigate('/assets?status=ASSIGNED')} />
           <KPICard title="In Repair" value={data.summary.repair.value} trend={`${data.summary.repair.trend} mnt`} type="neutral" icon={Wrench} colorClass="bg-amber-100 text-amber-600 dark:bg-amber-600" glowColor="rgba(245, 158, 11, 0.4)" onClick={() => navigate('/maintenance')} />
           <KPICard title="Warranty Risk" value={data.summary.warranty.value} trend={`${data.summary.warranty.trend} rsk`} type="down" icon={ShieldCheck} colorClass="bg-rose-100 text-rose-600 dark:bg-rose-600" glowColor="rgba(225, 29, 72, 0.4)" onClick={() => navigate('/reports')} />
-          <KPICard title="Total Staff" value={data.analytics.departments.reduce((acc, curr) => acc + curr.staffCount, 0)} trend={`+12 mth`} type="up" icon={UserCheck} colorClass="bg-purple-100 text-purple-600 dark:bg-purple-600" glowColor="rgba(147, 51, 234, 0.4)" onClick={() => navigate('/employees')} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">

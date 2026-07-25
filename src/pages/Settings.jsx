@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Save, UploadCloud, AlertCircle, CheckCircle2, FileText, Loader2, Play, Download } from 'lucide-react';
+import { Save, User, Building2, Server, Globe, DownloadCloud, Activity, UploadCloud, Play, FileText, CheckCircle2, AlertCircle, Eye, Download, Search } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import ExcelJS from 'exceljs';
+import { useNavigate } from 'react-router-dom';
+import * as ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 
 const _rawApi = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
@@ -9,6 +11,7 @@ const API_URL = _rawApi.endsWith('/api') ? _rawApi : `${_rawApi.replace(/\/$/, '
 
 export default function Settings() {
   const { showToast } = useToast();
+  const navigate = useNavigate();
   
   const [csvData, setCsvData] = useState([]);
   const [importStatus, setImportStatus] = useState(null);
@@ -250,6 +253,7 @@ export default function Settings() {
       setIsImporting(true);
       setImportStatus(null);
       setUploadProgress(0);
+      const startTime = performance.now();
       
       try {
          const token = localStorage.getItem('token');
@@ -263,6 +267,8 @@ export default function Settings() {
            createdEmployees: 0,
            updatedEmployees: 0,
            createdAssets: 0,
+           createdAssignments: 0,
+           skippedRows: 0,
            errors: []
          };
 
@@ -285,6 +291,9 @@ export default function Settings() {
             aggregatedResults.createdEmployees += data.createdEmployees || 0;
             aggregatedResults.updatedEmployees += data.updatedEmployees || 0;
             aggregatedResults.createdAssets += data.createdAssets || 0;
+            aggregatedResults.createdAssignments += data.createdAssignments || 0;
+            aggregatedResults.skippedRows += data.skippedRows || 0;
+            
             if (data.errors && data.errors.length > 0) {
                 aggregatedResults.errors.push(...data.errors);
             }
@@ -292,6 +301,19 @@ export default function Settings() {
             setUploadProgress(Math.round(((i + 1) / totalChunks) * 100));
          }
 
+         // Pre-fetch Dashboard APIs so it's ready in cache
+         try {
+           const dbRes = await fetch(`${API_URL}/dashboard/advanced`, { headers: { 'Authorization': `Bearer ${token}` } });
+           if (dbRes.ok) {
+             const result = await dbRes.json();
+             localStorage.setItem('analyticsDashboardCache', JSON.stringify(result));
+           }
+         } catch (e) {
+           console.error("Dashboard cache pre-warm failed", e);
+         }
+
+         const endTime = performance.now();
+         aggregatedResults.processingTime = ((endTime - startTime) / 1000).toFixed(2);
          setImportStatus(aggregatedResults);
       } catch (err) {
          setImportStatus({ fatal: err.message });
@@ -571,7 +593,7 @@ export default function Settings() {
              )}
 
             {importStatus && (
-               <div className={`mt-6 p-5 rounded-2xl border ${importStatus.fatal ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-200'}`}>
+               <div className={`mt-6 p-6 rounded-2xl border shadow-sm ${importStatus.fatal ? 'bg-red-50 border-red-200' : 'bg-white border-emerald-200'}`}>
                   {importStatus.fatal ? (
                      <div className="flex items-start gap-3">
                         <AlertCircle className="w-6 h-6 text-red-500 shrink-0" />
@@ -581,57 +603,90 @@ export default function Settings() {
                         </div>
                      </div>
                   ) : (
-                     <div>
-                        <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2 mb-4">
-                           <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                           Pipeline Transaction Closed
-                        </h3>
-                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 mb-4">
-                           <div className="bg-white p-3 rounded-lg border border-slate-100 shadow-sm text-center col-span-2 lg:col-span-1">
-                              <span className="text-xl font-bold text-slate-700">{importStatus.totalRows}</span>
-                              <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-1">Parsed</p>
+                     <div className="animate-in fade-in zoom-in-95 duration-500">
+                        <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
+                           <h3 className="text-xl font-bold text-slate-800 flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                                <CheckCircle2 className="w-6 h-6" />
+                              </div>
+                              Pipeline Transaction Complete
+                           </h3>
+                           <div className="flex items-center gap-3">
+                             {importStatus.processingTime && (
+                                <span className="bg-slate-100 text-slate-600 px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5">
+                                   <Activity className="w-3.5 h-3.5" />
+                                   {importStatus.processingTime}s
+                                </span>
+                             )}
+                             <button onClick={() => navigate('/')} className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-semibold text-sm hover:bg-indigo-700 shadow-sm flex items-center gap-2 transition-all hover:scale-105 active:scale-95">
+                               Go to Dashboard
+                             </button>
                            </div>
-                           <div className="bg-white p-3 rounded-lg border border-cyan-100 shadow-sm text-center">
-                              <span className="text-xl font-bold text-cyan-600">{importStatus.createdLocations}</span>
-                              <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-1">Locations</p>
+                        </div>
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 mb-6">
+                           <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center col-span-2 lg:col-span-1">
+                              <span className="text-2xl font-black text-slate-700">{importStatus.totalRows}</span>
+                              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Parsed</p>
                            </div>
-                           <div className="bg-white p-3 rounded-lg border border-purple-100 shadow-sm text-center">
-                              <span className="text-xl font-bold text-purple-600">{importStatus.createdDepartments}</span>
-                              <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-1">Depts</p>
+                           <div className="bg-cyan-50 p-4 rounded-xl border border-cyan-100 text-center">
+                              <span className="text-2xl font-black text-cyan-700">{importStatus.createdLocations}</span>
+                              <p className="text-[10px] font-bold text-cyan-600 uppercase tracking-widest mt-1">Locations</p>
                            </div>
-                           <div className="bg-white p-3 rounded-lg border border-indigo-100 shadow-sm text-center">
-                              <span className="text-xl font-bold text-indigo-600">{importStatus.createdEmployees}</span>
-                              <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-1">Staff New</p>
+                           <div className="bg-purple-50 p-4 rounded-xl border border-purple-100 text-center">
+                              <span className="text-2xl font-black text-purple-700">{importStatus.createdDepartments}</span>
+                              <p className="text-[10px] font-bold text-purple-600 uppercase tracking-widest mt-1">Depts</p>
                            </div>
-                           <div className="bg-white p-3 rounded-lg border border-blue-100 shadow-sm text-center">
-                              <span className="text-xl font-bold text-blue-600">{importStatus.updatedEmployees || 0}</span>
-                              <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-1">Staff Upd</p>
+                           <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 text-center">
+                              <span className="text-2xl font-black text-indigo-700">{importStatus.createdEmployees}</span>
+                              <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest mt-1">Staff New</p>
                            </div>
-                           <div className="bg-white p-3 rounded-lg border border-emerald-100 shadow-sm text-center">
-                              <span className="text-xl font-bold text-emerald-600">{importStatus.createdAssets}</span>
-                              <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-1">Assets</p>
+                           <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 text-center">
+                              <span className="text-2xl font-black text-blue-700">{importStatus.updatedEmployees || 0}</span>
+                              <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mt-1">Staff Upd</p>
                            </div>
-                           <div className="bg-white p-3 rounded-lg border border-green-100 shadow-sm text-center">
-                              <span className="text-xl font-bold text-green-600">{importStatus.createdAssignments}</span>
-                              <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-1">Bound</p>
+                           <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 text-center">
+                              <span className="text-2xl font-black text-emerald-700">{importStatus.createdAssets}</span>
+                              <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mt-1">Assets</p>
                            </div>
-                           <div className="bg-white p-3 rounded-lg border border-orange-100 shadow-sm text-center">
-                              <span className="text-xl font-bold text-orange-600">{importStatus.skippedRows}</span>
-                              <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-1">Failed</p>
+                           <div className="bg-green-50 p-4 rounded-xl border border-green-100 text-center">
+                              <span className="text-2xl font-black text-green-700">{importStatus.createdAssignments}</span>
+                              <p className="text-[10px] font-bold text-green-600 uppercase tracking-widest mt-1">Bound</p>
+                           </div>
+                           <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 text-center">
+                              <span className="text-2xl font-black text-orange-700">{importStatus.skippedRows}</span>
+                              <p className="text-[10px] font-bold text-orange-600 uppercase tracking-widest mt-1">Failed</p>
                            </div>
                         </div>
 
                         {importStatus.errors && importStatus.errors.length > 0 && (
-                           <div className="bg-white border border-orange-100 rounded-xl overflow-hidden mt-4">
-                              <div className="bg-orange-50 px-3 py-2 border-b border-orange-100">
-                                 <span className="text-xs font-bold text-orange-800 uppercase tracking-wide">Error Boundary Details</span>
+                           <div className="bg-orange-50 border border-orange-200 rounded-xl overflow-hidden mt-4">
+                              <div className="bg-orange-100/50 px-4 py-3 border-b border-orange-200 flex items-center justify-between">
+                                 <span className="text-sm font-bold text-orange-800 flex items-center gap-2">
+                                   <AlertCircle className="w-4 h-4" /> Error Boundary Details ({importStatus.errors.length})
+                                 </span>
+                                 <button 
+                                    onClick={() => {
+                                        const csvContent = "data:text/csv;charset=utf-8,Error\\n" + importStatus.errors.join("\\n");
+                                        const encodedUri = encodeURI(csvContent);
+                                        const link = document.createElement("a");
+                                        link.setAttribute("href", encodedUri);
+                                        link.setAttribute("download", "bulk_upload_error_report.csv");
+                                        document.body.appendChild(link);
+                                        link.click();
+                                        document.body.removeChild(link);
+                                    }}
+                                    className="px-3 py-1.5 bg-white text-orange-700 border border-orange-200 rounded-lg hover:bg-orange-100 flex items-center gap-2 text-xs font-bold shadow-sm transition-colors"
+                                 >
+                                    <DownloadCloud className="w-3.5 h-3.5" /> Download Error Report
+                                 </button>
                               </div>
-                              <div className="p-3 max-h-48 overflow-y-auto space-y-1">
+                              <div className="p-4 max-h-48 overflow-y-auto space-y-2">
                                  {importStatus.errors.map((err, dx) => (
-                                    <p key={dx} className="text-xs text-orange-700 font-mono flex items-start gap-2">
-                                       <span className="text-orange-400 mt-0.5">•</span>
-                                       {err}
-                                    </p>
+                                    <div key={dx} className="bg-white px-3 py-2 rounded border border-orange-100 text-xs text-orange-700 font-mono shadow-sm flex items-start gap-2">
+                                       <span className="text-orange-400 mt-0.5 shrink-0">•</span>
+                                       <span>{err}</span>
+                                    </div>
                                  ))}
                               </div>
                            </div>

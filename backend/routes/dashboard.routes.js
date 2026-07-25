@@ -111,7 +111,12 @@ router.get('/advanced', authenticate, async (req, res) => {
       assetsAssignedToday,
       assetsReturnedToday,
       unusedAssets,
-      hardwareRefresh
+      hardwareRefresh,
+      totalEmployees,
+      departmentAssets,
+      locationAssets,
+      sharedAssets,
+      inStoreAssets
     ] = await Promise.all([
       prisma.asset.count(),
       prisma.asset.count({ where: { status: 'ASSIGNED' } }),
@@ -133,7 +138,12 @@ router.get('/advanced', authenticate, async (req, res) => {
         },
         take: 5
       }),
-      prisma.asset.count({ where: { purchaseDate: { lte: new Date(now.getTime() - 4 * 365 * 24 * 60 * 60 * 1000) } } })
+      prisma.asset.count({ where: { purchaseDate: { lte: new Date(now.getTime() - 4 * 365 * 24 * 60 * 60 * 1000) } } }),
+      prisma.employee.count(),
+      prisma.asset.count({ where: { assignmentType: 'DEPARTMENT' } }),
+      prisma.asset.count({ where: { assignmentType: 'LOCATION' } }),
+      prisma.asset.count({ where: { assignmentType: 'SHARED' } }),
+      prisma.asset.count({ where: { assignmentType: 'STORE' } })
     ]);
 
     // Calculate trends (comparing to total)
@@ -204,7 +214,12 @@ router.get('/advanced', authenticate, async (req, res) => {
         assigned: { value: assignedAssets, trend: assetsAssignedToday, type: 'up' },
         available: { value: availableAssets, trend: assetsReturnedToday, type: 'up' },
         repair: { value: underRepair, trend: maintenanceLogs.length, type: 'neutral' },
-        warranty: { value: expiringSoon, trend: expiring7.length, type: 'down' }
+        warranty: { value: expiringSoon, trend: expiring7.length, type: 'down' },
+        employees: { value: totalEmployees, trend: 0, type: 'neutral' },
+        departmentAssets: { value: departmentAssets, trend: 0, type: 'neutral' },
+        locationAssets: { value: locationAssets, trend: 0, type: 'neutral' },
+        sharedAssets: { value: sharedAssets, trend: 0, type: 'neutral' },
+        inStoreAssets: { value: inStoreAssets, trend: 0, type: 'neutral' }
       },
       alerts: {
         longRepair: maintenanceLogs.filter(m => (new Date() - new Date(m.createdAt)) > 5 * 24 * 60 * 60 * 1000),
