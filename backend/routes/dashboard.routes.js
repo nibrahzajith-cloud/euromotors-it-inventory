@@ -49,7 +49,7 @@ router.get('/summary', authenticate, async (req, res) => {
     ]);
 
     // Counts for cards
-    const assignedCount = await prisma.asset.count({ where: { status: 'ASSIGNED' } });
+    const assignedCount = await prisma.asset.count({ where: { assignmentType: 'EMPLOYEE' } });
     const availableCount = await prisma.asset.count({ where: { status: 'AVAILABLE' } });
     const repairCount = await prisma.asset.count({ where: { status: 'UNDER_REPAIR' } });
     const warrantyCount = await prisma.asset.count({ where: { warrantyExpiryDate: { lte: thirtyDaysFromNow, gt: now } } });
@@ -119,7 +119,7 @@ router.get('/advanced', authenticate, async (req, res) => {
       inStoreAssets
     ] = await Promise.all([
       prisma.asset.count(),
-      prisma.asset.count({ where: { status: 'ASSIGNED' } }),
+      prisma.asset.count({ where: { assignmentType: 'EMPLOYEE' } }),
       prisma.asset.count({ where: { status: 'AVAILABLE' } }),
       prisma.asset.count({ where: { status: 'UNDER_REPAIR' } }),
       prisma.asset.count({ where: { warrantyExpiryDate: { lte: thirtyDaysFromNow, gt: new Date() } } }),

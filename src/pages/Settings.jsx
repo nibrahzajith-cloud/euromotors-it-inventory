@@ -314,7 +314,15 @@ export default function Settings() {
 
          const endTime = performance.now();
          aggregatedResults.processingTime = ((endTime - startTime) / 1000).toFixed(2);
-         setImportStatus(aggregatedResults);
+         
+         // If there are fatal errors or we want to show validation, we could set status
+         // But per requirements, on success navigate immediately to dashboard
+         if (aggregatedResults.errors.length > 0) {
+            setImportStatus(aggregatedResults);
+         } else {
+            showToast('Bulk import completed successfully!', 'success');
+            navigate('/dashboard');
+         }
       } catch (err) {
          setImportStatus({ fatal: err.message });
       } finally {
