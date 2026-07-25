@@ -122,14 +122,15 @@ export default function Settings() {
          csvRows.push([rowNum, colName, curValue, fix].join(","));
      });
      
-     const csvContent = "data:text/csv;charset=utf-8," + csvRows.join("\\n");
-     const encodedUri = encodeURI(csvContent);
+     const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+     const url = URL.createObjectURL(blob);
      const link = document.createElement("a");
-     link.setAttribute("href", encodedUri);
-     link.setAttribute("download", "validation_error_report.csv");
+     link.setAttribute("href", url);
+     link.setAttribute("download", "bulk_validation_report.csv");
      document.body.appendChild(link);
      link.click();
      document.body.removeChild(link);
+     URL.revokeObjectURL(url);
   };
 
   const handleFileUpload = async (e) => {
@@ -711,14 +712,15 @@ export default function Settings() {
                                            }
                                         });
                                         
-                                        const csvContent = "data:text/csv;charset=utf-8," + csvRows.join("\\n");
-                                        const encodedUri = encodeURI(csvContent);
+                                        const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+                                        const url = URL.createObjectURL(blob);
                                         const link = document.createElement("a");
-                                        link.setAttribute("href", encodedUri);
+                                        link.setAttribute("href", url);
                                         link.setAttribute("download", "failed_records_reimport.csv");
                                         document.body.appendChild(link);
                                         link.click();
                                         document.body.removeChild(link);
+                                        URL.revokeObjectURL(url);
                                     }}
                                     className="px-4 py-2 bg-white text-orange-700 border border-orange-200 rounded-lg hover:bg-orange-50 flex items-center gap-2 text-xs font-bold shadow-sm transition-colors"
                                  >
