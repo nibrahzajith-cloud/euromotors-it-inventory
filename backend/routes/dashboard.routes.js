@@ -49,10 +49,18 @@ router.get('/summary', authenticate, async (req, res) => {
     ]);
 
     // Counts for cards
-    const assignedCount = await prisma.asset.count({ where: { assignmentType: 'EMPLOYEE' } });
+    const assignedCount = await prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'EMPLOYEE' } });
     const availableCount = await prisma.asset.count({ where: { status: 'AVAILABLE' } });
     const repairCount = await prisma.asset.count({ where: { status: 'UNDER_REPAIR' } });
     const warrantyCount = await prisma.asset.count({ where: { warrantyExpiryDate: { lte: thirtyDaysFromNow, gt: now } } });
+    
+    // Add missing counts for regular summary
+    const [departmentAssets, locationAssets, sharedAssets, inStoreAssets] = await Promise.all([
+       prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'DEPARTMENT' } }),
+       prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'LOCATION' } }),
+       prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'SHARED' } }),
+       prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'STORE' } })
+    ]);
 
     res.json({
       counts: {   // The system develop come 
@@ -63,7 +71,11 @@ router.get('/summary', authenticate, async (req, res) => {
         warranty: warrantyCount,
         employees: totalEmployees,
         departments: totalDepartments,
-        locations: totalLocations
+        locations: totalLocations,
+        departmentAssets,
+        locationAssets,
+        sharedAssets,
+        inStoreAssets
       },
       previews: {
         totalAssets: recentAssets,
@@ -119,7 +131,7 @@ router.get('/advanced', authenticate, async (req, res) => {
       inStoreAssets
     ] = await Promise.all([
       prisma.asset.count(),
-      prisma.asset.count({ where: { assignmentType: 'EMPLOYEE' } }),
+      prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'EMPLOYEE' } }),
       prisma.asset.count({ where: { status: 'AVAILABLE' } }),
       prisma.asset.count({ where: { status: 'UNDER_REPAIR' } }),
       prisma.asset.count({ where: { warrantyExpiryDate: { lte: thirtyDaysFromNow, gt: new Date() } } }),
@@ -140,10 +152,10 @@ router.get('/advanced', authenticate, async (req, res) => {
       }),
       prisma.asset.count({ where: { purchaseDate: { lte: new Date(now.getTime() - 4 * 365 * 24 * 60 * 60 * 1000) } } }),
       prisma.employee.count(),
-      prisma.asset.count({ where: { assignmentType: 'DEPARTMENT' } }),
-      prisma.asset.count({ where: { assignmentType: 'LOCATION' } }),
-      prisma.asset.count({ where: { assignmentType: 'SHARED' } }),
-      prisma.asset.count({ where: { assignmentType: 'STORE' } })
+      prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'DEPARTMENT' } }),
+      prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'LOCATION' } }),
+      prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'SHARED' } }),
+      prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'STORE' } })
     ]);
 
     // Calculate trends (comparing to total)

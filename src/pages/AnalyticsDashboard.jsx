@@ -221,14 +221,14 @@ export default function AnalyticsDashboard() {
 
         {/* KPI Section */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          <KPICard title="Total Assets" value={data.summary.totalAssets?.value || 0} trend={`+${data.summary.totalAssets?.trend || 0} wk`} type="up" icon={MonitorSmartphone} colorClass="bg-blue-100 text-blue-600 dark:bg-blue-600" glowColor="rgba(59, 130, 246, 0.4)" onClick={() => navigate('/assets')} />
-          <KPICard title="Assets in Store" value={data.summary.inStoreAssets?.value || data.summary.available?.value || 0} trend={`+${data.summary.inStoreAssets?.trend || data.summary.available?.trend || 0} rtr`} type="up" icon={Server} colorClass="bg-emerald-100 text-emerald-600 dark:bg-emerald-600" glowColor="rgba(16, 185, 129, 0.4)" onClick={() => navigate('/assets?status=AVAILABLE')} />
-          <KPICard title="Assigned to Employees" value={data.summary.assigned?.value || 0} trend={`+${data.summary.assigned?.trend || 0} day`} type="up" icon={UserCheck} colorClass="bg-indigo-100 text-indigo-600 dark:bg-indigo-600" glowColor="rgba(79, 70, 229, 0.4)" onClick={() => navigate('/assets?status=ASSIGNED')} />
-          <KPICard title="Assigned to Departments" value={data.summary.departmentAssets?.value || data.summary.department?.value || 0} trend={`+${data.summary.departmentAssets?.trend || data.summary.department?.trend || 0} mnt`} type="up" icon={Building2} colorClass="bg-purple-100 text-purple-600 dark:bg-purple-600" glowColor="rgba(147, 51, 234, 0.4)" onClick={() => navigate('/assets?status=ASSIGNED')} />
-          <KPICard title="Assigned to Locations" value={data.summary.locationAssets?.value || data.summary.location?.value || 0} trend={`+${data.summary.locationAssets?.trend || data.summary.location?.trend || 0} mnt`} type="neutral" icon={MapPin} colorClass="bg-cyan-100 text-cyan-600 dark:bg-cyan-600" glowColor="rgba(6, 182, 212, 0.4)" onClick={() => navigate('/assets?status=ASSIGNED')} />
-          <KPICard title="Shared Assets" value={data.summary.sharedAssets?.value || data.summary.shared?.value || 0} trend={`+${data.summary.sharedAssets?.trend || data.summary.shared?.trend || 0} mnt`} type="neutral" icon={Activity} colorClass="bg-pink-100 text-pink-600 dark:bg-pink-600" glowColor="rgba(236, 72, 153, 0.4)" onClick={() => navigate('/assets?status=ASSIGNED')} />
-          <KPICard title="Assets Under Repair" value={data.summary.repair?.value || 0} trend={`${data.summary.repair?.trend || 0} mnt`} type="neutral" icon={Wrench} colorClass="bg-amber-100 text-amber-600 dark:bg-amber-600" glowColor="rgba(245, 158, 11, 0.4)" onClick={() => navigate('/maintenance')} />
-          <KPICard title="Warranty Alerts" value={data.summary.warranty?.value || 0} trend={`${data.summary.warranty?.trend || 0} rsk`} type="down" icon={ShieldCheck} colorClass="bg-rose-100 text-rose-600 dark:bg-rose-600" glowColor="rgba(225, 29, 72, 0.4)" onClick={() => navigate('/reports')} />
+          <KPICard title="Total Assets" value={data?.summary?.totalAssets?.value || 0} trend={`+${data?.summary?.totalAssets?.trend || 0} wk`} type="up" icon={MonitorSmartphone} colorClass="bg-blue-100 text-blue-600 dark:bg-blue-600" glowColor="rgba(59, 130, 246, 0.4)" onClick={() => navigate('/assets')} />
+          <KPICard title="Assets in Store" value={data?.summary?.inStoreAssets?.value || data?.summary?.available?.value || 0} trend={`+${data?.summary?.inStoreAssets?.trend || data?.summary?.available?.trend || 0} rtr`} type="up" icon={Server} colorClass="bg-emerald-100 text-emerald-600 dark:bg-emerald-600" glowColor="rgba(16, 185, 129, 0.4)" onClick={() => navigate('/assets?status=AVAILABLE')} />
+          <KPICard title="Assigned to Employees" value={data?.summary?.assigned?.value || 0} trend={`+${data?.summary?.assigned?.trend || 0} day`} type="up" icon={UserCheck} colorClass="bg-indigo-100 text-indigo-600 dark:bg-indigo-600" glowColor="rgba(79, 70, 229, 0.4)" onClick={() => navigate('/assets?status=ASSIGNED')} />
+          <KPICard title="Assigned to Departments" value={data?.summary?.departmentAssets?.value || data?.summary?.department?.value || 0} trend={`+${data?.summary?.departmentAssets?.trend || data?.summary?.department?.trend || 0} mnt`} type="up" icon={Building2} colorClass="bg-purple-100 text-purple-600 dark:bg-purple-600" glowColor="rgba(147, 51, 234, 0.4)" onClick={() => navigate('/assets?status=ASSIGNED')} />
+          <KPICard title="Assigned to Locations" value={data?.summary?.locationAssets?.value || data?.summary?.location?.value || 0} trend={`+${data?.summary?.locationAssets?.trend || data?.summary?.location?.trend || 0} mnt`} type="neutral" icon={MapPin} colorClass="bg-cyan-100 text-cyan-600 dark:bg-cyan-600" glowColor="rgba(6, 182, 212, 0.4)" onClick={() => navigate('/assets?status=ASSIGNED')} />
+          <KPICard title="Shared Assets" value={data?.summary?.sharedAssets?.value || data?.summary?.shared?.value || 0} trend={`+${data?.summary?.sharedAssets?.trend || data?.summary?.shared?.trend || 0} mnt`} type="neutral" icon={Activity} colorClass="bg-pink-100 text-pink-600 dark:bg-pink-600" glowColor="rgba(236, 72, 153, 0.4)" onClick={() => navigate('/assets?status=ASSIGNED')} />
+          <KPICard title="Assets Under Repair" value={data?.summary?.repair?.value || 0} trend={`${data?.summary?.repair?.trend || 0} mnt`} type="neutral" icon={Wrench} colorClass="bg-amber-100 text-amber-600 dark:bg-amber-600" glowColor="rgba(245, 158, 11, 0.4)" onClick={() => navigate('/maintenance')} />
+          <KPICard title="Warranty Alerts" value={data?.summary?.warranty?.value || 0} trend={`${data?.summary?.warranty?.trend || 0} rsk`} type="down" icon={ShieldCheck} colorClass="bg-rose-100 text-rose-600 dark:bg-rose-600" glowColor="rgba(225, 29, 72, 0.4)" onClick={() => navigate('/reports')} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -282,7 +282,7 @@ export default function AnalyticsDashboard() {
                      <span className="text-xs font-semibold text-slate-500 uppercase">Utilization</span>
                   </div>
                   <div className="space-y-6">
-                     {data.analytics.departments.map((dept) => (
+                     {(data?.analytics?.departments || []).map((dept) => (
                         <div key={dept.id}>
                            <div className="flex justify-between items-center mb-2">
                               <div className="flex items-center gap-3">
@@ -318,7 +318,7 @@ export default function AnalyticsDashboard() {
                      <span className="text-xs font-semibold text-slate-500 uppercase">Active Rate</span>
                   </div>
                   <div className="space-y-6">
-                     {data.analytics.locations.map((loc) => (
+                     {(data?.analytics?.locations || []).map((loc) => (
                         <div key={loc.id}>
                            <div className="flex justify-between items-center mb-2">
                               <div className="flex items-center gap-3">
@@ -393,7 +393,7 @@ export default function AnalyticsDashboard() {
                       <div>
                         <p className="text-xs font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400">Density</p>
                         <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
-                          Top 5 departments represent <span className="font-bold text-slate-800 dark:text-white">{Math.round(data.analytics.departments.reduce((a,b) => a+b.percentage, 0))}%</span> of total operational footprint.
+                          Top 5 departments represent <span className="font-bold text-slate-800 dark:text-white">{Math.round((data?.analytics?.departments || []).reduce((a,b) => a+b.percentage, 0))}%</span> of total operational footprint.
                         </p>
                       </div>
                    </div>
@@ -402,7 +402,7 @@ export default function AnalyticsDashboard() {
                       <div>
                         <p className="text-xs font-bold uppercase tracking-widest text-purple-600 dark:text-purple-400">Optimization</p>
                         <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
-                          Department <span className="font-bold text-slate-800 dark:text-white">{data.analytics.departments[0]?.name}</span> utilization is at <span className="text-emerald-600 dark:text-emerald-400 font-bold">{Math.round(data.analytics.departments[0]?.utilization)}%</span>.
+                          Department <span className="font-bold text-slate-800 dark:text-white">{data?.analytics?.departments?.[0]?.name || 'N/A'}</span> utilization is at <span className="text-emerald-600 dark:text-emerald-400 font-bold">{Math.round(data?.analytics?.departments?.[0]?.utilization || 0)}%</span>.
                         </p>
                       </div>
                    </div>
@@ -411,7 +411,7 @@ export default function AnalyticsDashboard() {
                       <div>
                         <p className="text-xs font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400">Maintenance</p>
                         <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
-                          Location <span className="font-bold text-slate-800 dark:text-white">{data.analytics.locations.sort((a,b) => b.repairCount - a.repairCount)[0]?.name}</span> requires attention with <span className="text-amber-600 dark:text-amber-400 font-bold">{data.analytics.locations.sort((a,b) => b.repairCount - a.repairCount)[0]?.repairCount}</span> active repairs.
+                          Location <span className="font-bold text-slate-800 dark:text-white">{(data?.analytics?.locations || []).sort((a,b) => b.repairCount - a.repairCount)[0]?.name || 'N/A'}</span> requires attention with <span className="text-amber-600 dark:text-amber-400 font-bold">{(data?.analytics?.locations || []).sort((a,b) => b.repairCount - a.repairCount)[0]?.repairCount || 0}</span> active repairs.
                         </p>
                       </div>
                    </div>
@@ -429,13 +429,13 @@ export default function AnalyticsDashboard() {
                 <AlertTriangle className="w-4 h-4 text-amber-500" /> Notifications & Alerts
               </h2>
               
-              {data.alerts.longRepair.length > 0 && (
+              {(data?.alerts?.longRepair || []).length > 0 && (
                 <GlassCard glowColor="rgba(245, 158, 11, 0.4)" className="!p-4 bg-amber-50 dark:bg-transparent border-amber-200 dark:border-amber-500/20">
                   <div className="flex gap-4">
                     <div className="p-2 bg-white dark:bg-amber-500/20 rounded-lg text-amber-600 dark:text-amber-500 border border-amber-100 dark:border-none"><Wrench className="w-5 h-5" /></div>
                     <div>
                       <p className="text-sm font-bold text-slate-800 dark:text-white">Pending Repairs</p>
-                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">{data.alerts.longRepair.length} assets exceeding 5-day queue.</p>
+                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">{(data?.alerts?.longRepair || []).length} assets exceeding 5-day queue.</p>
                       <button onClick={() => navigate('/maintenance')} className="mt-2 text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-500 flex items-center gap-1 hover:gap-2 transition-all">
                         View Repairs <ArrowRight className="w-3 h-3" />
                       </button>
@@ -443,13 +443,13 @@ export default function AnalyticsDashboard() {
                   </div>
                 </GlassCard>
               )}
-              {data.alerts.warranty30 > 0 && (
+              {(data?.alerts?.warranty30 || 0) > 0 && (
                 <GlassCard glowColor="rgba(225, 29, 72, 0.4)" className="!p-4 bg-rose-50 dark:bg-transparent border-rose-200 dark:border-rose-500/20">
                   <div className="flex gap-4">
                     <div className="p-2 bg-white dark:bg-rose-500/20 rounded-lg text-rose-600 dark:text-rose-500 border border-rose-100 dark:border-none"><ShieldCheck className="w-5 h-5" /></div>
                     <div>
                       <p className="text-sm font-bold text-slate-800 dark:text-white">Warranty Expirations</p>
-                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">{data.alerts.warranty30} assets expiring in 30 days.</p>
+                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">{data?.alerts?.warranty30 || 0} assets expiring in 30 days.</p>
                       <button onClick={() => navigate('/reports')} className="mt-2 text-xs font-bold uppercase tracking-wider text-rose-700 dark:text-rose-500 flex items-center gap-1 hover:gap-2 transition-all">
                         View Report <ArrowRight className="w-3 h-3" />
                       </button>
@@ -457,13 +457,13 @@ export default function AnalyticsDashboard() {
                   </div>
                 </GlassCard>
               )}
-              {data.alerts.hardwareRefresh > 0 && (
+              {(data?.alerts?.hardwareRefresh || 0) > 0 && (
                 <GlassCard glowColor="rgba(16, 185, 129, 0.4)" className="!p-4 bg-emerald-50 dark:bg-transparent border-emerald-200 dark:border-emerald-500/20">
                   <div className="flex gap-4">
                     <div className="p-2 bg-white dark:bg-emerald-500/20 rounded-lg text-emerald-600 dark:text-emerald-500 border border-emerald-100 dark:border-none"><Sparkles className="w-5 h-5" /></div>
                     <div>
                       <p className="text-sm font-bold text-slate-800 dark:text-white">Hardware Refresh</p>
-                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">{data.alerts.hardwareRefresh} assets are &gt;4 years old.</p>
+                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">{data?.alerts?.hardwareRefresh || 0} assets are &gt;4 years old.</p>
                       <button onClick={() => navigate('/reports')} className="mt-2 text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-500 flex items-center gap-1 hover:gap-2 transition-all">
                         View Pipeline <ArrowRight className="w-3 h-3" />
                       </button>
@@ -471,7 +471,7 @@ export default function AnalyticsDashboard() {
                   </div>
                 </GlassCard>
               )}
-              {(data.alerts.longRepair.length === 0 && data.alerts.warranty30 === 0 && data.alerts.hardwareRefresh === 0) && (
+              {((data?.alerts?.longRepair || []).length === 0 && (data?.alerts?.warranty30 || 0) === 0 && (data?.alerts?.hardwareRefresh || 0) === 0) && (
                 <GlassCard className="!p-4 border-slate-200 dark:border-white/10">
                    <p className="text-sm text-slate-500 text-center py-2">No active alerts at this time.</p>
                 </GlassCard>
