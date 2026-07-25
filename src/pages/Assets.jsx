@@ -252,6 +252,28 @@ export default function Assets() {
     exportToPDF(prepareExportData(), 'Assets_Inventory');
   };
 
+  const handleExportExcel = async () => {
+    setExportDropdownOpen(false);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/assets/export/excel`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Failed to export official Excel inventory');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'EuroMotors_IT_Inventory_Export.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex h-64 flex-col items-center justify-center space-y-4">
@@ -289,7 +311,10 @@ export default function Assets() {
               Export
             </button>
             {exportDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-100 dark:border-slate-700 z-20 py-2">
+              <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-100 dark:border-slate-700 z-20 py-2">
+                <button onClick={handleExportExcel} className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center gap-2 font-medium">
+                  <FileText className="w-4 h-4 text-emerald-600" /> Export Official Excel (.xlsx)
+                </button>
                 <button onClick={handleExportCSV} className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center gap-2">
                   <FileText className="w-4 h-4 text-green-600" /> Export as CSV
                 </button>

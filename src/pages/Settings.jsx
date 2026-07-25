@@ -337,59 +337,31 @@ export default function Settings() {
   };
 
   const handleDownloadExcelTemplate = async () => {
-     const headers = ["assignmentType", "locationName", "departmentName", "employeeCode", "employeeName", "email", "phone", "designation", "employeeStatus", "deviceType", "model", "serialNumber", "assetCode", "processor", "ram", "storage", "operatingSystem", "vendor", "purchaseDate", "warrantyExpiryDate", "status", "brand", "condition", "remarks"];
-     const sampleRows = [
-        ["EMPLOYEE", "Head Office", "IT", "EMP001", "John Silva", "john.silva@euromotors.lk", "0771234567", "IT Executive", "Active", "Laptop", "Dell Latitude 5450", "DL54501234", "LAP001", "Intel Core i5", "16GB", "512GB SSD", "Windows 11 Pro", "Dell", "2025-01-10", "2028-01-10", "Active", "Dell", "Excellent", "Assigned to employee"],
-        ["DEPARTMENT", "Head Office", "Finance", "", "", "", "", "", "", "Photocopier", "Canon IR 2630", "CN26304567", "PH001", "", "", "", "", "Canon", "2024-05-12", "2027-05-12", "Active", "Canon", "Good", "Finance department photocopier"],
-        ["LOCATION", "Kaduwela Showroom", "", "", "", "", "", "", "", "Router", "Cisco ISR 1100", "CS11001234", "RT001", "", "", "", "Cisco IOS", "Cisco", "2025-02-20", "2030-02-20", "Active", "Cisco", "Excellent", "Installed in showroom"],
-        ["SHARED", "Head Office", "Administration", "", "", "", "", "", "", "Projector", "Epson EB-X06", "EPX061234", "PJ001", "", "", "", "", "Epson", "2024-08-15", "2027-08-15", "Active", "Epson", "Good", "Shared meeting room projector"],
-        ["STORE", "Central Warehouse", "IT Store", "", "", "", "", "", "", "Laptop", "HP ProBook 450 G10", "HP4505678", "ST001", "Intel Core i7", "16GB", "512GB SSD", "Windows 11 Pro", "HP", "2025-04-18", "2028-04-18", "In Stock", "HP", "New", "Available in IT Store"]
-     ];
-
-     const workbook = new ExcelJS.Workbook();
-     const worksheet = workbook.addWorksheet('Asset Import Template');
-
-     worksheet.views = [ { state: 'frozen', ySplit: 1 } ];
-
-     const headerRow = worksheet.addRow(headers);
-     
-     headerRow.eachCell((cell, colNumber) => {
-       cell.fill = {
-         type: 'pattern',
-         pattern: 'solid',
-         fgColor: { argb: 'FF2563EB' } // Tailwind blue-600
-       };
-       cell.font = {
-         color: { argb: 'FFFFFFFF' },
-         bold: true
-       };
-     });
-
-     sampleRows.forEach(row => {
-        worksheet.addRow(row);
-     });
-
-     for (let i = 2; i <= 1000; i++) {
-        worksheet.getCell(`A${i}`).dataValidation = {
-           type: 'list',
-           allowBlank: false,
-           formulae: ['"EMPLOYEE,DEPARTMENT,LOCATION,SHARED,STORE"']
-        };
-     }
-
-     worksheet.columns.forEach(column => {
-        let maxLength = 0;
-        column["eachCell"]({ includeEmpty: true }, (cell) => {
-           let columnLength = cell.value ? cell.value.toString().length : 10;
-           if (columnLength > maxLength) {
-              maxLength = columnLength;
-           }
+     try {
+        const token = localStorage.getItem('token');
+        const res = await fetch(`${API_URL}/assets/template/download`, {
+           headers: { Authorization: `Bearer ${token}` }
         });
-        column.width = maxLength < 10 ? 10 : maxLength + 2;
-     });
+        if (!res.ok) throw new Error('Failed to download master template');
+        const blob = await res.blob();
+        saveAs(blob, 'Templates.xlsx');
+     } catch (err) {
+        showToast(err.message, 'error');
+     }
+  };
 
-     const buffer = await workbook.xlsx.writeBuffer();
-     saveAs(new Blob([buffer]), 'asset_bulk_import_template.xlsx');
+  const handleExportInventoryExcel = async () => {
+     try {
+        const token = localStorage.getItem('token');
+        const res = await fetch(`${API_URL}/assets/export/excel`, {
+           headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!res.ok) throw new Error('Failed to export inventory Excel');
+        const blob = await res.blob();
+        saveAs(blob, 'EuroMotors_IT_Inventory_Export.xlsx');
+     } catch (err) {
+        showToast(err.message, 'error');
+     }
   };
 
   const handleDownloadCsvTemplate = () => {
@@ -469,9 +441,13 @@ export default function Settings() {
                   Download Sample Template
                </h3>
                <div className="flex flex-wrap gap-4">
-                  <button onClick={handleDownloadExcelTemplate} className="cursor-pointer inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-green-50 border border-green-200 text-green-700 font-medium rounded-xl hover:bg-green-100 transition-colors shadow-sm">
-                     <FileText className="w-4 h-4 text-green-600" />
-                     Download Excel Template (.xlsx)
+                  <button onClick={handleDownloadExcelTemplate} className="cursor-pointer inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-50 border border-emerald-200 text-emerald-700 font-medium rounded-xl hover:bg-emerald-100 transition-colors shadow-sm">
+                     <FileText className="w-4 h-4 text-emerald-600" />
+                     Download Official Blank Template (.xlsx)
+                  </button>
+                  <button onClick={handleExportInventoryExcel} className="cursor-pointer inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-50 border border-indigo-200 text-indigo-700 font-medium rounded-xl hover:bg-indigo-100 transition-colors shadow-sm">
+                     <DownloadCloud className="w-4 h-4 text-indigo-600" />
+                     Export Current Inventory (.xlsx)
                   </button>
                   <button onClick={handleDownloadCsvTemplate} className="cursor-pointer inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-50 border border-blue-200 text-blue-700 font-medium rounded-xl hover:bg-blue-100 transition-colors shadow-sm">
                      <FileText className="w-4 h-4 text-blue-600" />
@@ -651,40 +627,44 @@ export default function Settings() {
                            </div>
                         </div>
 
-                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 mb-6">
-                           <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center col-span-2 lg:col-span-1">
-                              <span className="text-2xl font-black text-slate-700">{importStatus.totalRows}</span>
-                              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Parsed</p>
-                           </div>
-                           <div className="bg-cyan-50 p-4 rounded-xl border border-cyan-100 text-center">
-                              <span className="text-2xl font-black text-cyan-700">{importStatus.createdLocations}</span>
-                              <p className="text-[10px] font-bold text-cyan-600 uppercase tracking-widest mt-1">Locations</p>
-                           </div>
-                           <div className="bg-purple-50 p-4 rounded-xl border border-purple-100 text-center">
-                              <span className="text-2xl font-black text-purple-700">{importStatus.createdDepartments}</span>
-                              <p className="text-[10px] font-bold text-purple-600 uppercase tracking-widest mt-1">Depts</p>
-                           </div>
-                           <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 text-center">
-                              <span className="text-2xl font-black text-indigo-700">{importStatus.createdEmployees}</span>
-                              <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest mt-1">Staff New</p>
-                           </div>
-                           <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 text-center">
-                              <span className="text-2xl font-black text-blue-700">{importStatus.updatedEmployees || 0}</span>
-                              <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mt-1">Staff Upd</p>
-                           </div>
-                           <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 text-center">
-                              <span className="text-2xl font-black text-emerald-700">{importStatus.createdAssets}</span>
-                              <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mt-1">Assets</p>
-                           </div>
-                           <div className="bg-green-50 p-4 rounded-xl border border-green-100 text-center">
-                              <span className="text-2xl font-black text-green-700">{importStatus.createdAssignments}</span>
-                              <p className="text-[10px] font-bold text-green-600 uppercase tracking-widest mt-1">Bound</p>
-                           </div>
-                           <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 text-center">
-                              <span className="text-2xl font-black text-orange-700">{importStatus.skippedRows}</span>
-                              <p className="text-[10px] font-bold text-orange-600 uppercase tracking-widest mt-1">Failed</p>
-                           </div>
-                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-9 gap-3 mb-6">
+                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center">
+                               <span className="text-2xl font-black text-slate-700">{importStatus.totalRows}</span>
+                               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Parsed</p>
+                            </div>
+                            <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 text-center">
+                               <span className="text-2xl font-black text-emerald-700">{importStatus.imported ?? importStatus.createdAssets ?? 0}</span>
+                               <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mt-1">Imported</p>
+                            </div>
+                            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 text-center">
+                               <span className="text-2xl font-black text-blue-700">{importStatus.updated ?? importStatus.updatedAssets ?? 0}</span>
+                               <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mt-1">Updated</p>
+                            </div>
+                            <div className="bg-cyan-50 p-4 rounded-xl border border-cyan-100 text-center">
+                               <span className="text-2xl font-black text-cyan-700">{importStatus.createdLocations}</span>
+                               <p className="text-[10px] font-bold text-cyan-600 uppercase tracking-widest mt-1">Locations</p>
+                            </div>
+                            <div className="bg-purple-50 p-4 rounded-xl border border-purple-100 text-center">
+                               <span className="text-2xl font-black text-purple-700">{importStatus.createdDepartments}</span>
+                               <p className="text-[10px] font-bold text-purple-600 uppercase tracking-widest mt-1">Depts</p>
+                            </div>
+                            <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 text-center">
+                               <span className="text-2xl font-black text-indigo-700">{importStatus.createdEmployees}</span>
+                               <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest mt-1">Staff New</p>
+                            </div>
+                            <div className="bg-green-50 p-4 rounded-xl border border-green-100 text-center">
+                               <span className="text-2xl font-black text-green-700">{importStatus.createdAssignments}</span>
+                               <p className="text-[10px] font-bold text-green-600 uppercase tracking-widest mt-1">Bound</p>
+                            </div>
+                            <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 text-center">
+                               <span className="text-2xl font-black text-gray-700">{importStatus.skipped ?? 0}</span>
+                               <p className="text-[10px] font-bold text-gray-600 uppercase tracking-widest mt-1">Skipped</p>
+                            </div>
+                            <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 text-center">
+                               <span className="text-2xl font-black text-orange-700">{importStatus.failed ?? (importStatus.errors ? importStatus.errors.length : 0)}</span>
+                               <p className="text-[10px] font-bold text-orange-600 uppercase tracking-widest mt-1">Failed</p>
+                            </div>
+                         </div>
 
                         {importStatus.errors && importStatus.errors.length > 0 && (
                            <div className="bg-orange-50 border border-orange-200 rounded-xl overflow-hidden mt-6 shadow-sm">

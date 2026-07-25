@@ -1,5 +1,8 @@
 const express = require('express');
 const router = express.Router();
+const fs = require('fs');
+const path = require('path');
+const ExcelJS = require('exceljs');
 const prisma = require('../prismaClient');
 const { authenticate, authorize } = require('../middleware/auth.middleware');
 const { logAudit, logAssetTimeline } = require('../utils/logger');
@@ -99,6 +102,150 @@ router.post('/', authorize(['ADMIN', 'IT_OFFICER']), async (req, res) => {
   }
 });
 
+router.get('/template/download', (req, res) => {
+  try {
+    const templatePath = path.join(__dirname, '../../templates/Templates.xlsx');
+    const fallbackPath = path.join(__dirname, '../../template/Template.xlsx');
+    const finalPath = fs.existsSync(templatePath) ? templatePath : fallbackPath;
+    if (!fs.existsSync(finalPath)) {
+      return res.status(404).json({ error: 'Master template file not found.' });
+    }
+    res.download(finalPath, 'Templates.xlsx');
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/export/excel', async (req, res) => {
+  try {
+    const templatePath = path.join(__dirname, '../../templates/Templates.xlsx');
+    const fallbackPath = path.join(__dirname, '../../template/Template.xlsx');
+    const finalPath = fs.existsSync(templatePath) ? templatePath : fallbackPath;
+    if (!fs.existsSync(finalPath)) {
+      return res.status(404).json({ error: 'Master template file not found.' });
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(finalPath);
+
+    const ws1 = workbook.getWorksheet('IT Inventory') || workbook.worksheets[0];
+    
+    // Clear data rows starting at row 2 while keeping headers and formatting
+    const totalRows = ws1.rowCount;
+    for (let r = totalRows; r >= 2; r--) {
+      ws1.spliceRows(r, 1);
+    }
+
+    const assets = await prisma.asset.findMany({
+      include: {
+        location: true,
+        department: true,
+        assignedEmployee: true
+      },
+      orderBy: { createdAt: 'asc' }
+    });
+
+    const formatAssignmentType = (type) => {
+      switch ((type || '').toUpperCase()) {
+        case 'EMPLOYEE': return 'Employee';
+        case 'LOCATION': return 'Location';
+        case 'DEPARTMENT': return 'Department';
+        case 'SHARED': return 'Shared';
+        case 'STORE':
+        case 'IN STORE': return 'In Store';
+        default: return type || 'In Store';
+      }
+    };
+
+    const formatDate = (dt) => {
+      if (!dt) return '';
+      try {
+        const d = new Date(dt);
+        if (isNaN(d.getTime())) return '';
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        const yyyy = d.getFullYear();
+        return `${mm}/${dd}/${yyyy}`;
+      } catch (e) {
+        return '';
+      }
+    };
+
+    const sections = ['EMPLOYEE', 'LOCATION', 'DEPARTMENT', 'SHARED', 'STORE'];
+    const grouped = { EMPLOYEE: [], LOCATION: [], DEPARTMENT: [], SHARED: [], STORE: [] };
+
+    assets.forEach(a => {
+      const type = (a.assignmentType || 'STORE').toUpperCase();
+      if (grouped[type]) {
+        grouped[type].push(a);
+      } else {
+        grouped.STORE.push(a);
+      }
+    });
+
+    let isFirstSection = true;
+
+    sections.forEach(secKey => {
+      const list = grouped[secKey];
+      if (!list || list.length === 0) return;
+
+      if (!isFirstSection) {
+        ws1.addRow([]);
+      }
+      isFirstSection = false;
+
+      list.forEach(a => {
+        const emp = a.assignedEmployee;
+        const rowValues = [
+          formatAssignmentType(a.assignmentType),
+          a.location?.name || '',
+          a.department?.name || '',
+          emp?.employeeCode || '',
+          emp?.fullName || '',
+          emp?.email || '',
+          emp?.phone || '',
+          emp?.designation || '',
+          emp?.status || '',
+          a.deviceType || '',
+          a.model || '',
+          a.serialNumber || '',
+          a.assetCode || '',
+          a.processor || '',
+          a.ram || '',
+          a.storage || '',
+          a.operatingSystem || '',
+          a.vendor || '',
+          formatDate(a.purchaseDate),
+          formatDate(a.warrantyExpiryDate),
+          a.status === 'AVAILABLE' ? 'In Store' : (a.status === 'ASSIGNED' ? 'Assigned' : a.status),
+          a.brand || '',
+          a.condition || '',
+          a.remarks || ''
+        ];
+
+        const newRow = ws1.addRow(rowValues);
+        newRow.eachCell((cell) => {
+          cell.font = { name: 'Arial', size: 9 };
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+            left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+            bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+            right: { style: 'thin', color: { argb: 'FFCCCCCC' } }
+          };
+        });
+      });
+    });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="EuroMotors_IT_Inventory_Export.xlsx"');
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    res.send(Buffer.from(buffer));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
   try {
     const assets = req.body.assets;
@@ -107,49 +254,53 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
 
     let results = {
        totalRows: assets.length,
+       imported: 0,
+       updated: 0,
+       skipped: 0,
+       failed: 0,
        createdLocations: 0,
        createdDepartments: 0,
        createdEmployees: 0,
        updatedEmployees: 0,
        createdAssets: 0,
+       updatedAssets: 0,
        createdAssignments: 0,
        skippedRows: 0,
        errors: []
     };
 
-    // Pre-fetch data for caching to drastically speed up bulk insert
     const locations = await prisma.location.findMany();
     const departments = await prisma.department.findMany();
     const employees = await prisma.employee.findMany();
 
-    const locationMap = new Map(locations.map(l => [l.name, l]));
-    const departmentMap = new Map(departments.map(d => [d.name, d]));
-    const employeeMap = new Map(employees.map(e => [e.employeeCode, e]));
+    const locationMap = new Map(locations.map(l => [l.name.toLowerCase().trim(), l]));
+    const departmentMap = new Map(departments.map(d => [d.name.toLowerCase().trim(), d]));
+    const employeeMap = new Map(employees.map(e => [e.employeeCode ? e.employeeCode.toUpperCase().trim() : '', e]));
     
-    const existingAssetCodesArray = (await prisma.asset.findMany({ select: { assetCode: true } })).map(a => a.assetCode);
-    const existingAssetCodes = new Set(existingAssetCodesArray);
-    
+    const existingAssetRecords = await prisma.asset.findMany({ select: { id: true, assetCode: true, serialNumber: true } });
+    const assetCodeToAsset = new Map(existingAssetRecords.map(a => [a.assetCode.toUpperCase().trim(), a]));
+    const serialToAsset = new Map(existingAssetRecords.filter(a => a.serialNumber).map(a => [a.serialNumber.toUpperCase().trim(), a]));
+
     const settings = await prisma.systemSettings.findUnique({ where: { id: 'global' } });
     const assetPrefix = settings?.assetCodePrefix || 'AST';
 
     let highestAssetSequence = 0;
-    const assetRegex = new RegExp(`^${assetPrefix}-(\\d+)-001$`);
-    existingAssetCodesArray.forEach(code => {
-        const match = code.match(assetRegex);
+    const assetRegex = new RegExp(`^${assetPrefix}-(\\d+)-001$`, 'i');
+    existingAssetRecords.forEach(a => {
+        const match = a.assetCode.match(assetRegex);
         if (match) {
             const num = parseInt(match[1], 10);
             if (num > highestAssetSequence) highestAssetSequence = num;
         }
     });
 
-    const existingSerialNumbers = new Set((await prisma.asset.findMany({ where: { serialNumber: { not: null } }, select: { serialNumber: true } })).map(a => a.serialNumber));
-
-    const existingEmployeeCodesArray = (await prisma.employee.findMany({ select: { employeeCode: true } })).map(e => e.employeeCode);
-    const existingEmployeeCodes = new Set(existingEmployeeCodesArray);
+    const existingEmployeeCodesArray = employees.map(e => e.employeeCode);
+    const existingEmployeeCodes = new Set(existingEmployeeCodesArray.filter(Boolean));
     
     let highestEmployeeSequence = 0;
-    const empRegex = new RegExp(`^EMP-(\\d+)-001$`);
+    const empRegex = new RegExp(`^EMP-(\\d+)-001$`, 'i');
     existingEmployeeCodesArray.forEach(code => {
+        if (!code) return;
         const match = code.match(empRegex);
         if (match) {
             const num = parseInt(match[1], 10);
@@ -157,9 +308,21 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
         }
     });
 
+    const seenAssetCodesInBatch = new Set();
+    const seenSerialsInBatch = new Set();
+
     for (let i = 0; i < assets.length; i++) {
        const a = assets[i];
        const rowNum = rowOffset + i;
+
+       // Ignore empty/blank separator rows
+       const values = Object.values(a || {});
+       const isBlankRow = values.length === 0 || values.every(v => v === null || v === undefined || v.toString().trim() === '');
+       if (isBlankRow) {
+           results.skipped++;
+           results.skippedRows++;
+           continue;
+       }
        
        try {
           if (!a.deviceType) {
@@ -181,7 +344,7 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
              e.value = a.departmentName || '';
              throw e;
           }
-          if ((aType === 'LOCATION' || aType === 'STORE') && !a.locationName) {
+          if ((aType === 'LOCATION' || aType === 'STORE' || aType === 'IN STORE') && !a.locationName) {
              const e = new Error(`Location Name is mandatory for ${aType} assignment type.`);
              e.column = 'locationName';
              e.value = a.locationName || '';
@@ -194,38 +357,42 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
              throw e;
           }
 
-          // 1 & 2. Location and Department Resolution
+          // Location Resolution
           let locationId = null;
-          if (a.locationName) {
-             let loc = locationMap.get(a.locationName);
+          if (a.locationName && a.locationName.trim() !== '') {
+             const locKey = a.locationName.toLowerCase().trim();
+             let loc = locationMap.get(locKey);
              if (!loc) {
-                 loc = await prisma.location.create({ data: { name: a.locationName, status: 'ACTIVE' } });
-                 locationMap.set(a.locationName, loc);
+                 loc = await prisma.location.create({ data: { name: a.locationName.trim(), status: 'ACTIVE' } });
+                 locationMap.set(locKey, loc);
                  results.createdLocations++;
              }
              locationId = loc.id;
           }
 
+          // Department Resolution
           let departmentId = null;
-          if (a.departmentName) {
-             let dept = departmentMap.get(a.departmentName);
+          if (a.departmentName && a.departmentName.trim() !== '') {
+             const deptKey = a.departmentName.toLowerCase().trim();
+             let dept = departmentMap.get(deptKey);
              if (!dept) {
-                 dept = await prisma.department.create({ data: { name: a.departmentName, status: 'ACTIVE' } });
-                 departmentMap.set(a.departmentName, dept);
+                 dept = await prisma.department.create({ data: { name: a.departmentName.trim(), status: 'ACTIVE' } });
+                 departmentMap.set(deptKey, dept);
                  results.createdDepartments++;
              }
              departmentId = dept.id;
           }
 
-          // 3 & 4. Employee Resolution
+          // Employee Resolution
           let employeeId = null;
           if (aType === 'EMPLOYEE' && a.employeeCode) {
-             let emp = employeeMap.get(a.employeeCode);
+             const empKey = a.employeeCode.toUpperCase().trim();
+             let emp = employeeMap.get(empKey);
              
              if (!emp) {
                  emp = await prisma.employee.create({
                      data: {
-                         employeeCode: a.employeeCode,
+                         employeeCode: a.employeeCode.trim(),
                          fullName: a.employeeName || 'Unknown',
                          email: a.email || null,
                          phone: a.phone || null,
@@ -235,7 +402,7 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
                          status: a.employeeStatus ? a.employeeStatus.toUpperCase() : 'ACTIVE'
                      }
                  });
-                 employeeMap.set(a.employeeCode, emp);
+                 employeeMap.set(empKey, emp);
                  results.createdEmployees++;
              } else {
                  const updateData = { departmentId, locationId };
@@ -249,45 +416,72 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
                      where: { id: emp.id },
                      data: updateData
                  });
-                 employeeMap.set(a.employeeCode, emp);
+                 employeeMap.set(empKey, emp);
                  results.updatedEmployees++;
              }
              employeeId = emp.id;
           }
 
-          // 6. Auto-generate assetCode
-          let finalAssetCode = a.assetCode;
-          if (!finalAssetCode || finalAssetCode.trim() === '') {
-              highestAssetSequence++;
-              finalAssetCode = `${assetPrefix}-${highestAssetSequence.toString().padStart(5, '0')}-001`;
-          } else {
-              finalAssetCode = finalAssetCode.trim();
+          // AssetCode Resolution and Check if updating vs inserting
+          let inputCode = a.assetCode ? a.assetCode.toString().trim() : '';
+          let existingAsset = null;
+          if (inputCode) {
+              existingAsset = assetCodeToAsset.get(inputCode.toUpperCase());
           }
 
-          // Duplicate checks
-          if (existingAssetCodes.has(finalAssetCode)) {
-              const e = new Error("This asset code already exists in the database.");
-              e.column = 'assetCode';
-              e.value = finalAssetCode;
-              throw e;
+          if (!inputCode && !existingAsset) {
+              highestAssetSequence++;
+              inputCode = `${assetPrefix}-${highestAssetSequence.toString().padStart(5, '0')}-001`;
           }
-          existingAssetCodes.add(finalAssetCode);
-          
-          // 7. Serial Number Resolution
+
+          // Validate duplicate assetCode within batch
+          if (inputCode) {
+              const codeKey = inputCode.toUpperCase();
+              if (seenAssetCodesInBatch.has(codeKey)) {
+                  const e = new Error("Duplicate Asset Code in uploaded file.");
+                  e.column = 'assetCode';
+                  e.value = inputCode;
+                  throw e;
+              }
+              seenAssetCodesInBatch.add(codeKey);
+          }
+
+          // Serial Number Resolution
           let finalSerial = null;
-          if (a.serialNumber && a.serialNumber.toString().trim() !== '' && a.serialNumber.toString().trim().toLowerCase() !== 'no serial') {
+          if (a.serialNumber && a.serialNumber.toString().trim() !== '' && a.serialNumber.toString().trim().toLowerCase() !== 'no serial' && a.serialNumber.toString().trim().toLowerCase() !== 'n/a') {
               finalSerial = a.serialNumber.toString().trim();
-              if (existingSerialNumbers.has(finalSerial)) {
+              const serialKey = finalSerial.toUpperCase();
+              
+              if (seenSerialsInBatch.has(serialKey)) {
+                  const e = new Error("Duplicate Serial Number in uploaded file.");
+                  e.column = 'serialNumber';
+                  e.value = finalSerial;
+                  throw e;
+              }
+              
+              // Check if serial exists in DB on ANOTHER asset
+              const dbSerialAsset = serialToAsset.get(serialKey);
+              if (dbSerialAsset && (!existingAsset || dbSerialAsset.id !== existingAsset.id)) {
                   const e = new Error("This Serial Number already exists in the database.");
                   e.column = 'serialNumber';
                   e.value = finalSerial;
                   throw e;
               }
-              existingSerialNumbers.add(finalSerial);
+              seenSerialsInBatch.add(serialKey);
           }
 
-          // 5. Status determination
-          const finalStatus = (aType === 'STORE' || (!employeeId && !departmentId && !locationId)) ? 'AVAILABLE' : 'ASSIGNED';
+          // Status determination
+          const rawStatus = (a.status || '').toUpperCase();
+          let finalStatus = 'AVAILABLE';
+          if (rawStatus === 'ASSIGNED' || employeeId || (aType === 'EMPLOYEE' && employeeId)) {
+              finalStatus = 'ASSIGNED';
+          } else if (rawStatus === 'UNDER_REPAIR' || rawStatus === 'UNDER REPAIR') {
+              finalStatus = 'UNDER_REPAIR';
+          } else if (rawStatus === 'RETIRED') {
+              finalStatus = 'RETIRED';
+          } else {
+              finalStatus = (aType === 'STORE' || aType === 'IN STORE' || (!employeeId && !departmentId && !locationId)) ? 'AVAILABLE' : 'ASSIGNED';
+          }
 
           const parseSafeDate = (dt) => {
              if (!dt) return null;
@@ -295,13 +489,13 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
              return isNaN(parsed.getTime()) ? null : parsed;
           };
 
-          const createData = {
-             assetCode: finalAssetCode,
+          const assetPayload = {
+             assetCode: inputCode,
              deviceType: a.deviceType,
-             model: a.model,
+             model: a.model || null,
              serialNumber: finalSerial,
              status: finalStatus,
-             condition: a.condition || 'New',
+             condition: a.condition || 'GOOD',
              brand: a.brand || null,
              processor: a.processor || null,
              ram: a.ram || null,
@@ -317,79 +511,64 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
              departmentId,
              locationId,
              assignedEmployeeId: employeeId,
-             assignmentType: aType
+             assignmentType: aType === 'IN STORE' ? 'STORE' : aType
           };
 
-          const newAsset = await prisma.asset.create({ data: createData });
-          results.createdAssets++;
+          if (existingAsset) {
+              // UPDATE EXISTING ASSET
+              const updated = await prisma.asset.update({
+                  where: { id: existingAsset.id },
+                  data: assetPayload
+              });
+              
+              results.updated++;
+              results.updatedAssets++;
 
-          // Timeline Log for Creation
-          await logAssetTimeline({
-            assetId: newAsset.id,
-            assetCode: newAsset.assetCode,
-            eventType: 'CREATED',
-            title: 'Asset Created (Bulk)',
-            description: `Asset added via system bulk data ingestion. Initial status: ${finalStatus}`,
-            newStatus: finalStatus,
-            performedById: req.user.id,
-            performedByName: req.user.fullName
-          });
+              await logAssetTimeline({
+                assetId: updated.id,
+                assetCode: updated.assetCode,
+                eventType: 'UPDATED',
+                title: 'Asset Updated (Bulk)',
+                description: `Asset updated via standard Excel ingestion.`,
+                newStatus: finalStatus,
+                performedById: req.user.id,
+                performedByName: req.user.fullName
+              });
+          } else {
+              // INSERT NEW ASSET
+              const newAsset = await prisma.asset.create({ data: assetPayload });
+              results.imported++;
+              results.createdAssets++;
 
-          // 5. Assignment Logging
-          if (employeeId) {
-             await prisma.assetAssignment.create({
-                 data: {
-                     assetId: newAsset.id,
-                     employeeId: employeeId,
-                     status: 'ACTIVE',
-                     remarks: 'Automated Direct Organization Ingestion'
-                 }
-             });
-             results.createdAssignments++;
+              assetCodeToAsset.set(newAsset.assetCode.toUpperCase(), newAsset);
+              if (finalSerial) serialToAsset.set(finalSerial.toUpperCase(), newAsset);
 
-             // Timeline Log for Assignment
-             const emp = await prisma.employee.findUnique({ where: { id: employeeId } });
-             await logAssetTimeline({
-               assetId: newAsset.id,
-               assetCode: newAsset.assetCode,
-               eventType: 'ASSIGNED',
-               title: 'Asset Assigned (Bulk)',
-               description: `Automatically assigned to ${emp?.fullName} during ingestion.`,
-               oldStatus: 'AVAILABLE',
-               newStatus: 'ASSIGNED',
-               employeeId: emp?.id,
-               employeeName: emp?.fullName,
-               performedById: req.user.id,
-               performedByName: req.user.fullName
-             });
-          } else if (departmentId || locationId) {
-             let targetName = '';
-             if (departmentId && locationId) {
-                 const dept = departmentMap.get(a.departmentName);
-                 const loc = locationMap.get(a.locationName);
-                 targetName = `Department: ${dept?.name}, Location: ${loc?.name}`;
-             } else if (departmentId) {
-                 const dept = departmentMap.get(a.departmentName);
-                 targetName = `Department: ${dept?.name}`;
-             } else if (locationId) {
-                 const loc = locationMap.get(a.locationName);
-                 targetName = `Location: ${loc?.name}`;
-             }
-             
-             await logAssetTimeline({
-               assetId: newAsset.id,
-               assetCode: newAsset.assetCode,
-               eventType: 'ASSIGNED',
-               title: 'Asset Assigned (Bulk)',
-               description: `Automatically assigned to ${targetName} during ingestion.`,
-               oldStatus: 'AVAILABLE',
-               newStatus: 'ASSIGNED',
-               performedById: req.user.id,
-               performedByName: req.user.fullName
-             });
+              await logAssetTimeline({
+                assetId: newAsset.id,
+                assetCode: newAsset.assetCode,
+                eventType: 'CREATED',
+                title: 'Asset Created (Bulk)',
+                description: `Asset added via standard Excel ingestion. Initial status: ${finalStatus}`,
+                newStatus: finalStatus,
+                performedById: req.user.id,
+                performedByName: req.user.fullName
+              });
+
+              if (employeeId) {
+                 await prisma.assetAssignment.create({
+                     data: {
+                         assetId: newAsset.id,
+                         employeeId: employeeId,
+                         status: 'ACTIVE',
+                         remarks: 'Automated Direct Organization Ingestion'
+                     }
+                 });
+                 results.createdAssignments++;
+              }
           }
           
        } catch (err) {
+          results.failed++;
           results.skippedRows++;
           results.errors.push({
              row: rowNum,
@@ -408,7 +587,7 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
       action: 'BULK_UPLOAD',
       module: 'ASSETS',
       entityType: 'ASSET_COLLECTION',
-      description: `Bulk upload processed ${assets.length} rows. Results: ${results.createdAssets} assets created, ${results.createdEmployees} employees created, ${results.skippedRows} rows skipped.`
+      description: `Bulk upload processed ${assets.length} rows. Results: ${results.imported} created, ${results.updated} updated, ${results.skipped} skipped, ${results.failed} failed.`
     });
 
     res.status(200).json(results);
