@@ -692,31 +692,27 @@ export default function Settings() {
                                  <span className="text-sm font-bold text-orange-800 flex items-center gap-2">
                                    <AlertCircle className="w-4 h-4" /> Import Report: {importStatus.errors.length} Failed Records
                                  </span>
-                                 <button 
-                                    onClick={() => {
+                                 <button                                      onClick={() => {
                                         if (!importStatus.errors.length) return;
-                                        const headers = Object.keys(importStatus.errors[0].originalData || {});
-                                        if (headers.length === 0) return;
                                         
-                                        const csvRows = [];
-                                        csvRows.push(headers.join(',')); // Add headers
+                                        const headers = ['Row Number', 'Asset Code', 'Column Name', 'Current Value', 'Failure Reason'];
+                                        const csvRows = [headers.join(',')];
                                         
                                         importStatus.errors.forEach(err => {
-                                           if(err.originalData) {
-                                              const values = headers.map(header => {
-                                                 let val = err.originalData[header] || '';
-                                                 val = val.toString().replace(/"/g, '""');
-                                                 return `"${val}"`;
-                                              });
-                                              csvRows.push(values.join(','));
-                                           }
+                                           const rowNum = err.row || '';
+                                           const assetCode = err.assetCode || '';
+                                           const colName = err.column || '';
+                                           const curValue = (err.value || '').toString().replace(/"/g, '""');
+                                           const fix = (err.fix || '').toString().replace(/"/g, '""');
+                                           
+                                           csvRows.push(`"${rowNum}","${assetCode}","${colName}","${curValue}","${fix}"`);
                                         });
                                         
                                         const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
                                         const url = URL.createObjectURL(blob);
                                         const link = document.createElement("a");
                                         link.setAttribute("href", url);
-                                        link.setAttribute("download", "failed_records_reimport.csv");
+                                        link.setAttribute("download", "bulk_upload_error_report.csv");
                                         document.body.appendChild(link);
                                         link.click();
                                         document.body.removeChild(link);
@@ -724,7 +720,7 @@ export default function Settings() {
                                     }}
                                     className="px-4 py-2 bg-white text-orange-700 border border-orange-200 rounded-lg hover:bg-orange-50 flex items-center gap-2 text-xs font-bold shadow-sm transition-colors"
                                  >
-                                    <DownloadCloud className="w-4 h-4" /> Download Failed Records (CSV)
+                                    <DownloadCloud className="w-4 h-4" /> Download Error Report (CSV)
                                  </button>
                               </div>
                               <div className="overflow-x-auto max-h-64 overflow-y-auto">
