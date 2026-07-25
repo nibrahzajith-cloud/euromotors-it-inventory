@@ -17,6 +17,7 @@ export default function Settings() {
   const [importStatus, setImportStatus] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isImporting, setIsImporting] = useState(false);
+  const [transferredCount, setTransferredCount] = useState(0);
   const [validationReport, setValidationReport] = useState(null);
   const [selectedFileInfo, setSelectedFileInfo] = useState(null);
   
@@ -253,6 +254,7 @@ export default function Settings() {
       setIsImporting(true);
       setImportStatus(null);
       setUploadProgress(0);
+      setTransferredCount(0);
       const startTime = performance.now();
       
       try {
@@ -298,6 +300,7 @@ export default function Settings() {
                 aggregatedResults.errors.push(...data.errors);
             }
             
+            setTransferredCount(Math.min((i + 1) * chunkSize, csvData.length));
             setUploadProgress(Math.round(((i + 1) / totalChunks) * 100));
          }
 
@@ -320,6 +323,8 @@ export default function Settings() {
          if (aggregatedResults.errors.length > 0) {
             setImportStatus(aggregatedResults);
          } else {
+            console.log('Successfully transferred assets to database.');
+            console.log('Upload Summary:', aggregatedResults);
             showToast('Bulk import completed successfully!', 'success');
             navigate('/dashboard');
          }
@@ -592,7 +597,7 @@ export default function Settings() {
                     <div className="p-4 bg-indigo-50 rounded-full">
                        <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
                     </div>
-                    <span className="text-slate-800 font-bold text-xl">Uploading Assets...</span>
+                    <span className="text-slate-800 font-bold text-xl">Transferring assets to database...</span>
                     <span className="text-slate-500 text-sm text-center">
                        Processing {selectedFileInfo?.count || csvData.length} records.<br/>
                        Please do not close or refresh this window.
@@ -605,7 +610,10 @@ export default function Settings() {
                     >
                     </div>
                   </div>
-                  <div className="text-indigo-700 font-bold text-lg">{uploadProgress}% Complete</div>
+                  <div className="text-indigo-700 font-bold text-lg flex flex-col items-center">
+                     <span>{uploadProgress}% Complete</span>
+                     <span className="text-sm font-medium text-slate-500 mt-1">{transferredCount} out of {csvData.length} transferred</span>
+                  </div>
                  </div>
                </div>
             )}
