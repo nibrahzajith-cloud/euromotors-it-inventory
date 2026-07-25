@@ -141,12 +141,12 @@ export default function AnalyticsDashboard() {
   }, [autoRefresh]);
 
   const chartData = useMemo(() => {
-    if (!data) return [];
+    if (!data || !data.summary) return [];
     return [
-      { name: 'Available', value: data.summary.available.value, color: '#10b981' },
-      { name: 'Assigned', value: data.summary.assigned.value, color: '#3b82f6' },
-      { name: 'Repair', value: data.summary.repair.value, color: '#f59e0b' },
-      { name: 'Warranty Risk', value: data.summary.warranty.value, color: '#ef4444' }
+      { name: 'Available', value: data.summary.available?.value || 0, color: '#10b981' },
+      { name: 'Assigned', value: data.summary.assigned?.value || 0, color: '#3b82f6' },
+      { name: 'Repair', value: data.summary.repair?.value || 0, color: '#f59e0b' },
+      { name: 'Warranty Risk', value: data.summary.warranty?.value || 0, color: '#ef4444' }
     ];
   }, [data]);
 
@@ -221,14 +221,14 @@ export default function AnalyticsDashboard() {
 
         {/* KPI Section */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          <KPICard title="Total Assets" value={data.summary.totalAssets.value} trend={`+${data.summary.totalAssets.trend} wk`} type="up" icon={MonitorSmartphone} colorClass="bg-blue-100 text-blue-600 dark:bg-blue-600" glowColor="rgba(59, 130, 246, 0.4)" onClick={() => navigate('/assets')} />
-          <KPICard title="Assets in Store" value={data.summary.inStoreAssets.value} trend={`+${data.summary.available.trend} rtr`} type="up" icon={Server} colorClass="bg-emerald-100 text-emerald-600 dark:bg-emerald-600" glowColor="rgba(16, 185, 129, 0.4)" onClick={() => navigate('/assets?status=AVAILABLE')} />
-          <KPICard title="Assigned to Employees" value={data.summary.assigned.value} trend={`+${data.summary.assigned.trend} day`} type="up" icon={UserCheck} colorClass="bg-indigo-100 text-indigo-600 dark:bg-indigo-600" glowColor="rgba(79, 70, 229, 0.4)" onClick={() => navigate('/assets?status=ASSIGNED')} />
-          <KPICard title="Assigned to Departments" value={data.summary.departmentAssets?.value || 0} trend={`+${data.summary.departmentAssets?.trend || 0} mnt`} type="up" icon={Building2} colorClass="bg-purple-100 text-purple-600 dark:bg-purple-600" glowColor="rgba(147, 51, 234, 0.4)" onClick={() => navigate('/assets?status=ASSIGNED')} />
-          <KPICard title="Assigned to Locations" value={data.summary.locationAssets?.value || 0} trend={`+${data.summary.locationAssets?.trend || 0} mnt`} type="neutral" icon={MapPin} colorClass="bg-cyan-100 text-cyan-600 dark:bg-cyan-600" glowColor="rgba(6, 182, 212, 0.4)" onClick={() => navigate('/assets?status=ASSIGNED')} />
-          <KPICard title="Shared Assets" value={data.summary.sharedAssets?.value || 0} trend={`+${data.summary.sharedAssets?.trend || 0} mnt`} type="neutral" icon={Activity} colorClass="bg-pink-100 text-pink-600 dark:bg-pink-600" glowColor="rgba(236, 72, 153, 0.4)" onClick={() => navigate('/assets?status=ASSIGNED')} />
-          <KPICard title="Assets Under Repair" value={data.summary.repair.value} trend={`${data.summary.repair.trend} mnt`} type="neutral" icon={Wrench} colorClass="bg-amber-100 text-amber-600 dark:bg-amber-600" glowColor="rgba(245, 158, 11, 0.4)" onClick={() => navigate('/maintenance')} />
-          <KPICard title="Warranty Alerts" value={data.summary.warranty.value} trend={`${data.summary.warranty.trend} rsk`} type="down" icon={ShieldCheck} colorClass="bg-rose-100 text-rose-600 dark:bg-rose-600" glowColor="rgba(225, 29, 72, 0.4)" onClick={() => navigate('/reports')} />
+          <KPICard title="Total Assets" value={data.summary.totalAssets?.value || 0} trend={`+${data.summary.totalAssets?.trend || 0} wk`} type="up" icon={MonitorSmartphone} colorClass="bg-blue-100 text-blue-600 dark:bg-blue-600" glowColor="rgba(59, 130, 246, 0.4)" onClick={() => navigate('/assets')} />
+          <KPICard title="Assets in Store" value={data.summary.inStoreAssets?.value || data.summary.available?.value || 0} trend={`+${data.summary.inStoreAssets?.trend || data.summary.available?.trend || 0} rtr`} type="up" icon={Server} colorClass="bg-emerald-100 text-emerald-600 dark:bg-emerald-600" glowColor="rgba(16, 185, 129, 0.4)" onClick={() => navigate('/assets?status=AVAILABLE')} />
+          <KPICard title="Assigned to Employees" value={data.summary.assigned?.value || 0} trend={`+${data.summary.assigned?.trend || 0} day`} type="up" icon={UserCheck} colorClass="bg-indigo-100 text-indigo-600 dark:bg-indigo-600" glowColor="rgba(79, 70, 229, 0.4)" onClick={() => navigate('/assets?status=ASSIGNED')} />
+          <KPICard title="Assigned to Departments" value={data.summary.departmentAssets?.value || data.summary.department?.value || 0} trend={`+${data.summary.departmentAssets?.trend || data.summary.department?.trend || 0} mnt`} type="up" icon={Building2} colorClass="bg-purple-100 text-purple-600 dark:bg-purple-600" glowColor="rgba(147, 51, 234, 0.4)" onClick={() => navigate('/assets?status=ASSIGNED')} />
+          <KPICard title="Assigned to Locations" value={data.summary.locationAssets?.value || data.summary.location?.value || 0} trend={`+${data.summary.locationAssets?.trend || data.summary.location?.trend || 0} mnt`} type="neutral" icon={MapPin} colorClass="bg-cyan-100 text-cyan-600 dark:bg-cyan-600" glowColor="rgba(6, 182, 212, 0.4)" onClick={() => navigate('/assets?status=ASSIGNED')} />
+          <KPICard title="Shared Assets" value={data.summary.sharedAssets?.value || data.summary.shared?.value || 0} trend={`+${data.summary.sharedAssets?.trend || data.summary.shared?.trend || 0} mnt`} type="neutral" icon={Activity} colorClass="bg-pink-100 text-pink-600 dark:bg-pink-600" glowColor="rgba(236, 72, 153, 0.4)" onClick={() => navigate('/assets?status=ASSIGNED')} />
+          <KPICard title="Assets Under Repair" value={data.summary.repair?.value || 0} trend={`${data.summary.repair?.trend || 0} mnt`} type="neutral" icon={Wrench} colorClass="bg-amber-100 text-amber-600 dark:bg-amber-600" glowColor="rgba(245, 158, 11, 0.4)" onClick={() => navigate('/maintenance')} />
+          <KPICard title="Warranty Alerts" value={data.summary.warranty?.value || 0} trend={`${data.summary.warranty?.trend || 0} rsk`} type="down" icon={ShieldCheck} colorClass="bg-rose-100 text-rose-600 dark:bg-rose-600" glowColor="rgba(225, 29, 72, 0.4)" onClick={() => navigate('/reports')} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
