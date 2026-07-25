@@ -412,7 +412,7 @@ export default function AssetAssignment() {
                 <th className="px-4 py-3">Asset</th>
                 <th className="px-4 py-3">Assigned To</th>
                 <th className="px-4 py-3 text-center">Status</th>
-                <th className="px-4 py-3">Assigned On</th>
+                <th className="px-4 py-3">Dates</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -434,8 +434,17 @@ export default function AssetAssignment() {
                       {log.status === 'ACTIVE' ? 'Assigned' : 'Returned'}
                     </span>
                   </td>
-                  <td className="px-4 py-3">
-                    {new Date(log.assignedDate).toLocaleDateString()}
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-slate-600 dark:text-slate-400">
+                        <span className="font-semibold text-slate-700 dark:text-slate-300">Assigned:</span> {new Date(log.assignedDate).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                      </span>
+                      {log.status === 'RETURNED' && log.returnedDate && (
+                        <span className="text-xs text-slate-600 dark:text-slate-400">
+                          <span className="font-semibold text-slate-700 dark:text-slate-300">Returned:</span> {new Date(log.returnedDate).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-right space-x-2">
                     {canCreateEdit && log.status === 'ACTIVE' && (
