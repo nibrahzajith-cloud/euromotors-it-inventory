@@ -503,7 +503,7 @@ export default function Settings() {
                   </label>
                )}
 
-               {selectedFileInfo && !isImporting && !importStatus && !validationReport && (
+               {selectedFileInfo && !importStatus && !validationReport && (
                   <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 flex flex-col md:flex-row items-center justify-between gap-4">
                      <div>
                         <p className="text-sm text-slate-500 font-medium">Selected File:</p>
@@ -513,15 +513,17 @@ export default function Settings() {
                      <div className="flex gap-3">
                         <button 
                            onClick={() => { setSelectedFileInfo(null); setCsvData([]); }}
-                           className="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-100"
+                           disabled={isImporting}
+                           className="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                         >
                            Cancel
                         </button>
                         <button 
                            onClick={handleBulkImport}
-                           className="px-5 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 flex items-center gap-2 shadow-sm"
+                           disabled={isImporting}
+                           className="px-5 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 flex items-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                         >
-                           <Play className="w-4 h-4" /> Upload Assets
+                           <Play className="w-4 h-4" /> {isImporting ? 'Uploading...' : 'Upload Assets'}
                         </button>
                      </div>
                   </div>
@@ -574,23 +576,31 @@ export default function Settings() {
                </div>
             )}
 
-             {isImporting && (
-                 <div className="bg-white border border-slate-200 rounded-xl p-8 shadow-sm flex flex-col items-center justify-center space-y-5 animate-in fade-in duration-300">
-                  <div className="flex flex-col items-center gap-2">
-                    <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
-                    <span className="text-slate-800 font-bold text-lg">Uploading Assets...</span>
-                    <span className="text-slate-500 text-sm">Processing {selectedFileInfo?.count || csvData.length} records. Please do not close this window.</span>
+            {/* IMPORTING PROGRESS MODAL */}
+            {isImporting && (
+               <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300">
+                 <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-2xl flex flex-col items-center justify-center space-y-6 max-w-md w-full mx-4">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="p-4 bg-indigo-50 rounded-full">
+                       <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
+                    </div>
+                    <span className="text-slate-800 font-bold text-xl">Uploading Assets...</span>
+                    <span className="text-slate-500 text-sm text-center">
+                       Processing {selectedFileInfo?.count || csvData.length} records.<br/>
+                       Please do not close or refresh this window.
+                    </span>
                   </div>
-                  <div className="w-full max-w-md bg-slate-100 rounded-full h-4 overflow-hidden border border-slate-200 shadow-inner relative">
+                  <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden border border-slate-200 shadow-inner relative">
                     <div 
                       className="bg-gradient-to-r from-indigo-500 to-purple-500 h-full rounded-full transition-all duration-300 ease-out flex items-center justify-end pr-2"
                       style={{ width: `${Math.max(uploadProgress, 2)}%` }}
                     >
                     </div>
                   </div>
-                  <div className="text-indigo-700 font-bold">{uploadProgress}% Complete</div>
-                </div>
-             )}
+                  <div className="text-indigo-700 font-bold text-lg">{uploadProgress}% Complete</div>
+                 </div>
+               </div>
+            )}
 
             {importStatus && (
                <div className={`mt-6 p-6 rounded-2xl border shadow-sm ${importStatus.fatal ? 'bg-red-50 border-red-200' : 'bg-white border-emerald-200'}`}>
