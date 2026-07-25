@@ -340,11 +340,18 @@ export default function Settings() {
      try {
         const token = localStorage.getItem('token');
         const res = await fetch(`${API_URL}/assets/template/download`, {
-           headers: { Authorization: `Bearer ${token}` }
+           headers: token ? { Authorization: `Bearer ${token}` } : {}
         });
         if (!res.ok) throw new Error('Failed to download master template');
         const blob = await res.blob();
-        saveAs(blob, 'Templates.xlsx');
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'Templates.xlsx';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
      } catch (err) {
         showToast(err.message, 'error');
      }
@@ -358,7 +365,14 @@ export default function Settings() {
         });
         if (!res.ok) throw new Error('Failed to export inventory Excel');
         const blob = await res.blob();
-        saveAs(blob, 'EuroMotors_IT_Inventory_Export.xlsx');
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'EuroMotors_IT_Inventory_Export.xlsx';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
      } catch (err) {
         showToast(err.message, 'error');
      }

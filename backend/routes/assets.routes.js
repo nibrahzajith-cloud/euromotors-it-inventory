@@ -8,6 +8,20 @@ const { authenticate, authorize } = require('../middleware/auth.middleware');
 const { logAudit, logAssetTimeline } = require('../utils/logger');
 const { generateAssetCode, generateEmployeeCode } = require('../utils/codeGenerator');
 
+router.get('/template/download', (req, res) => {
+  try {
+    const templatePath = path.join(__dirname, '../../templates/Templates.xlsx');
+    const fallbackPath = path.join(__dirname, '../../template/Template.xlsx');
+    const finalPath = fs.existsSync(templatePath) ? templatePath : fallbackPath;
+    if (!fs.existsSync(finalPath)) {
+      return res.status(404).json({ error: 'Master template file not found.' });
+    }
+    res.download(finalPath, 'Templates.xlsx');
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.use(authenticate);
 
 router.get('/', async (req, res) => {
@@ -102,19 +116,7 @@ router.post('/', authorize(['ADMIN', 'IT_OFFICER']), async (req, res) => {
   }
 });
 
-router.get('/template/download', (req, res) => {
-  try {
-    const templatePath = path.join(__dirname, '../../templates/Templates.xlsx');
-    const fallbackPath = path.join(__dirname, '../../template/Template.xlsx');
-    const finalPath = fs.existsSync(templatePath) ? templatePath : fallbackPath;
-    if (!fs.existsSync(finalPath)) {
-      return res.status(404).json({ error: 'Master template file not found.' });
-    }
-    res.download(finalPath, 'Templates.xlsx');
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+
 
 router.get('/export/excel', async (req, res) => {
   try {
