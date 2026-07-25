@@ -34,7 +34,7 @@ function DraggableAsset({ asset }) {
 function DraggableAssetOverlay({ asset }) {
   if (!asset) return null;
   return (
-    <div className="p-3 bg-white dark:bg-slate-800 border border-blue-500 rounded-xl shadow-2xl flex items-center gap-3 scale-105 rotate-2 cursor-grabbing z-[100]">
+    <div className="pointer-events-none p-3 bg-white dark:bg-slate-800 border border-blue-500 rounded-xl shadow-2xl flex items-center gap-3 scale-105 rotate-2 cursor-grabbing z-[100]">
       <GripVertical className="w-4 h-4 text-blue-500" />
       <div>
         <p className="font-bold text-sm text-blue-700 dark:text-blue-300">{asset.assetCode}</p>
