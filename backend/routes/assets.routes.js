@@ -391,21 +391,14 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
           
        } catch (err) {
           results.skippedRows++;
-          if (err.column) {
-              results.errors.push({
-                 row: rowNum,
-                 column: err.column,
-                 value: err.value,
-                 fix: err.message
-              });
-          } else {
-              results.errors.push({
-                 row: rowNum,
-                 column: 'System',
-                 value: '-',
-                 fix: err.message
-              });
-          }
+          results.errors.push({
+             row: rowNum,
+             assetCode: a.assetCode || 'N/A',
+             column: err.column || 'System',
+             value: err.value || '-',
+             fix: err.message,
+             originalData: a
+          });
        }
     }
 

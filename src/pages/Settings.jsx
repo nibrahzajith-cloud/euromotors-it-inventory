@@ -686,34 +686,66 @@ export default function Settings() {
                         </div>
 
                         {importStatus.errors && importStatus.errors.length > 0 && (
-                           <div className="bg-orange-50 border border-orange-200 rounded-xl overflow-hidden mt-4">
-                              <div className="bg-orange-100/50 px-4 py-3 border-b border-orange-200 flex items-center justify-between">
+                           <div className="bg-orange-50 border border-orange-200 rounded-xl overflow-hidden mt-6 shadow-sm">
+                              <div className="bg-orange-100/80 px-4 py-3 border-b border-orange-200 flex items-center justify-between">
                                  <span className="text-sm font-bold text-orange-800 flex items-center gap-2">
-                                   <AlertCircle className="w-4 h-4" /> Error Boundary Details ({importStatus.errors.length})
+                                   <AlertCircle className="w-4 h-4" /> Import Report: {importStatus.errors.length} Failed Records
                                  </span>
                                  <button 
                                     onClick={() => {
-                                        const csvContent = "data:text/csv;charset=utf-8,Error\\n" + importStatus.errors.join("\\n");
+                                        if (!importStatus.errors.length) return;
+                                        const headers = Object.keys(importStatus.errors[0].originalData || {});
+                                        if (headers.length === 0) return;
+                                        
+                                        const csvRows = [];
+                                        csvRows.push(headers.join(',')); // Add headers
+                                        
+                                        importStatus.errors.forEach(err => {
+                                           if(err.originalData) {
+                                              const values = headers.map(header => {
+                                                 let val = err.originalData[header] || '';
+                                                 val = val.toString().replace(/"/g, '""');
+                                                 return `"${val}"`;
+                                              });
+                                              csvRows.push(values.join(','));
+                                           }
+                                        });
+                                        
+                                        const csvContent = "data:text/csv;charset=utf-8," + csvRows.join("\\n");
                                         const encodedUri = encodeURI(csvContent);
                                         const link = document.createElement("a");
                                         link.setAttribute("href", encodedUri);
-                                        link.setAttribute("download", "bulk_upload_error_report.csv");
+                                        link.setAttribute("download", "failed_records_reimport.csv");
                                         document.body.appendChild(link);
                                         link.click();
                                         document.body.removeChild(link);
                                     }}
-                                    className="px-3 py-1.5 bg-white text-orange-700 border border-orange-200 rounded-lg hover:bg-orange-100 flex items-center gap-2 text-xs font-bold shadow-sm transition-colors"
+                                    className="px-4 py-2 bg-white text-orange-700 border border-orange-200 rounded-lg hover:bg-orange-50 flex items-center gap-2 text-xs font-bold shadow-sm transition-colors"
                                  >
-                                    <DownloadCloud className="w-3.5 h-3.5" /> Download Error Report
+                                    <DownloadCloud className="w-4 h-4" /> Download Failed Records (CSV)
                                  </button>
                               </div>
-                              <div className="p-4 max-h-48 overflow-y-auto space-y-2">
-                                 {importStatus.errors.map((err, dx) => (
-                                    <div key={dx} className="bg-white px-3 py-2 rounded border border-orange-100 text-xs text-orange-700 font-mono shadow-sm flex items-start gap-2">
-                                       <span className="text-orange-400 mt-0.5 shrink-0">•</span>
-                                       <span>{err}</span>
-                                    </div>
-                                 ))}
+                              <div className="overflow-x-auto max-h-64 overflow-y-auto">
+                                 <table className="w-full text-sm text-left">
+                                    <thead className="bg-orange-100/50 text-orange-800 sticky top-0 shadow-sm">
+                                       <tr>
+                                          <th className="px-4 py-2.5 font-semibold">Row</th>
+                                          <th className="px-4 py-2.5 font-semibold">Asset Code</th>
+                                          <th className="px-4 py-2.5 font-semibold">Status</th>
+                                          <th className="px-4 py-2.5 font-semibold">Failure Reason</th>
+                                       </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-orange-100">
+                                       {importStatus.errors.map((err, idx) => (
+                                          <tr key={idx} className="bg-white text-slate-700 hover:bg-orange-50/30 transition-colors">
+                                             <td className="px-4 py-3 font-bold text-orange-700">{err.row}</td>
+                                             <td className="px-4 py-3 font-medium text-slate-900">{err.assetCode}</td>
+                                             <td className="px-4 py-3 font-bold text-red-600">Failed</td>
+                                             <td className="px-4 py-3 text-xs text-orange-800">{err.fix}</td>
+                                          </tr>
+                                       ))}
+                                    </tbody>
+                                 </table>
                               </div>
                            </div>
                         )}
