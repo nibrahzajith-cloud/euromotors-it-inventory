@@ -10,13 +10,23 @@ const { generateAssetCode, generateEmployeeCode } = require('../utils/codeGenera
 
 router.get('/template/download', (req, res) => {
   try {
-    const templatePath = path.join(__dirname, '../../templates/Templates.xlsx');
-    const fallbackPath = path.join(__dirname, '../../template/Template.xlsx');
-    const finalPath = fs.existsSync(templatePath) ? templatePath : fallbackPath;
-    if (!fs.existsSync(finalPath)) {
+    const templatePath = path.join(__dirname, '../../templates/Bulk Upload Templates.xlsx');
+    if (!fs.existsSync(templatePath)) {
       return res.status(404).json({ error: 'Master template file not found.' });
     }
-    res.download(finalPath, 'Templates.xlsx');
+    res.download(templatePath, 'Bulk Upload Templates.xlsx');
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/guide/download', (req, res) => {
+  try {
+    const guidePath = path.join(__dirname, '../../templates/Bulk Upload Guide.xlsx');
+    if (!fs.existsSync(guidePath)) {
+      return res.status(404).json({ error: 'Bulk Upload Guide file not found.' });
+    }
+    res.download(guidePath, 'Bulk Upload Guide.xlsx');
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -120,15 +130,13 @@ router.post('/', authorize(['ADMIN', 'IT_OFFICER']), async (req, res) => {
 
 router.get('/export/excel', async (req, res) => {
   try {
-    const templatePath = path.join(__dirname, '../../templates/Templates.xlsx');
-    const fallbackPath = path.join(__dirname, '../../template/Template.xlsx');
-    const finalPath = fs.existsSync(templatePath) ? templatePath : fallbackPath;
-    if (!fs.existsSync(finalPath)) {
+    const templatePath = path.join(__dirname, '../../templates/Bulk Upload Templates.xlsx');
+    if (!fs.existsSync(templatePath)) {
       return res.status(404).json({ error: 'Master template file not found.' });
     }
 
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.readFile(finalPath);
+    await workbook.xlsx.readFile(templatePath);
 
     const ws1 = workbook.getWorksheet('IT Inventory') || workbook.worksheets[0];
     

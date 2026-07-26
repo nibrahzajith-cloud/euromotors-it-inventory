@@ -368,7 +368,8 @@ export default function Settings() {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'EuroMotors_IT_Inventory_Export.xlsx';
+        const dateString = new Date().toISOString().split('T')[0];
+        a.download = `Current_IT_Inventory_${dateString}.xlsx`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -378,25 +379,25 @@ export default function Settings() {
      }
   };
 
-  const handleDownloadCsvTemplate = () => {
-     const headers = ["assignmentType", "locationName", "departmentName", "employeeCode", "employeeName", "email", "phone", "designation", "employeeStatus", "deviceType", "model", "serialNumber", "assetCode", "processor", "ram", "storage", "operatingSystem", "vendor", "purchaseDate", "warrantyExpiryDate", "status", "brand", "condition", "remarks"];
-     const sampleRows = [
-        ["EMPLOYEE", "Head Office", "IT", "EMP001", "John Silva", "john.silva@euromotors.lk", "0771234567", "IT Executive", "Active", "Laptop", "Dell Latitude 5450", "DL54501234", "LAP001", "Intel Core i5", "16GB", "512GB SSD", "Windows 11 Pro", "Dell", "2025-01-10", "2028-01-10", "Active", "Dell", "Excellent", "Assigned to employee"],
-        ["DEPARTMENT", "Head Office", "Finance", "", "", "", "", "", "", "Photocopier", "Canon IR 2630", "CN26304567", "PH001", "", "", "", "", "Canon", "2024-05-12", "2027-05-12", "Active", "Canon", "Good", "Finance department photocopier"],
-        ["LOCATION", "Kaduwela Showroom", "", "", "", "", "", "", "", "Router", "Cisco ISR 1100", "CS11001234", "RT001", "", "", "", "Cisco IOS", "Cisco", "2025-02-20", "2030-02-20", "Active", "Cisco", "Excellent", "Installed in showroom"],
-        ["SHARED", "Head Office", "Administration", "", "", "", "", "", "", "Projector", "Epson EB-X06", "EPX061234", "PJ001", "", "", "", "", "Epson", "2024-08-15", "2027-08-15", "Active", "Epson", "Good", "Shared meeting room projector"],
-        ["STORE", "Central Warehouse", "IT Store", "", "", "", "", "", "", "Laptop", "HP ProBook 450 G10", "HP4505678", "ST001", "Intel Core i7", "16GB", "512GB SSD", "Windows 11 Pro", "HP", "2025-04-18", "2028-04-18", "In Stock", "HP", "New", "Available in IT Store"]
-     ];
-     const csvContent = headers.join(",") + "\n" + sampleRows.map(e => e.join(",")).join("\n");
-     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-     const link = document.createElement("a");
-     const url = URL.createObjectURL(blob);
-     link.setAttribute("href", url);
-     link.setAttribute("download", "asset_bulk_import_template.csv");
-     link.style.visibility = 'hidden';
-     document.body.appendChild(link);
-     link.click();
-     document.body.removeChild(link);
+  const handleDownloadGuide = async () => {
+     try {
+        const token = localStorage.getItem('token');
+        const res = await fetch(`${API_URL}/assets/guide/download`, {
+           headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+        if (!res.ok) throw new Error('Failed to download bulk upload guide');
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'Bulk Upload Guide.xlsx';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+     } catch (err) {
+        showToast(err.message, 'error');
+     }
   };
 
   return (
@@ -457,15 +458,15 @@ export default function Settings() {
                <div className="flex flex-wrap gap-4">
                   <button onClick={handleDownloadExcelTemplate} className="cursor-pointer inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-50 border border-emerald-200 text-emerald-700 font-medium rounded-xl hover:bg-emerald-100 transition-colors shadow-sm">
                      <FileText className="w-4 h-4 text-emerald-600" />
-                     Download Official Blank Template (.xlsx)
+                     Download Sample Template
                   </button>
                   <button onClick={handleExportInventoryExcel} className="cursor-pointer inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-50 border border-indigo-200 text-indigo-700 font-medium rounded-xl hover:bg-indigo-100 transition-colors shadow-sm">
                      <DownloadCloud className="w-4 h-4 text-indigo-600" />
-                     Export Current Inventory (.xlsx)
+                     Download Current Inventory
                   </button>
-                  <button onClick={handleDownloadCsvTemplate} className="cursor-pointer inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-50 border border-blue-200 text-blue-700 font-medium rounded-xl hover:bg-blue-100 transition-colors shadow-sm">
+                  <button onClick={handleDownloadGuide} className="cursor-pointer inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-50 border border-blue-200 text-blue-700 font-medium rounded-xl hover:bg-blue-100 transition-colors shadow-sm">
                      <FileText className="w-4 h-4 text-blue-600" />
-                     Download CSV Template (.csv)
+                     Download Bulk Upload Guide
                   </button>
                </div>
             </div>
