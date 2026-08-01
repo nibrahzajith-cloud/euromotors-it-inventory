@@ -528,6 +528,11 @@ export default function AssetProfile() {
   };
 
   const handleDocDelete = (docId) => {
+    if (!docId) {
+      showToast("Error: Document ID is missing.", "error");
+      console.error("handleDocDelete failed: docId is undefined");
+      return;
+    }
     setDocToDelete(docId);
   };
 
