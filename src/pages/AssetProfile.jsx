@@ -410,8 +410,8 @@ export default function AssetProfile() {
     const files = Array.from(e.target.files);
     if (!files.length) return;
 
-    // Check if any file is over 1MB
-    const hasLargeFile = files.some(f => f.size > 1 * 1024 * 1024);
+    // Check if any file is over 1MB (1,000,000 bytes)
+    const hasLargeFile = files.some(f => f.size > 1000000);
     if (hasLargeFile) {
       setShowSizeError(true);
       if (e.target) e.target.value = '';
@@ -543,16 +543,17 @@ export default function AssetProfile() {
       });
 
       if (!res.ok) {
-         const contentType = res.headers.get("content-type");
-         if (contentType && contentType.indexOf("application/json") !== -1) {
-            throw new Error((await res.json()).error || 'Failed to delete document');
-         } else {
-            throw new Error('Failed to delete document. Server returned an error.');
-         }
+         const errorText = await res.text();
+         let errorMessage = 'Failed to delete document. Server returned an error.';
+         try {
+           const errObj = JSON.parse(errorText);
+           errorMessage = errObj.error || errorMessage;
+         } catch (e) {}
+         throw new Error(errorMessage);
       }
       
       setDocuments(prev => prev.filter(d => d.id !== docId));
-      showToast('Document deleted', 'success');
+      showToast('Document deleted successfully', 'success');
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -925,14 +926,24 @@ export default function AssetProfile() {
                             </div>
                             <div className="flex items-center justify-end gap-1 border-t border-slate-100 dark:border-slate-600 pt-2">
                                 <button 
-                                  onClick={() => handleForceDownload(`${API_URL.replace('/api', '')}${doc.filePath}`, doc.documentName)}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleForceDownload(`${API_URL.replace('/api', '')}${doc.filePath}`, doc.documentName);
+                                  }}
                                   className="p-1 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
                                   title="Download"
                                 >
                                   <Download className="w-3.5 h-3.5" />
                                 </button>
                                 <button 
-                                  onClick={() => handleDocDelete(doc.id)}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleDocDelete(doc.id);
+                                  }}
                                   className="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors flex items-center gap-1"
                                   title="Delete"
                                 >
@@ -1195,7 +1206,7 @@ function AssetTimeline({ timeline }) {
               </div>
               <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">File Too Large</h3>
               <p className="text-slate-600 dark:text-slate-400 mb-6">
-                One or more files are larger than 1MB. Please compress your files before uploading to save storage space and ensure fast load times.
+                You selected a large file. Try to compress it before uploading to save storage space and ensure fast load times.
               </p>
               <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-4 mb-6">
                 <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">You can easily compress PDFs here:</p>
