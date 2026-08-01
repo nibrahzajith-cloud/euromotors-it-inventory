@@ -51,6 +51,7 @@ export default function AssetProfile() {
 
   // Delete Confirmation State
   const [docToDelete, setDocToDelete] = useState(null);
+  const [isDeletingDoc, setIsDeletingDoc] = useState(false);
   const [imageToDelete, setImageToDelete] = useState(false);
 
   useEffect(() => {
@@ -533,6 +534,7 @@ export default function AssetProfile() {
   const confirmDocDelete = async () => {
     if (!docToDelete) return;
     const docId = docToDelete;
+    setIsDeletingDoc(true);
     // Keep modal open while deleting
     
     try {
@@ -555,8 +557,9 @@ export default function AssetProfile() {
       setDocuments(prev => prev.filter(d => d.id !== docId));
       showToast('Document deleted successfully', 'success');
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast(err.message || 'Failed to delete document', 'error');
     } finally {
+      setIsDeletingDoc(false);
       setDocToDelete(null);
     }
   };
@@ -931,25 +934,23 @@ export default function AssetProfile() {
                                   type="button"
                                   onClick={(e) => {
                                     e.preventDefault();
-                                    e.stopPropagation();
                                     handleForceDownload(`${API_URL.replace('/api', '')}${doc.filePath}`, doc.documentName);
                                   }}
                                   className="p-1 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
                                   title="Download"
                                 >
-                                  <Download className="w-3.5 h-3.5" />
+                                  <Download className="w-3.5 h-3.5 pointer-events-none" />
                                 </button>
                                 <button 
                                   type="button"
                                   onClick={(e) => {
                                     e.preventDefault();
-                                    e.stopPropagation();
                                     handleDocDelete(doc.id);
                                   }}
-                                  className="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors flex items-center gap-1"
+                                  className="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors flex items-center gap-1 z-50 relative"
                                   title="Delete"
                                 >
-                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <Trash2 className="w-3.5 h-3.5 pointer-events-none" />
                                 </button>
                             </div>
                           </div>
@@ -1188,9 +1189,15 @@ function AssetTimeline({ timeline }) {
                 </button>
                 <button 
                   onClick={confirmDocDelete}
-                  className="flex-1 py-2.5 px-4 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium transition-colors shadow-sm"
+                  disabled={isDeletingDoc}
+                  className="flex-1 py-2.5 px-4 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  Delete
+                  {isDeletingDoc ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Deleting...
+                    </>
+                  ) : 'Delete'}
                 </button>
               </div>
             </div>
