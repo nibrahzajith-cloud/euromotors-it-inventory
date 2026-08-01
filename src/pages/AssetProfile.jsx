@@ -403,7 +403,7 @@ export default function AssetProfile() {
             copiedPages.forEach((page) => pdfDoc.addPage(page));
           } else if (file.type.startsWith('image/')) {
              // Compress image to JPEG before embedding to keep PDF size small
-             const options = { maxSizeMB: 1, maxWidthOrHeight: 1920, useWebWorker: true, fileType: 'image/jpeg', initialQuality: 0.8 };
+             const options = { maxSizeMB: 0.1, maxWidthOrHeight: 1920, useWebWorker: true, fileType: 'image/jpeg', initialQuality: 0.8 };
              const compressedImage = await imageCompression(file, options);
              const arrayBuffer = await compressedImage.arrayBuffer();
              
