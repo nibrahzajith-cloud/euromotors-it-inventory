@@ -39,6 +39,9 @@ export default function AssetProfile() {
   const fileInputRef = useRef(null);
   const docInputRef = useRef(null);
 
+  // Modal State for Size Error
+  const [showSizeError, setShowSizeError] = useState(false);
+
   // Camera capture state
   const [showCamera, setShowCamera] = useState(false);
   const [cameraStream, setCameraStream] = useState(null);
@@ -399,10 +402,10 @@ export default function AssetProfile() {
     const files = Array.from(e.target.files);
     if (!files.length) return;
 
-    // Check if any PDF file is over 1MB
+    // Check if any file is over 1MB
     const hasLargeFile = files.some(f => f.size > 1 * 1024 * 1024);
     if (hasLargeFile) {
-      alert('One or more files are larger than 1MB. Please compress them before uploading to save storage space.\n\nYou can use: https://smallpdf.com/compress-pdf');
+      setShowSizeError(true);
       if (e.target) e.target.value = '';
       return;
     }
@@ -426,10 +429,14 @@ export default function AssetProfile() {
 
         for (const file of files) {
           if (file.type === 'application/pdf') {
-            const arrayBuffer = await file.arrayBuffer();
-            const loadedPdf = await PDFDocument.load(arrayBuffer);
-            const copiedPages = await pdfDoc.copyPages(loadedPdf, loadedPdf.getPageIndices());
-            copiedPages.forEach((page) => pdfDoc.addPage(page));
+            try {
+              const arrayBuffer = await file.arrayBuffer();
+              const loadedPdf = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+              const copiedPages = await pdfDoc.copyPages(loadedPdf, loadedPdf.getPageIndices());
+              copiedPages.forEach((page) => pdfDoc.addPage(page));
+            } catch (err) {
+              throw new Error(`Failed to read PDF "${file.name}". It might be corrupted or not a valid PDF file.`);
+            }
           } else if (file.type.startsWith('image/')) {
              // Compress image to JPEG before embedding to keep PDF size small
              const options = { maxSizeMB: 0.1, maxWidthOrHeight: 1920, useWebWorker: true, fileType: 'image/jpeg', initialQuality: 0.8 };
@@ -438,8 +445,22 @@ export default function AssetProfile() {
              
              let image = await pdfDoc.embedJpg(arrayBuffer);
              
-             const page = pdfDoc.addPage([image.width, image.height]);
-             page.drawImage(image, { x: 0, y: 0, width: image.width, height: image.height });
+             // A4 dimensions in points
+             const A4_WIDTH = 595.28;
+             const A4_HEIGHT = 841.89;
+             
+             // Calculate scale to fit within A4
+             const scale = Math.min(A4_WIDTH / image.width, A4_HEIGHT / image.height);
+             
+             // Scale image leaving a small 5% margin
+             const scaledWidth = image.width * scale * 0.95;
+             const scaledHeight = image.height * scale * 0.95;
+             
+             const x = (A4_WIDTH - scaledWidth) / 2;
+             const y = (A4_HEIGHT - scaledHeight) / 2;
+
+             const page = pdfDoc.addPage([A4_WIDTH, A4_HEIGHT]);
+             page.drawImage(image, { x, y, width: scaledWidth, height: scaledHeight });
           }
         }
         
@@ -451,7 +472,8 @@ export default function AssetProfile() {
         pdfDoc.setProducer('');
         
         const mergedPdfBytes = await pdfDoc.save();
-        finalFile = new File([mergedPdfBytes], `merged-document-${Date.now()}.pdf`, { type: 'application/pdf' });
+        const safeAssetCode = asset.assetCode ? asset.assetCode.replace(/[^a-zA-Z0-9_-]/g, '_') : 'Asset';
+        finalFile = new File([mergedPdfBytes], `${safeAssetCode}_Documents_${Date.now()}.pdf`, { type: 'application/pdf' });
       } else {
         finalFile = files[0];
       }
@@ -876,7 +898,9 @@ export default function AssetProfile() {
                         <li>Delivery Note</li>
                         <li>Service / Repair Reports</li>
                       </ul>
-                      <p className="mt-2 text-blue-600 dark:text-blue-400">All selected files will be automatically merged into a single PDF.</p>
+                      <p className="mt-2 text-blue-600 dark:text-blue-400">
+                        You can manually compress and upload a single merged PDF, or select each file from your computer and the system will auto-merge them (please select them in standard order).
+                      </p>
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -884,9 +908,9 @@ export default function AssetProfile() {
                     <button 
                       onClick={() => docInputRef.current.click()} 
                       disabled={uploadingDoc}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold transition-colors flex items-center gap-2 disabled:opacity-50 shadow-sm"
+                      className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-base font-bold transition-all hover:shadow-lg hover:-translate-y-0.5 flex items-center gap-2 disabled:opacity-50 disabled:hover:translate-y-0 shadow-md"
                     >
-                      {uploadingDoc ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                      {uploadingDoc ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
                       Upload Documents
                     </button>
                   </div>
@@ -1095,6 +1119,37 @@ function AssetTimeline({ timeline }) {
           ))}
         </div>
       </div>
+      {/* Delete Image Confirmation (Existing code but ensuring bottom rendering) */}
+      
+      {/* File Size Error Modal */}
+      {showSizeError && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertCircle className="w-8 h-8" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">File Too Large</h3>
+              <p className="text-slate-600 dark:text-slate-400 mb-6">
+                One or more files are larger than 1MB. Please compress your files before uploading to save storage space and ensure fast load times.
+              </p>
+              <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-4 mb-6">
+                <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">You can easily compress PDFs here:</p>
+                <a href="https://smallpdf.com/compress-pdf" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 font-bold hover:underline flex items-center justify-center gap-1">
+                  smallpdf.com/compress-pdf <ExternalLink className="w-4 h-4" />
+                </a>
+              </div>
+              <button 
+                onClick={() => setShowSizeError(false)}
+                className="w-full py-3 px-4 bg-slate-800 hover:bg-slate-900 dark:bg-blue-600 dark:hover:bg-blue-700 text-white rounded-xl font-bold transition-colors"
+              >
+                Understood
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
