@@ -260,7 +260,11 @@ router.delete('/document/:docId', authorize(['ADMIN', 'IT_OFFICER']), async (req
     } else {
       const filePath = path.join(__dirname, '../', document.filePath);
       if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
+        try {
+          fs.unlinkSync(filePath);
+        } catch (unlinkErr) {
+          console.warn(`Failed to unlink file ${filePath}, but proceeding with DB deletion:`, unlinkErr.message);
+        }
       }
     }
     

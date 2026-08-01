@@ -533,7 +533,7 @@ export default function AssetProfile() {
   const confirmDocDelete = async () => {
     if (!docToDelete) return;
     const docId = docToDelete;
-    setDocToDelete(null);
+    // Keep modal open while deleting
     
     try {
       const token = localStorage.getItem('token');
@@ -556,6 +556,8 @@ export default function AssetProfile() {
       showToast('Document deleted successfully', 'success');
     } catch (err) {
       showToast(err.message, 'error');
+    } finally {
+      setDocToDelete(null);
     }
   };
 
