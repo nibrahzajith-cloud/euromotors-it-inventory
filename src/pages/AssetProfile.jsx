@@ -287,7 +287,14 @@ export default function AssetProfile() {
         body: formData
       });
 
-      if (!res.ok) throw new Error((await res.json()).error || 'Upload failed');
+      if (!res.ok) {
+         const contentType = res.headers.get("content-type");
+         if (contentType && contentType.indexOf("application/json") !== -1) {
+            throw new Error((await res.json()).error || 'Upload failed');
+         } else {
+            throw new Error('Upload failed. The file might be too large for the server.');
+         }
+      }
 
       const data = await res.json();
       setAsset(prev => ({ ...prev, imageUrl: data.imageUrl, thumbnailUrl: data.thumbnailUrl }));
@@ -342,7 +349,14 @@ export default function AssetProfile() {
         body: formData
       });
 
-      if (!res.ok) throw new Error((await res.json()).error || 'Failed to upload image');
+      if (!res.ok) {
+         const contentType = res.headers.get("content-type");
+         if (contentType && contentType.indexOf("application/json") !== -1) {
+            throw new Error((await res.json()).error || 'Failed to upload image');
+         } else {
+            throw new Error('Upload failed. The file might be too large for the server.');
+         }
+      }
       
       const data = await res.json();
       setAsset(prev => ({ ...prev, imageUrl: data.imageUrl, thumbnailUrl: data.thumbnailUrl }));
@@ -365,7 +379,14 @@ export default function AssetProfile() {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
-      if (!res.ok) throw new Error('Failed to remove image');
+      if (!res.ok) {
+         const contentType = res.headers.get("content-type");
+         if (contentType && contentType.indexOf("application/json") !== -1) {
+            throw new Error((await res.json()).error || 'Failed to remove image');
+         } else {
+            throw new Error('Failed to remove image. Server returned an error.');
+         }
+      }
       
       setAsset(prev => ({ ...prev, imageUrl: null }));
       showToast('Image removed', 'success');
@@ -377,6 +398,14 @@ export default function AssetProfile() {
   const handleDocUpload = async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
+
+    // Check if any PDF file is over 1MB
+    const hasLargeFile = files.some(f => f.size > 1 * 1024 * 1024);
+    if (hasLargeFile) {
+      alert('One or more files are larger than 1MB. Please compress them before uploading to save storage space.\n\nYou can use: https://smallpdf.com/compress-pdf');
+      if (e.target) e.target.value = '';
+      return;
+    }
 
     setUploadingDoc(true);
     
@@ -433,7 +462,7 @@ export default function AssetProfile() {
 
       const formData = new FormData();
       formData.append('document', finalFile);
-      formData.append('documentType', docType);
+      formData.append('documentType', 'Merged Asset Document');
 
       const token = localStorage.getItem('token');
       const res = await fetch(`${API_URL}/uploads/document/${asset.id}`, {
@@ -442,7 +471,14 @@ export default function AssetProfile() {
         body: formData
       });
 
-      if (!res.ok) throw new Error((await res.json()).error || 'Failed to upload document');
+      if (!res.ok) {
+         const contentType = res.headers.get("content-type");
+         if (contentType && contentType.indexOf("application/json") !== -1) {
+            throw new Error((await res.json()).error || 'Failed to upload document');
+         } else {
+            throw new Error('Upload failed. The file might be too large for the server.');
+         }
+      }
       
       const newDoc = await res.json();
       setDocuments(prev => [newDoc, ...prev]);
@@ -470,7 +506,14 @@ export default function AssetProfile() {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
-      if (!res.ok) throw new Error('Failed to delete document');
+      if (!res.ok) {
+         const contentType = res.headers.get("content-type");
+         if (contentType && contentType.indexOf("application/json") !== -1) {
+            throw new Error((await res.json()).error || 'Failed to delete document');
+         } else {
+            throw new Error('Failed to delete document. Server returned an error.');
+         }
+      }
       
       setDocuments(prev => prev.filter(d => d.id !== docId));
       showToast('Document deleted', 'success');
@@ -825,31 +868,26 @@ export default function AssetProfile() {
                     Asset Documents
                   </h3>
                   <div className="w-full sm:w-auto">
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-3 sm:mb-0 max-w-md">
-                      Please combine all asset-related documents into a single PDF before uploading. This should include the Purchase/Proforma Invoice, Purchase Invoice, Warranty, Delivery Note, Service/Repair Reports, and any other supporting documents. Uploading a single PDF helps maintain a complete digital asset file. You can select multiple images/PDFs and we will merge them automatically.
-                    </p>
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mb-3 sm:mb-0 max-w-md">
+                      <p className="font-semibold text-slate-700 dark:text-slate-300 mb-1">Please upload the following required documents:</p>
+                      <ul className="list-disc list-inside space-y-0.5">
+                        <li>Purchase / Proforma Invoice</li>
+                        <li>Warranty Certificate</li>
+                        <li>Delivery Note</li>
+                        <li>Service / Repair Reports</li>
+                      </ul>
+                      <p className="mt-2 text-blue-600 dark:text-blue-400">All selected files will be automatically merged into a single PDF.</p>
+                    </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <select 
-                      className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-blue-500"
-                      value={docType}
-                      onChange={(e) => setDocType(e.target.value)}
-                    >
-                      <option value="PI / Proforma Invoice">PI / Proforma Invoice</option>
-                      <option value="Purchase Invoice">Purchase Invoice</option>
-                      <option value="Warranty">Warranty</option>
-                      <option value="Service/Repair Report">Service/Repair Report</option>
-                      <option value="Delivery Note">Delivery Note</option>
-                      <option value="Other">Other</option>
-                    </select>
                     <input type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.webp" className="hidden" ref={docInputRef} onChange={handleDocUpload} />
                     <button 
                       onClick={() => docInputRef.current.click()} 
                       disabled={uploadingDoc}
-                      className="px-3 py-1.5 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-blue-700 dark:text-blue-400 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold transition-colors flex items-center gap-2 disabled:opacity-50 shadow-sm"
                     >
-                      {uploadingDoc ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-                      Upload File
+                      {uploadingDoc ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                      Upload Documents
                     </button>
                   </div>
                 </div>
