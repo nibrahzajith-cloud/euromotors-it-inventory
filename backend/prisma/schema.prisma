@@ -135,6 +135,7 @@ model Asset {
   
   qrCodeUrl          String?
   imageUrl           String?
+  thumbnailUrl       String?
   remarks            String?
   
   createdAt          DateTime    @default(now())

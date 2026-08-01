@@ -4,6 +4,7 @@ const prisma = require('../prismaClient');
 const { authenticate, authorize } = require('../middleware/auth.middleware');
 const { uploadImage, uploadDocument } = require('../middleware/upload.middleware');
 const { logAudit, logAssetTimeline } = require('../utils/logger');
+const { uploadToS3, deleteFromS3 } = require('../utils/s3Client');
 const fs = require('fs');
 const path = require('path');
 
@@ -14,34 +15,65 @@ router.use(authenticate);
 // ==========================================
 
 // Upload / Replace Asset Image
-router.post('/image/:assetId', authorize(['ADMIN', 'IT_OFFICER']), uploadImage.single('image'), async (req, res) => {
+router.post('/image/:assetId', authorize(['ADMIN', 'IT_OFFICER']), uploadImage.fields([{ name: 'image', maxCount: 1 }, { name: 'thumbnail', maxCount: 1 }]), async (req, res) => {
   try {
     const { assetId } = req.params;
     
-    if (!req.file) {
+    if (!req.files || !req.files.image || !req.files.image[0]) {
       return res.status(400).json({ error: 'No image file uploaded' });
     }
+    
+    const imageFile = req.files.image[0];
+    const thumbnailFile = req.files.thumbnail ? req.files.thumbnail[0] : null;
 
     const asset = await prisma.asset.findUnique({ where: { id: assetId } });
     if (!asset) {
       // Clean up uploaded file if asset doesn't exist
-      fs.unlinkSync(req.file.path);
+      fs.unlinkSync(imageFile.path);
+      if (thumbnailFile) fs.unlinkSync(thumbnailFile.path);
       return res.status(404).json({ error: 'Asset not found' });
     }
 
     // Delete old image if it exists
     if (asset.imageUrl) {
-      const oldPath = path.join(__dirname, '../', asset.imageUrl);
-      if (fs.existsSync(oldPath)) {
-        fs.unlinkSync(oldPath);
+      if (asset.imageUrl.startsWith('http')) {
+        await deleteFromS3(asset.imageUrl);
+      } else {
+        const oldPath = path.join(__dirname, '../', asset.imageUrl);
+        if (fs.existsSync(oldPath)) {
+          fs.unlinkSync(oldPath);
+        }
+      }
+    }
+    
+    // Delete old thumbnail if it exists
+    if (asset.thumbnailUrl) {
+      if (asset.thumbnailUrl.startsWith('http')) {
+        await deleteFromS3(asset.thumbnailUrl);
+      } else {
+        const oldPath = path.join(__dirname, '../', asset.thumbnailUrl);
+        if (fs.existsSync(oldPath)) {
+          fs.unlinkSync(oldPath);
+        }
       }
     }
 
-    const imageUrl = `/uploads/images/${req.file.filename}`;
+    // Upload new image to S3
+    const s3Key = `images/${Date.now()}-${imageFile.originalname}`;
+    const imageUrl = await uploadToS3(imageFile.path, s3Key, imageFile.mimetype);
+    fs.unlinkSync(imageFile.path);
+    
+    // Upload thumbnail to S3 if provided
+    let thumbnailUrl = null;
+    if (thumbnailFile) {
+      const thumbS3Key = `thumbnails/${Date.now()}-thumb-${imageFile.originalname}`;
+      thumbnailUrl = await uploadToS3(thumbnailFile.path, thumbS3Key, thumbnailFile.mimetype);
+      fs.unlinkSync(thumbnailFile.path);
+    }
     
     const updatedAsset = await prisma.asset.update({
       where: { id: assetId },
-      data: { imageUrl }
+      data: { imageUrl, thumbnailUrl }
     });
 
     await logAssetTimeline({
@@ -54,10 +86,13 @@ router.post('/image/:assetId', authorize(['ADMIN', 'IT_OFFICER']), uploadImage.s
       performedByName: req.user.fullName
     });
 
-    res.json({ message: 'Image uploaded successfully', imageUrl });
+    res.json({ message: 'Image uploaded successfully', imageUrl, thumbnailUrl });
   } catch (err) {
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
+    if (req.files && req.files.image && fs.existsSync(req.files.image[0].path)) {
+      fs.unlinkSync(req.files.image[0].path);
+    }
+    if (req.files && req.files.thumbnail && fs.existsSync(req.files.thumbnail[0].path)) {
+      fs.unlinkSync(req.files.thumbnail[0].path);
     }
     res.status(500).json({ error: err.message });
   }
@@ -72,14 +107,29 @@ router.delete('/image/:assetId', authorize(['ADMIN', 'IT_OFFICER']), async (req,
     if (!asset) return res.status(404).json({ error: 'Asset not found' });
 
     if (asset.imageUrl) {
-      const oldPath = path.join(__dirname, '../', asset.imageUrl);
-      if (fs.existsSync(oldPath)) {
-        fs.unlinkSync(oldPath);
+      if (asset.imageUrl.startsWith('http')) {
+        await deleteFromS3(asset.imageUrl);
+      } else {
+        const oldPath = path.join(__dirname, '../', asset.imageUrl);
+        if (fs.existsSync(oldPath)) {
+          fs.unlinkSync(oldPath);
+        }
+      }
+      
+      if (asset.thumbnailUrl) {
+        if (asset.thumbnailUrl.startsWith('http')) {
+          await deleteFromS3(asset.thumbnailUrl);
+        } else {
+          const oldPath = path.join(__dirname, '../', asset.thumbnailUrl);
+          if (fs.existsSync(oldPath)) {
+            fs.unlinkSync(oldPath);
+          }
+        }
       }
       
       await prisma.asset.update({
         where: { id: assetId },
-        data: { imageUrl: null }
+        data: { imageUrl: null, thumbnailUrl: null }
       });
 
       await logAssetTimeline({
@@ -125,7 +175,12 @@ router.post('/document/:assetId', authorize(['ADMIN', 'IT_OFFICER']), uploadDocu
       return res.status(404).json({ error: 'Asset not found' });
     }
 
-    const filePath = `/uploads/documents/${req.file.filename}`;
+    // Upload to S3
+    const s3Key = `documents/${Date.now()}-${req.file.originalname}`;
+    const filePath = await uploadToS3(req.file.path, s3Key, req.file.mimetype);
+    
+    // Delete temp file
+    fs.unlinkSync(req.file.path);
     
     const document = await prisma.assetDocument.create({
       data: {
@@ -185,9 +240,13 @@ router.delete('/document/:docId', authorize(['ADMIN', 'IT_OFFICER']), async (req
     if (!document) return res.status(404).json({ error: 'Document not found' });
 
     // Delete file
-    const filePath = path.join(__dirname, '../', document.filePath);
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
+    if (document.filePath.startsWith('http')) {
+      await deleteFromS3(document.filePath);
+    } else {
+      const filePath = path.join(__dirname, '../', document.filePath);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
     }
     
     await prisma.assetDocument.delete({ where: { id: docId } });

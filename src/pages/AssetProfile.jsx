@@ -8,6 +8,8 @@ import {
 } from 'lucide-react';
 import QRCard from '../components/QRCard';
 import { downloadQRCard } from '../utils/qrUtils';
+import imageCompression from 'browser-image-compression';
+import { PDFDocument } from 'pdf-lib';
 
 const _rawApi = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 const API_URL = _rawApi.endsWith('/api') ? _rawApi : `${_rawApi.replace(/\/$/, '')}/api`;
@@ -230,14 +232,14 @@ export default function AssetProfile() {
     const canvas = canvasRef.current;
     if (!video || !canvas) return;
 
-    // Compress: draw at max 1280px width, maintaining aspect ratio
-    const maxW = 1280;
+    // Compress: draw at max 1920px width, maintaining aspect ratio
+    const maxW = 1920;
     const scale = Math.min(1, maxW / video.videoWidth);
     canvas.width = video.videoWidth * scale;
     canvas.height = video.videoHeight * scale;
     const ctx = canvas.getContext('2d');
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.80); // 80% quality JPEG
+    const dataUrl = canvas.toDataURL('image/webp', 0.80); // 80% quality WEBP
     setCapturedPhoto(dataUrl);
 
     // Pause the video stream
@@ -257,14 +259,26 @@ export default function AssetProfile() {
       // Convert base64 dataURL to a File blob
       const response = await fetch(capturedPhoto);
       const blob = await response.blob();
-      const file = new File([blob], `camera-capture-${Date.now()}.jpg`, { type: 'image/jpeg' });
+      let file = new File([blob], `camera-capture-${Date.now()}.webp`, { type: 'image/webp' });
+      let originalSize = file.size;
 
-      if (file.size > 5 * 1024 * 1024) {
-        return showToast('Captured image exceeds 5MB limit. Please retake.', 'error');
+      if (file.size > 15 * 1024 * 1024) {
+        return showToast('Captured image exceeds 15MB limit. Please retake.', 'error');
       }
+
+      showToast('Optimizing image...', 'info');
+      // Create thumbnail
+      const thumbOptions = { maxSizeMB: 0.1, maxWidthOrHeight: 300, useWebWorker: true, fileType: 'image/webp' };
+      const thumbnailFile = await imageCompression(file, thumbOptions);
+
+      // Ensure it's optimized
+      const options = { maxSizeMB: 1, maxWidthOrHeight: 1920, useWebWorker: true, fileType: 'image/webp', initialQuality: 0.8 };
+      file = await imageCompression(file, options);
+      const compressedSize = file.size;
 
       const formData = new FormData();
       formData.append('image', file);
+      formData.append('thumbnail', thumbnailFile, `thumb-${Date.now()}.webp`);
 
       const token = localStorage.getItem('token');
       const res = await fetch(`${API_URL}/uploads/image/${asset.id}`, {
@@ -276,8 +290,8 @@ export default function AssetProfile() {
       if (!res.ok) throw new Error((await res.json()).error || 'Upload failed');
 
       const data = await res.json();
-      setAsset(prev => ({ ...prev, imageUrl: data.imageUrl }));
-      showToast('Camera photo uploaded successfully!', 'success');
+      setAsset(prev => ({ ...prev, imageUrl: data.imageUrl, thumbnailUrl: data.thumbnailUrl }));
+      showToast(`Camera photo optimized & uploaded! Size reduced from ${formatBytes(originalSize)} to ${formatBytes(compressedSize)}.`, 'success');
       closeCamera();
     } catch (err) {
       showToast(err.message, 'error');
@@ -292,15 +306,35 @@ export default function AssetProfile() {
     const file = e.target.files[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      return showToast('Image must be under 5MB', 'error');
+    if (file.size > 15 * 1024 * 1024) {
+      return showToast('Image must be under 15MB before compression', 'error');
     }
 
     setUploadingImage(true);
-    const formData = new FormData();
-    formData.append('image', file);
+    let fileToUpload = file;
+    let originalSize = file.size;
 
     try {
+      showToast('Optimizing image...', 'info');
+      const options = {
+        maxSizeMB: 1,
+        maxWidthOrHeight: 1920,
+        useWebWorker: true,
+        fileType: 'image/webp',
+        initialQuality: 0.8,
+        exifOrientation: true
+      };
+      
+      fileToUpload = await imageCompression(file, options);
+      const compressedSize = fileToUpload.size;
+      
+      const thumbOptions = { maxSizeMB: 0.1, maxWidthOrHeight: 300, useWebWorker: true, fileType: 'image/webp' };
+      const thumbnailFile = await imageCompression(file, thumbOptions);
+      
+      const formData = new FormData();
+      formData.append('image', fileToUpload, `optimized-${Date.now()}.webp`);
+      formData.append('thumbnail', thumbnailFile, `thumb-${Date.now()}.webp`);
+
       const token = localStorage.getItem('token');
       const res = await fetch(`${API_URL}/uploads/image/${asset.id}`, {
         method: 'POST',
@@ -311,8 +345,8 @@ export default function AssetProfile() {
       if (!res.ok) throw new Error((await res.json()).error || 'Failed to upload image');
       
       const data = await res.json();
-      setAsset(prev => ({ ...prev, imageUrl: data.imageUrl }));
-      showToast('Asset image updated', 'success');
+      setAsset(prev => ({ ...prev, imageUrl: data.imageUrl, thumbnailUrl: data.thumbnailUrl }));
+      showToast(`Image optimized successfully. Size reduced from ${formatBytes(originalSize)} to ${formatBytes(compressedSize)}.`, 'success');
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
@@ -341,19 +375,66 @@ export default function AssetProfile() {
   };
 
   const handleDocUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    if (file.size > 10 * 1024 * 1024) {
-      return showToast('Document must be under 10MB', 'error');
-    }
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
 
     setUploadingDoc(true);
-    const formData = new FormData();
-    formData.append('document', file);
-    formData.append('documentType', docType);
-
+    
     try {
+      let finalFile;
+      let originalTotalSize = files.reduce((acc, f) => acc + f.size, 0);
+
+      // Check if all files can be merged (PDFs or Images)
+      const canMerge = files.every(f => f.type === 'application/pdf' || f.type.startsWith('image/'));
+      
+      if (files.length > 1 && !canMerge) {
+        throw new Error('Please only select PDF and Image files if you are uploading multiple files to merge them.');
+      }
+
+      if (canMerge && (files.length > 1 || files[0].type.startsWith('image/'))) {
+        showToast('Merging and compressing documents...', 'info');
+        const pdfDoc = await PDFDocument.create();
+
+        for (const file of files) {
+          if (file.type === 'application/pdf') {
+            const arrayBuffer = await file.arrayBuffer();
+            const loadedPdf = await PDFDocument.load(arrayBuffer);
+            const copiedPages = await pdfDoc.copyPages(loadedPdf, loadedPdf.getPageIndices());
+            copiedPages.forEach((page) => pdfDoc.addPage(page));
+          } else if (file.type.startsWith('image/')) {
+             // Compress image to JPEG before embedding to keep PDF size small
+             const options = { maxSizeMB: 1, maxWidthOrHeight: 1920, useWebWorker: true, fileType: 'image/jpeg', initialQuality: 0.8 };
+             const compressedImage = await imageCompression(file, options);
+             const arrayBuffer = await compressedImage.arrayBuffer();
+             
+             let image = await pdfDoc.embedJpg(arrayBuffer);
+             
+             const page = pdfDoc.addPage([image.width, image.height]);
+             page.drawImage(image, { x: 0, y: 0, width: image.width, height: image.height });
+          }
+        }
+        
+        // Strip metadata to reduce size and remove unnecessary info
+        pdfDoc.setTitle('');
+        pdfDoc.setAuthor('');
+        pdfDoc.setSubject('');
+        pdfDoc.setCreator('');
+        pdfDoc.setProducer('');
+        
+        const mergedPdfBytes = await pdfDoc.save();
+        finalFile = new File([mergedPdfBytes], `merged-document-${Date.now()}.pdf`, { type: 'application/pdf' });
+      } else {
+        finalFile = files[0];
+      }
+
+      if (finalFile.size > 15 * 1024 * 1024) {
+        throw new Error('Final document size exceeds 15MB limit');
+      }
+
+      const formData = new FormData();
+      formData.append('document', finalFile);
+      formData.append('documentType', docType);
+
       const token = localStorage.getItem('token');
       const res = await fetch(`${API_URL}/uploads/document/${asset.id}`, {
         method: 'POST',
@@ -365,7 +446,12 @@ export default function AssetProfile() {
       
       const newDoc = await res.json();
       setDocuments(prev => [newDoc, ...prev]);
-      showToast('Document uploaded successfully', 'success');
+      
+      if (finalFile !== files[0] || files.length > 1) {
+        showToast(`Document compressed successfully. Size reduced from ${formatBytes(originalTotalSize)} to ${formatBytes(finalFile.size)}.`, 'success');
+      } else {
+        showToast('Document uploaded successfully', 'success');
+      }
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
@@ -738,7 +824,12 @@ export default function AssetProfile() {
                     <FileText className="w-5 h-5 text-blue-600" />
                     Asset Documents
                   </h3>
-                  <div className="flex items-center gap-2">
+                  <div className="w-full sm:w-auto">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-3 sm:mb-0 max-w-md">
+                      Please combine all asset-related documents into a single PDF before uploading. This should include the Purchase/Proforma Invoice, Purchase Invoice, Warranty, Delivery Note, Service/Repair Reports, and any other supporting documents. Uploading a single PDF helps maintain a complete digital asset file. You can select multiple images/PDFs and we will merge them automatically.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
                     <select 
                       className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-blue-500"
                       value={docType}
@@ -751,7 +842,7 @@ export default function AssetProfile() {
                       <option value="Delivery Note">Delivery Note</option>
                       <option value="Other">Other</option>
                     </select>
-                    <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg" className="hidden" ref={docInputRef} onChange={handleDocUpload} />
+                    <input type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.webp" className="hidden" ref={docInputRef} onChange={handleDocUpload} />
                     <button 
                       onClick={() => docInputRef.current.click()} 
                       disabled={uploadingDoc}
