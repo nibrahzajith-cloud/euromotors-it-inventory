@@ -122,7 +122,11 @@ router.delete('/image/:assetId', authorize(['ADMIN', 'IT_OFFICER']), async (req,
       } else {
         const oldPath = path.join(__dirname, '../', asset.imageUrl);
         if (fs.existsSync(oldPath)) {
-          fs.unlinkSync(oldPath);
+          try {
+            fs.unlinkSync(oldPath);
+          } catch (unlinkErr) {
+            console.warn(`Failed to unlink image ${oldPath}, proceeding:`, unlinkErr.message);
+          }
         }
       }
       
@@ -132,7 +136,11 @@ router.delete('/image/:assetId', authorize(['ADMIN', 'IT_OFFICER']), async (req,
         } else {
           const oldPath = path.join(__dirname, '../', asset.thumbnailUrl);
           if (fs.existsSync(oldPath)) {
-            fs.unlinkSync(oldPath);
+            try {
+              fs.unlinkSync(oldPath);
+            } catch (unlinkErr) {
+              console.warn(`Failed to unlink thumbnail ${oldPath}, proceeding:`, unlinkErr.message);
+            }
           }
         }
       }
