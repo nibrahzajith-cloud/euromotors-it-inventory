@@ -898,92 +898,82 @@ export default function AssetProfile() {
 
               {/* Asset Documents Card */}
               <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-3 mb-4 gap-4">
-                  <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
-                    <FileText className="w-5 h-5 text-blue-600" />
-                    Asset Documents
-                  </h3>
-                  <div className="w-full sm:w-auto">
-                    <div className="text-xs text-slate-500 dark:text-slate-400 mb-3 sm:mb-0 max-w-md">
+                <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 pb-3 mb-4">
+                  <FileText className="w-5 h-5 text-blue-600" />
+                  Asset Documents
+                </h3>
+                
+                <div className="flex flex-col sm:flex-row gap-6 items-start">
+                  
+                  {/* Left Column: Preview/List */}
+                  <div className="w-full sm:w-48 h-48 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex flex-col items-center justify-center overflow-hidden relative group shrink-0">
+                    {documents.length === 0 ? (
+                      <div className="text-center p-4 text-slate-400">
+                        <FileText className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                        <p className="text-xs font-medium">No Documents</p>
+                      </div>
+                    ) : (
+                      <div className="w-full h-full p-2 flex flex-col gap-2 overflow-y-auto">
+                        {documents.map((doc) => (
+                          <div key={doc.id} className="bg-white dark:bg-slate-700 p-2.5 rounded-lg border border-slate-200 dark:border-slate-600 shadow-sm flex flex-col gap-2 relative group/doc">
+                            <div className="flex items-center gap-2">
+                              <FileText className="w-4 h-4 text-blue-500 shrink-0" />
+                              <div className="truncate flex-1 text-left">
+                                <p className="text-xs font-medium text-slate-700 dark:text-slate-200 truncate" title={doc.documentName}>{doc.documentName}</p>
+                                <p className="text-[10px] text-slate-500">{formatBytes(doc.fileSize)}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-end gap-1 border-t border-slate-100 dark:border-slate-600 pt-2">
+                                <button 
+                                  onClick={() => handleForceDownload(`${API_URL.replace('/api', '')}${doc.filePath}`, doc.documentName)}
+                                  className="p-1 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
+                                  title="Download"
+                                >
+                                  <Download className="w-3.5 h-3.5" />
+                                </button>
+                                <button 
+                                  onClick={() => handleDocDelete(doc.id)}
+                                  className="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors flex items-center gap-1"
+                                  title="Delete"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Right Column: Text & Upload Button */}
+                  <div className="flex-1 space-y-3">
+                    <div className="text-sm text-slate-500 dark:text-slate-400 max-w-md">
                       <p className="font-semibold text-slate-700 dark:text-slate-300 mb-1">Please upload the following required documents:</p>
-                      <ul className="list-disc list-inside space-y-0.5">
+                      <ul className="list-disc list-inside space-y-0.5 ml-2">
                         <li>Purchase / Proforma Invoice</li>
                         <li>Warranty Certificate</li>
                         <li>Delivery Note</li>
                         <li>Service / Repair Reports</li>
                       </ul>
-                      <p className="mt-2 text-blue-600 dark:text-blue-400">
+                      <p className="mt-2 text-blue-600 dark:text-blue-400 text-xs">
                         You can manually compress and upload a single merged PDF, or select each file from your computer and the system will auto-merge them (please select them in standard order).
                       </p>
                     </div>
+                    
+                    <div className="flex flex-wrap gap-2">
+                      <input type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.webp" className="hidden" ref={docInputRef} onChange={handleDocUpload} />
+                      <button 
+                        onClick={() => docInputRef.current.click()} 
+                        disabled={uploadingDoc}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50 shadow-sm"
+                      >
+                        {uploadingDoc ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                        {uploadingDoc ? 'Uploading...' : 'Upload Documents'}
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <input type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.webp" className="hidden" ref={docInputRef} onChange={handleDocUpload} />
-                    <button 
-                      onClick={() => docInputRef.current.click()} 
-                      disabled={uploadingDoc}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50 shadow-sm"
-                    >
-                      {uploadingDoc ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                      Upload Documents
-                    </button>
-                  </div>
+                  
                 </div>
-
-                {documents.length === 0 ? (
-                  <div className="text-center py-8 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
-                    <FileText className="w-10 h-10 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
-                    <p className="text-sm font-medium text-slate-600 dark:text-slate-400">No documents uploaded yet</p>
-                    <p className="text-xs text-slate-400 mt-1">Upload invoices, warranties, or service reports here.</p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto rounded-xl border border-slate-100 dark:border-slate-700">
-                    <table className="w-full text-left text-sm whitespace-nowrap">
-                      <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400">
-                        <tr>
-                          <th className="px-4 py-3 font-medium">Document Name</th>
-                          <th className="px-4 py-3 font-medium">Type</th>
-                          <th className="px-4 py-3 font-medium">Size</th>
-                          <th className="px-4 py-3 font-medium">Date</th>
-                          <th className="px-4 py-3 font-medium text-right">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-700 text-slate-700 dark:text-slate-300">
-                        {documents.map((doc) => (
-                          <tr key={doc.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-2">
-                                <FileText className="w-4 h-4 text-slate-400" />
-                                <span className="font-medium max-w-[150px] truncate" title={doc.documentName}>{doc.documentName}</span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 text-xs"><span className="bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-md">{doc.documentType}</span></td>
-                            <td className="px-4 py-3 text-xs text-slate-500">{formatBytes(doc.fileSize)}</td>
-                            <td className="px-4 py-3 text-xs text-slate-500">{new Date(doc.createdAt).toLocaleDateString()}</td>
-                            <td className="px-4 py-3 text-right">
-                              <div className="flex items-center justify-end gap-2">
-                                <button 
-                                  onClick={() => handleForceDownload(`${API_URL.replace('/api', '')}${doc.filePath}`, doc.documentName)}
-                                  className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
-                                  title="Download Document"
-                                >
-                                  <Download className="w-4 h-4" />
-                                </button>
-                                <button 
-                                  onClick={() => handleDocDelete(doc.id)}
-                                  className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
-                                  title="Delete Document"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
               </div>
             </div>
           </div>
