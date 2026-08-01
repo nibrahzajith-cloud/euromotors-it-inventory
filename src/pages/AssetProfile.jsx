@@ -49,6 +49,10 @@ export default function AssetProfile() {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
 
+  // Delete Confirmation State
+  const [docToDelete, setDocToDelete] = useState(null);
+  const [imageToDelete, setImageToDelete] = useState(false);
+
   useEffect(() => {
     const fetchAssetProfile = async () => {
       try {
@@ -372,8 +376,12 @@ export default function AssetProfile() {
     }
   };
 
-  const handleImageDelete = async () => {
-    if (!window.confirm('Remove this asset image?')) return;
+  const handleImageDelete = () => {
+    setImageToDelete(true);
+  };
+
+  const confirmImageDelete = async () => {
+    setImageToDelete(false);
     
     try {
       const token = localStorage.getItem('token');
@@ -518,8 +526,14 @@ export default function AssetProfile() {
     }
   };
 
-  const handleDocDelete = async (docId) => {
-    if (!window.confirm('Delete this document? This cannot be undone.')) return;
+  const handleDocDelete = (docId) => {
+    setDocToDelete(docId);
+  };
+
+  const confirmDocDelete = async () => {
+    if (!docToDelete) return;
+    const docId = docToDelete;
+    setDocToDelete(null);
     
     try {
       const token = localStorage.getItem('token');
@@ -908,9 +922,9 @@ export default function AssetProfile() {
                     <button 
                       onClick={() => docInputRef.current.click()} 
                       disabled={uploadingDoc}
-                      className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-base font-bold transition-all hover:shadow-lg hover:-translate-y-0.5 flex items-center gap-2 disabled:opacity-50 disabled:hover:translate-y-0 shadow-md"
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50 shadow-sm"
                     >
-                      {uploadingDoc ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
+                      {uploadingDoc ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
                       Upload Documents
                     </button>
                   </div>
@@ -1119,7 +1133,67 @@ function AssetTimeline({ timeline }) {
           ))}
         </div>
       </div>
-      {/* Delete Image Confirmation (Existing code but ensuring bottom rendering) */}
+      {/* Delete Image Confirmation */}
+      {imageToDelete && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Trash2 className="w-8 h-8" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Remove Asset Image</h3>
+              <p className="text-slate-600 dark:text-slate-400 mb-6 text-sm">
+                Are you sure you want to remove the image for this asset? This action cannot be undone.
+              </p>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setImageToDelete(false)}
+                  className="flex-1 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded-xl font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={confirmImageDelete}
+                  className="flex-1 py-2.5 px-4 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium transition-colors shadow-sm"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Document Confirmation */}
+      {docToDelete && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Trash2 className="w-8 h-8" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Delete Document</h3>
+              <p className="text-slate-600 dark:text-slate-400 mb-6 text-sm">
+                Are you sure you want to delete this document? This action cannot be undone.
+              </p>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setDocToDelete(null)}
+                  className="flex-1 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded-xl font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={confirmDocDelete}
+                  className="flex-1 py-2.5 px-4 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium transition-colors shadow-sm"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* File Size Error Modal */}
       {showSizeError && (
