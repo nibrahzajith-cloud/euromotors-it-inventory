@@ -527,17 +527,14 @@ export default function AssetProfile() {
     }
   };
 
-  const handleDocDelete = (docId) => {
+  const handleDocDelete = async (docId) => {
     if (!docId) {
       showToast("Error: Document ID is missing.", "error");
       console.error("handleDocDelete failed: docId is undefined");
       return;
     }
+    
     setDocToDelete(docId);
-  };
-
-  const confirmDocDelete = async (docIdToDel) => {
-    if (!docIdToDel) return;
     setIsDeletingDoc(true);
     
     try {
@@ -557,12 +554,13 @@ export default function AssetProfile() {
          throw new Error(errorMessage);
       }
       
-      setDocuments(prev => prev.filter(d => d.id !== docIdToDel));
+      setDocuments(prev => prev.filter(d => d.id !== docId));
       showToast('Document deleted successfully', 'success');
     } catch (err) {
       showToast(err.message || 'Failed to delete document', 'error');
     } finally {
       setIsDeletingDoc(false);
+      setDocToDelete(null);
     }
   };
 
