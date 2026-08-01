@@ -44,11 +44,11 @@ enum MaintenanceStatus {
 }
 
 model User {
-  id           String        @id @default(uuid())
-  fullName     String
-  email        String        @unique
-  passwordHash String
-  role         Role          @default(VIEWER)
+  id                 String        @id @default(uuid())
+  fullName           String
+  email              String        @unique
+  passwordHash       String
+  role               Role          @default(VIEWER)
   status             GeneralStatus @default(ACTIVE)
   mustChangePassword Boolean       @default(true)
   createdAt          DateTime      @default(now())
@@ -63,8 +63,8 @@ model Department {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
-  employees   Employee[]
-  assets      Asset[]
+  employees Employee[]
+  assets    Asset[]
 }
 
 model Location {
@@ -75,27 +75,27 @@ model Location {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
-  employees   Employee[]
-  assets      Asset[]
+  employees Employee[]
+  assets    Asset[]
 }
 
 model Employee {
-  id           String        @id @default(uuid())
-  employeeCode String        @unique 
+  id           String  @id @default(uuid())
+  employeeCode String  @unique
   fullName     String
-  email        String?       
+  email        String?
   designation  String?
   phone        String?
-  
+
   departmentId String?
-  department   Department?   @relation(fields: [departmentId], references: [id])
-  
-  locationId   String?
-  location     Location?     @relation(fields: [locationId], references: [id])
-  
-  status       GeneralStatus @default(ACTIVE)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  department   Department? @relation(fields: [departmentId], references: [id])
+
+  locationId String?
+  location   Location? @relation(fields: [locationId], references: [id])
+
+  status    GeneralStatus @default(ACTIVE)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
 
   assignedAssets Asset[]           @relation("DirectAssignment")
   assignments    AssetAssignment[]
@@ -103,12 +103,12 @@ model Employee {
 }
 
 model Asset {
-  id                 String      @id @default(uuid())
-  assetCode          String      @unique 
+  id                 String         @id @default(uuid())
+  assetCode          String         @unique
   deviceType         String
   brand              String?
   model              String?
-  serialNumber       String?     @unique
+  serialNumber       String?        @unique
   processor          String?
   ram                String?
   storage            String?
@@ -118,59 +118,65 @@ model Asset {
   warrantyStatus     String
   warrantyExpiryDate DateTime?
   condition          String
-  status             AssetStatus @default(AVAILABLE)
+  status             AssetStatus    @default(AVAILABLE)
   assignmentType     AssignmentType @default(EMPLOYEE)
-  
-  macAddress         String?
-  ipAddress          String?
-  
-  locationId         String?
-  location           Location?   @relation(fields: [locationId], references: [id])
-  
-  departmentId       String?
-  department         Department? @relation(fields: [departmentId], references: [id])
-  
-  assignedEmployeeId String?
-  assignedEmployee   Employee?   @relation("DirectAssignment", fields: [assignedEmployeeId], references: [id])
-  
-  qrCodeUrl          String?
-  imageUrl           String?
-  thumbnailUrl       String?
-  remarks            String?
-  
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
 
-  assignments        AssetAssignment[]
-  maintenanceLogs    MaintenanceLog[]
-  documents          AssetDocument[]
-  supportTickets     SupportTicket[]
+  macAddress String?
+  ipAddress  String?
+
+  locationId String?
+  location   Location? @relation(fields: [locationId], references: [id])
+
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+
+  assignedEmployeeId String?
+  assignedEmployee   Employee? @relation("DirectAssignment", fields: [assignedEmployeeId], references: [id])
+
+  qrCodeUrl       String?
+  imageUrl        String?
+  imageStorageKey String?
+  imageFileName   String?
+  imageFileSize   Int?
+  imageMimeType   String?
+  imageUploadedAt DateTime?
+  imageUploadedBy String?
+  thumbnailUrl    String?
+  remarks         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assignments     AssetAssignment[]
+  maintenanceLogs MaintenanceLog[]
+  documents       AssetDocument[]
+  supportTickets  SupportTicket[]
 }
 
 model AssetAssignment {
-  id            String           @id @default(uuid())
-  
-  assetId       String
-  asset         Asset            @relation(fields: [assetId], references: [id])
-  
-  employeeId    String
-  employee      Employee         @relation(fields: [employeeId], references: [id])
-  
-  assignedDate  DateTime         @default(now())
-  returnedDate  DateTime?
-  status        AssignmentStatus @default(ACTIVE)
-  remarks       String?
-  
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  id String @id @default(uuid())
+
+  assetId String
+  asset   Asset  @relation(fields: [assetId], references: [id])
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+
+  assignedDate DateTime         @default(now())
+  returnedDate DateTime?
+  status       AssignmentStatus @default(ACTIVE)
+  remarks      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model MaintenanceLog {
-  id               String            @id @default(uuid())
-  
-  assetId          String
-  asset            Asset             @relation(fields: [assetId], references: [id])
-  
+  id String @id @default(uuid())
+
+  assetId String
+  asset   Asset  @relation(fields: [assetId], references: [id])
+
   issueDescription String
   repairAction     String?
   vendor           String?
@@ -178,16 +184,16 @@ model MaintenanceLog {
   repairDate       DateTime?
   status           MaintenanceStatus @default(OPEN)
   remarks          String?
-  
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model SystemSettings {
-  id                 String   @id @default("global")
-  assetCodePrefix    String   @default("AST")
-  warrantyPeriod     Int      @default(12)
-  updatedAt          DateTime @updatedAt
+  id              String   @id @default("global")
+  assetCodePrefix String   @default("AST")
+  warrantyPeriod  Int      @default(12)
+  updatedAt       DateTime @updatedAt
 }
 
 model AuditLog {
@@ -228,19 +234,21 @@ model AssetTimeline {
 }
 
 model AssetDocument {
-  id              String   @id @default(uuid())
-  
-  assetId         String
-  asset           Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  
+  id String @id @default(uuid())
+
+  assetId String
+  asset   Asset  @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
   documentName    String
   documentType    String
-  filePath        String
+  fileUrl         String?
+  storageKey      String?
   fileSize        Int
+  mimeType        String?
   uploadedBy      String?
   uploadedByName  String?
-  
-  createdAt       DateTime @default(now())
+
+  createdAt DateTime @default(now())
 }
 
 enum TicketPriority {
@@ -264,14 +272,14 @@ model SupportTicket {
   description String
   priority    TicketPriority @default(MEDIUM)
   status      TicketStatus   @default(OPEN)
-  
-  employeeId  String
-  employee    Employee       @relation(fields: [employeeId], references: [id])
-  
-  assetId     String?
-  asset       Asset?         @relation(fields: [assetId], references: [id])
-  
-  resolvedAt  DateTime?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+
+  assetId String?
+  asset   Asset?  @relation(fields: [assetId], references: [id])
+
+  resolvedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 }

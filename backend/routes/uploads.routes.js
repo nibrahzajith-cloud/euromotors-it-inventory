@@ -4,7 +4,7 @@ const prisma = require('../prismaClient');
 const { authenticate, authorize } = require('../middleware/auth.middleware');
 const { uploadImage, uploadDocument } = require('../middleware/upload.middleware');
 const { logAudit, logAssetTimeline } = require('../utils/logger');
-const { uploadToS3, deleteFromS3 } = require('../utils/s3Client');
+const { uploadToS3, deleteFromS3, getSignedDownloadUrl } = require('../utils/s3Client');
 const fs = require('fs');
 const path = require('path');
 
@@ -60,31 +60,46 @@ router.post('/image/:assetId', authorize(['ADMIN', 'IT_OFFICER']), uploadImage.f
 
     // Upload new image to S3
     const s3Key = `images/${Date.now()}-${imageFile.originalname}`;
-    let imageUrl = await uploadToS3(imageFile.path, s3Key, imageFile.mimetype);
+    let uploadRes = await uploadToS3(imageFile.path, s3Key, imageFile.mimetype);
+    let imageUrl = uploadRes ? uploadRes.url : `/uploads/images/${path.basename(imageFile.path)}`;
+    let imageStorageKey = uploadRes ? uploadRes.storageKey : null;
     
-    if (imageUrl) {
+    if (uploadRes) {
       fs.unlinkSync(imageFile.path);
-    } else {
-      // Fallback to local
-      imageUrl = `/uploads/images/${path.basename(imageFile.path)}`;
     }
     
     // Upload thumbnail to S3 if provided
     let thumbnailUrl = null;
     if (thumbnailFile) {
       const thumbS3Key = `thumbnails/${Date.now()}-thumb-${imageFile.originalname}`;
-      thumbnailUrl = await uploadToS3(thumbnailFile.path, thumbS3Key, thumbnailFile.mimetype);
-      if (thumbnailUrl) {
+      let thumbRes = await uploadToS3(thumbnailFile.path, thumbS3Key, thumbnailFile.mimetype);
+      if (thumbRes) {
+        thumbnailUrl = thumbRes.url;
         fs.unlinkSync(thumbnailFile.path);
       } else {
         thumbnailUrl = `/uploads/images/${path.basename(thumbnailFile.path)}`;
       }
     }
     
-    const updatedAsset = await prisma.asset.update({
-      where: { id: assetId },
-      data: { imageUrl, thumbnailUrl }
-    });
+    try {
+      const updatedAsset = await prisma.asset.update({
+        where: { id: assetId },
+        data: { 
+          imageUrl, 
+          thumbnailUrl,
+          imageStorageKey,
+          imageFileName: imageFile.originalname,
+          imageFileSize: imageFile.size,
+          imageMimeType: imageFile.mimetype,
+          imageUploadedAt: new Date(),
+          imageUploadedBy: req.user.id
+        }
+      });
+    } catch (dbErr) {
+       // Rollback S3 upload
+       if (imageStorageKey) await deleteFromS3(imageStorageKey);
+       throw new Error('Database error. Image upload rolled back.');
+    }
 
     await logAssetTimeline({
       assetId: asset.id,
@@ -96,7 +111,15 @@ router.post('/image/:assetId', authorize(['ADMIN', 'IT_OFFICER']), uploadImage.f
       performedByName: req.user.fullName
     });
 
-    res.json({ message: 'Image uploaded successfully', imageUrl, thumbnailUrl });
+    res.json({ 
+      message: 'Image uploaded successfully', 
+      imageUrl, 
+      thumbnailUrl,
+      imageFileName: imageFile.originalname,
+      imageFileSize: imageFile.size,
+      imageMimeType: imageFile.mimetype,
+      imageUploadedAt: new Date()
+    });
   } catch (err) {
     if (req.files && req.files.image && fs.existsSync(req.files.image[0].path)) {
       fs.unlinkSync(req.files.image[0].path);
@@ -116,10 +139,12 @@ router.delete('/image/:assetId', authorize(['ADMIN', 'IT_OFFICER']), async (req,
     const asset = await prisma.asset.findUnique({ where: { id: assetId } });
     if (!asset) return res.status(404).json({ error: 'Asset not found' });
 
-    if (asset.imageUrl) {
-      if (asset.imageUrl.startsWith('http')) {
+    if (asset.imageStorageKey || asset.imageUrl) {
+      if (asset.imageStorageKey) {
+        await deleteFromS3(asset.imageStorageKey);
+      } else if (asset.imageUrl && asset.imageUrl.startsWith('http')) {
         await deleteFromS3(asset.imageUrl);
-      } else {
+      } else if (asset.imageUrl) {
         const oldPath = path.join(__dirname, '../', asset.imageUrl);
         if (fs.existsSync(oldPath)) {
           try {
@@ -147,7 +172,16 @@ router.delete('/image/:assetId', authorize(['ADMIN', 'IT_OFFICER']), async (req,
       
       await prisma.asset.update({
         where: { id: assetId },
-        data: { imageUrl: null, thumbnailUrl: null }
+        data: { 
+          imageUrl: null, 
+          thumbnailUrl: null,
+          imageStorageKey: null,
+          imageFileName: null,
+          imageFileSize: null,
+          imageMimeType: null,
+          imageUploadedAt: null,
+          imageUploadedBy: null
+        }
       });
 
       await logAssetTimeline({
@@ -166,7 +200,23 @@ router.delete('/image/:assetId', authorize(['ADMIN', 'IT_OFFICER']), async (req,
     res.status(500).json({ error: err.message });
   }
 });
-
+// Download Image (Signed URL)
+router.get('/image/:assetId/download', async (req, res) => {
+  try {
+    const { assetId } = req.params;
+    const asset = await prisma.asset.findUnique({ where: { id: assetId } });
+    if (!asset || !asset.imageStorageKey) {
+      return res.status(404).json({ error: 'Image not found or not stored securely' });
+    }
+    
+    const signedUrl = await getSignedDownloadUrl(asset.imageStorageKey);
+    if (!signedUrl) return res.status(500).json({ error: 'Failed to generate download URL' });
+    
+    res.json({ url: signedUrl });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ==========================================
 // ASSET DOCUMENTS ROUTES
@@ -195,27 +245,35 @@ router.post('/document/:assetId', authorize(['ADMIN', 'IT_OFFICER']), uploadDocu
 
     // Upload to S3
     const s3Key = `documents/${Date.now()}-${req.file.originalname}`;
-    let filePath = await uploadToS3(req.file.path, s3Key, req.file.mimetype);
+    let uploadRes = await uploadToS3(req.file.path, s3Key, req.file.mimetype);
     
-    if (filePath) {
+    let fileUrl = uploadRes ? uploadRes.url : `/uploads/documents/${path.basename(req.file.path)}`;
+    let storageKey = uploadRes ? uploadRes.storageKey : null;
+
+    if (uploadRes) {
       // Delete temp file if S3 upload succeeded
       fs.unlinkSync(req.file.path);
-    } else {
-      // Fallback to local path
-      filePath = `/uploads/documents/${path.basename(req.file.path)}`;
     }
     
-    const document = await prisma.assetDocument.create({
-      data: {
-        assetId,
-        documentName: req.file.originalname,
-        documentType,
-        filePath,
-        fileSize: req.file.size,
-        uploadedBy: req.user.id,
-        uploadedByName: req.user.fullName
-      }
-    });
+    let document;
+    try {
+      document = await prisma.assetDocument.create({
+        data: {
+          assetId,
+          documentName: req.file.originalname,
+          documentType,
+          fileUrl,
+          storageKey,
+          fileSize: req.file.size,
+          mimeType: req.file.mimetype,
+          uploadedBy: req.user.id,
+          uploadedByName: req.user.fullName
+        }
+      });
+    } catch (dbErr) {
+       if (storageKey) await deleteFromS3(storageKey);
+       throw new Error('Database error. Document upload rolled back.');
+    }
 
     await logAssetTimeline({
       assetId: asset.id,
@@ -263,10 +321,12 @@ router.delete('/document/:docId', authorize(['ADMIN', 'IT_OFFICER']), async (req
     if (!document) return res.status(404).json({ error: 'Document not found' });
 
     // Delete file
-    if (document.filePath.startsWith('http')) {
-      await deleteFromS3(document.filePath);
-    } else {
-      const filePath = path.join(__dirname, '../', document.filePath);
+    if (document.storageKey) {
+      await deleteFromS3(document.storageKey);
+    } else if (document.fileUrl && document.fileUrl.startsWith('http')) {
+      await deleteFromS3(document.fileUrl);
+    } else if (document.fileUrl) {
+      const filePath = path.join(__dirname, '../', document.fileUrl);
       if (fs.existsSync(filePath)) {
         try {
           fs.unlinkSync(filePath);
@@ -289,6 +349,24 @@ router.delete('/document/:docId', authorize(['ADMIN', 'IT_OFFICER']), async (req
     });
 
     res.json({ message: 'Document deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Download Document (Signed URL)
+router.get('/document/:docId/download', async (req, res) => {
+  try {
+    const { docId } = req.params;
+    const document = await prisma.assetDocument.findUnique({ where: { id: docId } });
+    if (!document || !document.storageKey) {
+      return res.status(404).json({ error: 'Document not found or not stored securely' });
+    }
+    
+    const signedUrl = await getSignedDownloadUrl(document.storageKey);
+    if (!signedUrl) return res.status(500).json({ error: 'Failed to generate download URL' });
+    
+    res.json({ url: signedUrl });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

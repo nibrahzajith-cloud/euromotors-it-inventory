@@ -208,6 +208,34 @@ export default function AssetProfile() {
     }
   };
 
+  const handleDownloadSecureImage = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/uploads/image/${asset.id}/download`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Failed to get secure download URL');
+      const data = await res.json();
+      handleForceDownload(data.url, asset.imageFileName || `asset-image-${asset.assetCode}.webp`);
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  const handleDownloadSecureDoc = async (doc) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/uploads/document/${doc.id}/download`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Failed to get secure download URL');
+      const data = await res.json();
+      handleForceDownload(data.url, doc.documentName);
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  };
+
   // ─── Camera Capture Handlers ───────────────────────────────────────────────
   const openCamera = async () => {
     try {
@@ -333,12 +361,12 @@ export default function AssetProfile() {
     try {
       showToast('Optimizing image...', 'info');
       const options = {
-        maxSizeMB: 1,
+        maxSizeMB: 0.8,
         maxWidthOrHeight: 1920,
         useWebWorker: true,
         fileType: 'image/webp',
         initialQuality: 0.8,
-        exifOrientation: true
+        exifOrientation: false
       };
       
       fileToUpload = await imageCompression(file, options);
@@ -368,8 +396,18 @@ export default function AssetProfile() {
       }
       
       const data = await res.json();
-      setAsset(prev => ({ ...prev, imageUrl: data.imageUrl, thumbnailUrl: data.thumbnailUrl }));
-      showToast(`Image optimized successfully. Size reduced from ${formatBytes(originalSize)} to ${formatBytes(compressedSize)}.`, 'success');
+      setAsset(prev => ({ 
+        ...prev, 
+        imageUrl: data.imageUrl, 
+        thumbnailUrl: data.thumbnailUrl,
+        imageFileName: data.imageFileName,
+        imageFileSize: data.imageFileSize,
+        imageMimeType: data.imageMimeType,
+        imageUploadedAt: data.imageUploadedAt
+      }));
+      
+      const reduction = Math.round((1 - compressedSize / originalSize) * 100);
+      showToast(`Image optimized. Reduced by ${reduction}% (from ${formatBytes(originalSize)} to ${formatBytes(compressedSize)}).`, 'success');
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
@@ -401,7 +439,15 @@ export default function AssetProfile() {
          }
       }
       
-      setAsset(prev => ({ ...prev, imageUrl: null }));
+      setAsset(prev => ({ 
+        ...prev, 
+        imageUrl: null,
+        thumbnailUrl: null,
+        imageFileName: null,
+        imageFileSize: null,
+        imageMimeType: null,
+        imageUploadedAt: null
+      }));
       showToast('Image removed', 'success');
     } catch (err) {
       showToast(err.message, 'error');
@@ -412,8 +458,8 @@ export default function AssetProfile() {
     const files = Array.from(e.target.files);
     if (!files.length) return;
 
-    // Check if any file is over 1MB (1,000,000 bytes)
-    const hasLargeFile = files.some(f => f.size > 1000000);
+    // Check if any file is over 10MB
+    const hasLargeFile = files.some(f => f.size > 10485760);
     if (hasLargeFile) {
       setShowSizeError(true);
       if (e.target) e.target.value = '';
@@ -827,13 +873,13 @@ export default function AssetProfile() {
                       <>
                         <img src={`${API_URL.replace('/api', '')}${asset.imageUrl}`} alt={asset.model} className="w-full h-full object-cover" />
                         <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                           <button onClick={() => handleForceDownload(`${API_URL.replace('/api', '')}${asset.imageUrl}`, `asset-image-${asset.assetCode}`)} className="p-2 bg-blue-500/80 hover:bg-blue-600 rounded-full text-white backdrop-blur-sm transition-colors" title="Download Image">
+                           <button onClick={handleDownloadSecureImage} className="p-2 bg-blue-500/80 hover:bg-blue-600 rounded-full text-white backdrop-blur-sm transition-colors" title="Download Image">
                              <Download className="w-4 h-4" />
                            </button>
                            <button onClick={() => fileInputRef.current.click()} className="p-2 bg-white/20 hover:bg-white/40 rounded-full text-white backdrop-blur-sm transition-colors" title="Replace Image">
                              <Upload className="w-4 h-4" />
                            </button>
-                           <button onClick={handleImageDelete} className="p-2 bg-red-500/80 hover:bg-red-600 rounded-full text-white backdrop-blur-sm transition-colors" title="Remove Image">
+                           <button onClick={handleImageDelete} className="p-2 bg-red-500/80 hover:bg-red-600 rounded-full text-white backdrop-blur-sm transition-colors" title="Remove Image Permanently">
                              <Trash2 className="w-4 h-4" />
                            </button>
                         </div>
@@ -876,31 +922,42 @@ export default function AssetProfile() {
                       </div>
                     )}
                     {asset.imageUrl && (
-                      <div className="flex flex-wrap gap-2">
-                        <button 
-                          onClick={() => fileInputRef.current.click()} 
-                          disabled={uploadingImage}
-                          className="px-4 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
-                        >
-                          <Upload className="w-4 h-4" />
-                          Replace
-                        </button>
-                        <button 
-                          onClick={openCamera} 
-                          disabled={uploadingImage}
-                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50 shadow-sm"
-                        >
-                          <Camera className="w-4 h-4" />
-                          Re-capture
-                        </button>
-                        <button 
-                          onClick={handleImageDelete} 
-                          disabled={uploadingImage}
-                          className="px-4 py-2 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50 shadow-sm"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          Delete
-                        </button>
+                      <div className="flex flex-col gap-3">
+                        <div className="text-sm text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-700/50 p-3 rounded-xl border border-slate-100 dark:border-slate-700">
+                          <div className="font-medium text-slate-800 dark:text-slate-200 truncate" title={asset.imageFileName || 'Image'}>
+                            {asset.imageFileName || 'asset-image.webp'}
+                          </div>
+                          <div className="flex justify-between items-center mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            <span>{asset.imageFileSize ? formatBytes(asset.imageFileSize) : 'Unknown size'}</span>
+                            {asset.imageUploadedAt && <span>{new Date(asset.imageUploadedAt).toLocaleDateString()}</span>}
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button 
+                            onClick={() => fileInputRef.current.click()} 
+                            disabled={uploadingImage}
+                            className="px-4 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
+                          >
+                            <Upload className="w-4 h-4" />
+                            Replace
+                          </button>
+                          <button 
+                            onClick={openCamera} 
+                            disabled={uploadingImage}
+                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50 shadow-sm"
+                          >
+                            <Camera className="w-4 h-4" />
+                            Re-capture
+                          </button>
+                          <button 
+                            onClick={handleImageDelete} 
+                            disabled={uploadingImage}
+                            className="px-4 py-2 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50 shadow-sm"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            Delete
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -937,7 +994,7 @@ export default function AssetProfile() {
                             <div className="flex items-center justify-end gap-1 border-t border-slate-100 dark:border-slate-600 pt-2">
                                 <button 
                                   type="button"
-                                  onClick={() => handleForceDownload(`${API_URL.replace('/api', '')}${doc.filePath}`, doc.documentName)}
+                                  onClick={() => handleDownloadSecureDoc(doc)}
                                   className="p-1 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
                                   title="Download"
                                 >

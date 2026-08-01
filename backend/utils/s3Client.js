@@ -1,4 +1,5 @@
-const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const fs = require('fs');
 
 const s3Client = new S3Client({
@@ -30,7 +31,10 @@ async function uploadToS3(filePath, s3Key, mimeType) {
 
   try {
     await s3Client.send(command);
-    return `${PUBLIC_URL_PREFIX}/${s3Key}`;
+    return {
+      url: `${PUBLIC_URL_PREFIX}/${s3Key}`,
+      storageKey: s3Key
+    };
   } catch (error) {
     console.error("S3 Upload Error:", error);
     // Return null instead of throwing to trigger local fallback
@@ -61,7 +65,26 @@ async function deleteFromS3(urlOrKey) {
   }
 }
 
+/**
+ * Generate a pre-signed URL for downloading an object
+ */
+async function getSignedDownloadUrl(s3Key, expiresIn = 3600) {
+  try {
+    const command = new GetObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: s3Key,
+    });
+    // Create a signed URL that expires in 1 hour
+    const url = await getSignedUrl(s3Client, command, { expiresIn });
+    return url;
+  } catch (err) {
+    console.error("Error generating signed URL", err);
+    return null;
+  }
+}
+
 module.exports = {
   uploadToS3,
-  deleteFromS3
+  deleteFromS3,
+  getSignedDownloadUrl
 };
