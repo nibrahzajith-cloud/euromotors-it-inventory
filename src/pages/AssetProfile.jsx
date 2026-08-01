@@ -52,6 +52,7 @@ export default function AssetProfile() {
   // Delete Confirmation State
   const [docToDelete, setDocToDelete] = useState(null);
   const [isDeletingDoc, setIsDeletingDoc] = useState(false);
+  const [showDocDeleteModal, setShowDocDeleteModal] = useState(false);
   const [imageToDelete, setImageToDelete] = useState(false);
 
   useEffect(() => {
@@ -527,19 +528,22 @@ export default function AssetProfile() {
     }
   };
 
-  const handleDocDelete = async (docId) => {
+  const handleDocDelete = (docId) => {
     if (!docId) {
       showToast("Error: Document ID is missing.", "error");
-      console.error("handleDocDelete failed: docId is undefined");
       return;
     }
-    
     setDocToDelete(docId);
+    setShowDocDeleteModal(true);
+  };
+
+  const confirmDocDelete = async () => {
+    if (!docToDelete) return;
     setIsDeletingDoc(true);
     
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/uploads/document/${docId}`, {
+      const res = await fetch(`${API_URL}/uploads/document/${docToDelete}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -554,8 +558,9 @@ export default function AssetProfile() {
          throw new Error(errorMessage);
       }
       
-      setDocuments(prev => prev.filter(d => d.id !== docId));
+      setDocuments(prev => prev.filter(d => d.id !== docToDelete));
       showToast('Document deleted successfully', 'success');
+      setShowDocDeleteModal(false);
     } catch (err) {
       showToast(err.message || 'Failed to delete document', 'error');
     } finally {
@@ -1167,7 +1172,39 @@ function AssetTimeline({ timeline }) {
         </div>
       )}
 
-
+      {/* Delete Document Confirmation */}
+      {showDocDeleteModal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                <FileText className="w-8 h-8" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Delete Document</h3>
+              <p className="text-slate-600 dark:text-slate-400 mb-6 text-sm">
+                Are you sure you want to delete this document? This action cannot be undone.
+              </p>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => { setShowDocDeleteModal(false); setDocToDelete(null); }}
+                  disabled={isDeletingDoc}
+                  className="flex-1 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded-xl font-medium transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={confirmDocDelete}
+                  disabled={isDeletingDoc}
+                  className="flex-1 py-2.5 px-4 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium transition-colors shadow-sm flex justify-center items-center gap-2 disabled:opacity-50"
+                >
+                  {isDeletingDoc ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  {isDeletingDoc ? 'Deleting...' : 'Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {/* File Size Error Modal */}
       {showSizeError && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
