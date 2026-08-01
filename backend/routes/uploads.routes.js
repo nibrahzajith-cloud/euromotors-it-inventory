@@ -60,15 +60,25 @@ router.post('/image/:assetId', authorize(['ADMIN', 'IT_OFFICER']), uploadImage.f
 
     // Upload new image to S3
     const s3Key = `images/${Date.now()}-${imageFile.originalname}`;
-    const imageUrl = await uploadToS3(imageFile.path, s3Key, imageFile.mimetype);
-    fs.unlinkSync(imageFile.path);
+    let imageUrl = await uploadToS3(imageFile.path, s3Key, imageFile.mimetype);
+    
+    if (imageUrl) {
+      fs.unlinkSync(imageFile.path);
+    } else {
+      // Fallback to local
+      imageUrl = `/uploads/images/${path.basename(imageFile.path)}`;
+    }
     
     // Upload thumbnail to S3 if provided
     let thumbnailUrl = null;
     if (thumbnailFile) {
       const thumbS3Key = `thumbnails/${Date.now()}-thumb-${imageFile.originalname}`;
       thumbnailUrl = await uploadToS3(thumbnailFile.path, thumbS3Key, thumbnailFile.mimetype);
-      fs.unlinkSync(thumbnailFile.path);
+      if (thumbnailUrl) {
+        fs.unlinkSync(thumbnailFile.path);
+      } else {
+        thumbnailUrl = `/uploads/images/${path.basename(thumbnailFile.path)}`;
+      }
     }
     
     const updatedAsset = await prisma.asset.update({
@@ -177,10 +187,15 @@ router.post('/document/:assetId', authorize(['ADMIN', 'IT_OFFICER']), uploadDocu
 
     // Upload to S3
     const s3Key = `documents/${Date.now()}-${req.file.originalname}`;
-    const filePath = await uploadToS3(req.file.path, s3Key, req.file.mimetype);
+    let filePath = await uploadToS3(req.file.path, s3Key, req.file.mimetype);
     
-    // Delete temp file
-    fs.unlinkSync(req.file.path);
+    if (filePath) {
+      // Delete temp file if S3 upload succeeded
+      fs.unlinkSync(req.file.path);
+    } else {
+      // Fallback to local path
+      filePath = `/uploads/documents/${path.basename(req.file.path)}`;
+    }
     
     const document = await prisma.assetDocument.create({
       data: {

@@ -33,7 +33,8 @@ async function uploadToS3(filePath, s3Key, mimeType) {
     return `${PUBLIC_URL_PREFIX}/${s3Key}`;
   } catch (error) {
     console.error("S3 Upload Error:", error);
-    throw new Error('Failed to upload to Cloud Storage. Check your S3 credentials in .env');
+    // Return null instead of throwing to trigger local fallback
+    return null;
   }
 }
 
