@@ -419,5 +419,6 @@ export default function AssetProfile() {
             <QRCard assetCode={assetCode} id="asset-profile-qr-print" size={200} />
          </div>
       </div>
+    </>
   );
 }
