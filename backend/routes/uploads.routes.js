@@ -1,56 +1,5 @@
 const express = require('express');
 const router = express.Router();
-
-// =============================================================================
-// ASSET MEDIA MODULE — TEMPORARILY DISABLED FOR PRODUCTION
-// =============================================================================
-//
-// Status: Under Development
-// Feature Branch: feature/enterprise-asset-media-r2
-//
-// All upload, download, preview, delete, compression, PDF merge, and presigned
-// URL routes are commented out below. They will be re-enabled once:
-//
-//   1. Cloudflare R2 integration is fully tested on localhost
-//   2. Image optimization pipeline is validated
-//   3. PDF merge and document versioning is approved
-//   4. Presigned URL security model is reviewed
-//   5. Integration is merged from feature/enterprise-asset-media-r2 → main
-//
-// To re-enable: uncomment the block below and restore the original imports.
-// DO NOT DELETE — all original code is preserved.
-//
-// Original imports (restore when re-enabling):
-//   const prisma = require('../prismaClient');
-//   const { authenticate } = require('../middleware/auth.middleware');
-//   const { uploadImageMiddleware, uploadDocumentMiddleware } = require('../middleware/upload.middleware');
-//   const { uploadFile, deleteFile, getPresignedUrl } = require('../utils/s3Client');
-//
-// =============================================================================
-
-// Return 503 with a clear message for any /uploads/* request that reaches the server.
-// This makes the disabled state explicit rather than silently failing.
-const DISABLED_RESPONSE = {
-    error: 'Asset Media Module is under development and not available in this release.',
-    code: 'FEATURE_UNDER_DEVELOPMENT',
-    module: 'ASSET_MEDIA',
-    availableIn: 'future-release'
-};
-
-router.use((req, res) => {
-    res.status(503).json(DISABLED_RESPONSE);
-});
-
-module.exports = router;
-
-
-// =============================================================================
-// PRESERVED IMPLEMENTATION — DO NOT DELETE
-// Uncomment this entire block to restore full functionality.
-// =============================================================================
-
-/*
-
 const prisma = require('../prismaClient');
 const { authenticate } = require('../middleware/auth.middleware');
 const { uploadImageMiddleware, uploadDocumentMiddleware } = require('../middleware/upload.middleware');
@@ -87,7 +36,7 @@ router.post('/image/:assetId', authenticate, uploadImageMiddleware.fields([
         const imageKey = `assets/images/${safeCode}_${timestamp}.webp`;
         const thumbKey = `assets/thumbnails/${safeCode}_${timestamp}.webp`;
 
-        // Upload to S3
+        // Upload to S3/R2
         await uploadFile(imageFile.buffer, imageKey, imageFile.mimetype);
         if (thumbFile) {
             await uploadFile(thumbFile.buffer, thumbKey, thumbFile.mimetype);
@@ -133,7 +82,7 @@ router.post('/image/:assetId', authenticate, uploadImageMiddleware.fields([
         });
     } catch (error) {
         console.error('Image Upload Error:', error);
-        res.status(500).json({ error: 'Failed to upload image. Ensure storage variables are configured.' });
+        res.status(500).json({ error: 'Failed to upload image. Ensure R2 storage variables are configured.' });
     }
 });
 
@@ -147,7 +96,7 @@ router.delete('/image/:assetId', authenticate, async (req, res) => {
             return res.status(404).json({ error: 'Image not found' });
         }
 
-        // Delete from S3
+        // Delete from R2
         await deleteFile(asset.imageStorageKey);
         const thumbKey = asset.imageStorageKey.replace('assets/images/', 'assets/thumbnails/');
         try { await deleteFile(thumbKey); } catch(e) {}
@@ -240,7 +189,7 @@ router.post('/document/:assetId', authenticate, uploadDocumentMiddleware.single(
         const safeCode = asset.assetCode.replace(/[^a-zA-Z0-9_-]/g, '_');
         const docKey = `assets/documents/${safeCode}_${timestamp}.pdf`;
 
-        // Upload to S3
+        // Upload to R2
         await uploadFile(file.buffer, docKey, file.mimetype);
 
         // Create DB record
@@ -249,7 +198,7 @@ router.post('/document/:assetId', authenticate, uploadDocumentMiddleware.single(
                 assetId: asset.id,
                 documentName: file.originalname,
                 documentType: documentType || 'Asset Document',
-                fileUrl: '', // Will update with custom route
+                fileUrl: '',
                 storageKey: docKey,
                 fileSize: file.size,
                 mimeType: file.mimetype,
@@ -283,7 +232,7 @@ router.post('/document/:assetId', authenticate, uploadDocumentMiddleware.single(
         res.json(updatedDoc);
     } catch (error) {
         console.error('Document Upload Error:', error);
-        res.status(500).json({ error: 'Failed to upload document. Ensure storage variables are configured.' });
+        res.status(500).json({ error: 'Failed to upload document. Ensure R2 storage variables are configured.' });
     }
 });
 
@@ -298,7 +247,7 @@ router.delete('/document/:docId', authenticate, async (req, res) => {
         
         if (!document) return res.status(404).json({ error: 'Document not found' });
 
-        // Delete from S3
+        // Delete from R2
         if (document.storageKey) {
             await deleteFile(document.storageKey);
         }
@@ -366,4 +315,4 @@ router.get('/documents/:assetId', authenticate, async (req, res) => {
     }
 });
 
-*/
+module.exports = router;
