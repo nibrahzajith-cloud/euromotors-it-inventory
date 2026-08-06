@@ -1,90 +1,82 @@
 const { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
-const fs = require('fs');
+require('dotenv').config();
 
-const s3Client = new S3Client({
-  region: process.env.S3_REGION || 'auto',
-  endpoint: process.env.S3_ENDPOINT || 'https://example.r2.cloudflarestorage.com',
-  credentials: {
-    accessKeyId: process.env.S3_ACCESS_KEY_ID || 'dummy_key',
-    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || 'dummy_secret',
-  },
-  // Necessary for R2 or Supabase
-  forcePathStyle: true,
-});
+// Create the S3 Client
+// Configured to support AWS S3, Cloudflare R2, MinIO, or Supabase Storage dynamically.
+const s3Config = {
+    region: process.env.AWS_REGION || 'auto',
+    credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    }
+};
 
-const BUCKET_NAME = process.env.S3_BUCKET_NAME || 'it-inventory-assets';
-const PUBLIC_URL_PREFIX = process.env.S3_PUBLIC_URL_PREFIX || 'https://pub-example.r2.dev';
-
-/**
- * Upload a local file to S3 and return its public URL
- */
-async function uploadToS3(filePath, s3Key, mimeType) {
-  const fileStream = fs.createReadStream(filePath);
-
-  const command = new PutObjectCommand({
-    Bucket: BUCKET_NAME,
-    Key: s3Key,
-    Body: fileStream,
-    ContentType: mimeType,
-  });
-
-  try {
-    await s3Client.send(command);
-    return {
-      url: `${PUBLIC_URL_PREFIX}/${s3Key}`,
-      storageKey: s3Key
-    };
-  } catch (error) {
-    console.error("S3 Upload Error:", error);
-    // Return null instead of throwing to trigger local fallback
-    return null;
-  }
+// Only add endpoint if it is defined (required for R2/Supabase)
+if (process.env.AWS_ENDPOINT) {
+    s3Config.endpoint = process.env.AWS_ENDPOINT;
 }
 
-/**
- * Delete a file from S3 given its public URL or key
- */
-async function deleteFromS3(urlOrKey) {
-  let key = urlOrKey;
-  if (urlOrKey.startsWith('http')) {
-    key = urlOrKey.replace(`${PUBLIC_URL_PREFIX}/`, '');
-  }
-
-  const command = new DeleteObjectCommand({
-    Bucket: BUCKET_NAME,
-    Key: key,
-  });
-
-  try {
-    await s3Client.send(command);
-    return true;
-  } catch (error) {
-    console.error("S3 Delete Error:", error);
-    return false;
-  }
-}
+const s3Client = new S3Client(s3Config);
+const BUCKET_NAME = process.env.AWS_BUCKET_NAME;
 
 /**
- * Generate a pre-signed URL for downloading an object
+ * Uploads a file buffer to S3-compatible storage
+ * @param {Buffer} fileBuffer - The file content
+ * @param {string} fileName - Destination key path in bucket
+ * @param {string} mimeType - The content type of the file
+ * @returns {Promise<string>} The uploaded file key
  */
-async function getSignedDownloadUrl(s3Key, expiresIn = 3600) {
-  try {
-    const command = new GetObjectCommand({
-      Bucket: BUCKET_NAME,
-      Key: s3Key,
+const uploadFile = async (fileBuffer, fileName, mimeType) => {
+    if (!BUCKET_NAME) throw new Error("AWS_BUCKET_NAME is not configured.");
+    
+    const command = new PutObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: fileName,
+        Body: fileBuffer,
+        ContentType: mimeType,
     });
-    // Create a signed URL that expires in 1 hour
+
+    await s3Client.send(command);
+    return fileName;
+};
+
+/**
+ * Deletes a file from S3-compatible storage
+ * @param {string} fileName - The key path in bucket to delete
+ */
+const deleteFile = async (fileName) => {
+    if (!BUCKET_NAME) throw new Error("AWS_BUCKET_NAME is not configured.");
+    
+    const command = new DeleteObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: fileName,
+    });
+
+    await s3Client.send(command);
+};
+
+/**
+ * Generates a presigned URL to view/download a private file securely
+ * @param {string} fileName - The key path in bucket
+ * @param {number} expiresIn - Time in seconds until URL expires (default 1 hour)
+ * @returns {Promise<string>} Secure URL string
+ */
+const getPresignedUrl = async (fileName, expiresIn = 3600) => {
+    if (!BUCKET_NAME) throw new Error("AWS_BUCKET_NAME is not configured.");
+    
+    const command = new GetObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: fileName,
+    });
+
     const url = await getSignedUrl(s3Client, command, { expiresIn });
     return url;
-  } catch (err) {
-    console.error("Error generating signed URL", err);
-    return null;
-  }
-}
+};
 
 module.exports = {
-  uploadToS3,
-  deleteFromS3,
-  getSignedDownloadUrl
+    s3Client,
+    uploadFile,
+    deleteFile,
+    getPresignedUrl
 };

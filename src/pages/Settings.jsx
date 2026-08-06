@@ -11,6 +11,7 @@ const API_URL = _rawApi.endsWith('/api') ? _rawApi : `${_rawApi.replace(/\/$/, '
 
 export default function Settings() {
   const { showToast } = useToast();
+  const { user } = useAuth();
   const navigate = useNavigate();
   
   const [csvData, setCsvData] = useState([]);
@@ -20,6 +21,8 @@ export default function Settings() {
   const [transferredCount, setTransferredCount] = useState(0);
   const [validationReport, setValidationReport] = useState(null);
   const [selectedFileInfo, setSelectedFileInfo] = useState(null);
+  const [pendingUpload, setPendingUpload] = useState(null);
+  const [forceUploadFlag, setForceUploadFlag] = useState(false);
   
   const [assetCodePrefix, setAssetCodePrefix] = useState('AST');
   const [warrantyPeriod, setWarrantyPeriod] = useState(12);
@@ -139,6 +142,7 @@ export default function Settings() {
 
     setValidationReport(null);
     setSelectedFileInfo(null);
+    setPendingUpload(null);
     setCsvData([]);
 
     if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
@@ -239,6 +243,7 @@ export default function Settings() {
 
       if (fileErrors.length > 0) {
          setValidationReport(fileErrors);
+         setPendingUpload({ parsedAssets, file });
          showToast(`Validation Failed: Found ${fileErrors.length} duplicates in your file.`, 'error');
          e.target.value = null;
          return;
@@ -282,7 +287,7 @@ export default function Settings() {
             const res = await fetch(`${API_URL}/assets/bulk`, {
                method: 'POST',
                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-               body: JSON.stringify({ assets: chunk, rowOffset })
+               body: JSON.stringify({ assets: chunk, rowOffset, forceUpload: forceUploadFlag })
             });
             
             const data = await res.json();
@@ -333,6 +338,7 @@ export default function Settings() {
          setImportStatus({ fatal: err.message });
       } finally {
          setIsImporting(false);
+         setForceUploadFlag(false);
       }
   };
 
@@ -517,7 +523,7 @@ export default function Settings() {
                      </div>
                      <div className="flex gap-3">
                         <button 
-                           onClick={() => { setSelectedFileInfo(null); setCsvData([]); }}
+                           onClick={() => { setSelectedFileInfo(null); setCsvData([]); setForceUploadFlag(false); }}
                            disabled={isImporting}
                            className="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                         >
@@ -543,12 +549,27 @@ export default function Settings() {
                         <AlertCircle className="w-5 h-5" /> 
                         Validation Failed: {validationReport.length} Duplicates Found
                      </h3>
-                     <button 
-                        onClick={() => downloadValidationReport(validationReport)}
-                        className="px-3 py-1.5 bg-white text-red-700 border border-red-200 rounded-lg hover:bg-red-50 flex items-center gap-2 text-sm font-semibold shadow-sm transition-colors"
-                     >
-                        <Download className="w-4 h-4" /> Download Report
-                     </button>
+                     <div className="flex gap-2">
+                        {user?.role === 'ADMIN' && pendingUpload && (
+                           <button 
+                              onClick={() => {
+                                 setForceUploadFlag(true);
+                                 processParsedAssets(pendingUpload.parsedAssets, pendingUpload.file);
+                                 setValidationReport(null);
+                                 setPendingUpload(null);
+                              }}
+                              className="px-3 py-1.5 bg-red-600 text-white border border-red-700 rounded-lg hover:bg-red-700 flex items-center gap-2 text-sm font-semibold shadow-sm transition-colors"
+                           >
+                              <Play className="w-4 h-4" /> Force Upload
+                           </button>
+                        )}
+                        <button 
+                           onClick={() => downloadValidationReport(validationReport)}
+                           className="px-3 py-1.5 bg-white text-red-700 border border-red-200 rounded-lg hover:bg-red-50 flex items-center gap-2 text-sm font-semibold shadow-sm transition-colors"
+                        >
+                           <Download className="w-4 h-4" /> Download Report
+                        </button>
+                     </div>
                   </div>
                   <div className="overflow-x-auto max-h-80 overflow-y-auto">
                      <table className="w-full text-sm text-left">
