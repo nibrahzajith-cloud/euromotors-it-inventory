@@ -48,18 +48,19 @@ router.get('/summary', authenticate, async (req, res) => {
       prisma.asset.findMany({ orderBy: { createdAt: 'desc' }, take: 5, select: { assetCode: true, model: true, status: true } })
     ]);
 
-    // Counts for cards
-    const assignedCount = await prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'EMPLOYEE' } });
-    const availableCount = await prisma.asset.count({ where: { status: 'AVAILABLE' } });
-    const repairCount = await prisma.asset.count({ where: { status: 'UNDER_REPAIR' } });
-    const warrantyCount = await prisma.asset.count({ where: { warrantyExpiryDate: { lte: thirtyDaysFromNow, gt: now } } });
-    
-    // Add missing counts for regular summary
-    const [departmentAssets, locationAssets, sharedAssets, inStoreAssets] = await Promise.all([
-       prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'DEPARTMENT' } }),
-       prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'LOCATION' } }),
-       prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'SHARED' } }),
-       prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'STORE' } })
+    // All counts in a single parallel batch — zero serial round-trips
+    const [
+      assignedCount, availableCount, repairCount, warrantyCount,
+      departmentAssets, locationAssets, sharedAssets, inStoreAssets
+    ] = await Promise.all([
+      prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'EMPLOYEE' } }),
+      prisma.asset.count({ where: { status: 'AVAILABLE' } }),
+      prisma.asset.count({ where: { status: 'UNDER_REPAIR' } }),
+      prisma.asset.count({ where: { warrantyExpiryDate: { lte: thirtyDaysFromNow, gt: now } } }),
+      prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'DEPARTMENT' } }),
+      prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'LOCATION' } }),
+      prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'SHARED' } }),
+      prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'STORE' } })
     ]);
 
     res.json({
@@ -158,39 +159,44 @@ router.get('/advanced', authenticate, async (req, res) => {
       prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'STORE' } })
     ]);
 
-    // Calculate trends (comparing to total)
-    // For a real app, we'd compare to yesterday's snapshot.
-    // Here we'll simulate a trend based on recent additions.
+    // Build all 7-day buckets upfront, then fire ALL queries in a single Promise.all.
+    // BEFORE: 7 iterations × 3 queries each = 21 SERIAL round-trips
+    // AFTER:  21 queries launched simultaneously = 1 parallel round-trip batch
     const lastWeek = new Date(new Date().getTime() - 7 * 24 * 60 * 60 * 1000);
-    const addedLastWeek = await prisma.asset.count({ where: { createdAt: { gte: lastWeek } } });
-
-    // Warranty segments
-    const expiring7 = await prisma.asset.findMany({ where: { warrantyExpiryDate: { lte: sevenDaysFromNow, gt: new Date() } }, take: 5 });
-    const expiring15 = await prisma.asset.findMany({ where: { warrantyExpiryDate: { lte: fifteenDaysFromNow, gt: sevenDaysFromNow } }, take: 5 });
-    const expiring30 = await prisma.asset.findMany({ where: { warrantyExpiryDate: { lte: thirtyDaysFromNow, gt: fifteenDaysFromNow } }, take: 5 });
-
-    // 7-Day Activity Timeline Data
-    const timelineData = [];
-    for (let i = 6; i >= 0; i--) {
+    const dayBuckets = Array.from({ length: 7 }, (_, i) => {
       const d = new Date();
       d.setHours(0, 0, 0, 0);
-      d.setDate(d.getDate() - i);
+      d.setDate(d.getDate() - (6 - i));
       const nextD = new Date(d);
       nextD.setDate(d.getDate() + 1);
+      return { d, nextD };
+    });
 
-      const [assigned, returned, repairs] = await Promise.all([
+    // Launch all queries simultaneously (21 + 4 extra = 25 total, all parallel)
+    const [
+      addedLastWeek,
+      expiring7, expiring15, expiring30,
+      ...timelineResults
+    ] = await Promise.all([
+      prisma.asset.count({ where: { createdAt: { gte: lastWeek } } }),
+      prisma.asset.findMany({ where: { warrantyExpiryDate: { lte: sevenDaysFromNow, gt: new Date() } }, take: 5 }),
+      prisma.asset.findMany({ where: { warrantyExpiryDate: { lte: fifteenDaysFromNow, gt: sevenDaysFromNow } }, take: 5 }),
+      prisma.asset.findMany({ where: { warrantyExpiryDate: { lte: thirtyDaysFromNow, gt: fifteenDaysFromNow } }, take: 5 }),
+      // 7 × 3 = 21 timeline queries, all in parallel
+      ...dayBuckets.flatMap(({ d, nextD }) => [
         prisma.assetAssignment.count({ where: { assignedDate: { gte: d, lt: nextD } } }),
         prisma.assetAssignment.count({ where: { returnedDate: { gte: d, lt: nextD } } }),
         prisma.maintenanceLog.count({ where: { createdAt: { gte: d, lt: nextD } } })
-      ]);
+      ])
+    ]);
 
-      timelineData.push({
-        date: d.toLocaleDateString([], { weekday: 'short', day: 'numeric' }),
-        assigned,
-        returned,
-        repairs
-      });
-    }
+    // Reconstruct timeline data from the flat parallel results array
+    const timelineData = dayBuckets.map(({ d }, i) => ({
+      date: d.toLocaleDateString([], { weekday: 'short', day: 'numeric' }),
+      assigned: timelineResults[i * 3],
+      returned: timelineResults[i * 3 + 1],
+      repairs: timelineResults[i * 3 + 2]
+    }));
 
     // Enhanced Analytics Aggregation
     const assetStatsByDept = await prisma.asset.groupBy({

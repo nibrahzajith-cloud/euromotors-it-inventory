@@ -101,22 +101,41 @@ const renderActiveShape = (props) => {
   );
 };
 
+const CACHE_KEY = 'analyticsDashboardCache';
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+const loadCache = () => {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const { data, timestamp } = JSON.parse(raw);
+    return { data, timestamp, isStale: Date.now() - timestamp > CACHE_TTL_MS };
+  } catch (_) { return null; }
+};
+
+const saveCache = (data) => {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ data, timestamp: Date.now() }));
+  } catch (_) {}
+};
+
 export default function AnalyticsDashboard() {
   const navigate = useNavigate();
-  const [data, setData] = useState(() => {
-    try {
-      const cached = localStorage.getItem('analyticsDashboardCache');
-      return cached ? JSON.parse(cached) : null;
-    } catch (e) {
-      return null;
-    }
-  });
-  const [loading, setLoading] = useState(!data);
+
+  // Stale-while-revalidate: load cached data instantly on mount
+  const cached = React.useMemo(() => loadCache(), []);
+  const [data, setData] = useState(cached?.data ?? null);
+  // Only show skeleton if there's NO cache at all — otherwise render cached data immediately
+  const [loading, setLoading] = useState(!cached);
+  const [revalidating, setRevalidating] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [autoRefresh, setAutoRefresh] = useState(true);
 
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchData = async (isBackground = false) => {
+      // Background revalidation: show a subtle indicator instead of blocking the UI
+      if (isBackground) setRevalidating(true);
+
       try {
         const token = localStorage.getItem('token');
         const res = await fetch(`${API_URL}/dashboard/advanced`, {
@@ -124,21 +143,33 @@ export default function AnalyticsDashboard() {
         });
         const result = await res.json();
         setData(result);
-        localStorage.setItem('analyticsDashboardCache', JSON.stringify(result));
+        saveCache(result);
       } catch (err) {
         console.error('Failed to fetch analytics:', err);
       } finally {
         setLoading(false);
+        setRevalidating(false);
       }
     };
-    
-    fetchData();
+
+    // If cache exists but is fresh, still revalidate silently in the background
+    // If cache is stale or missing, fetch normally
+    if (cached && !cached.isStale) {
+      // Data is fresh — background revalidate quietly
+      fetchData(true);
+    } else {
+      // No cache or stale cache — fetch (shows skeleton only if no cache)
+      fetchData(false);
+    }
+
     let interval;
     if (autoRefresh) {
-      interval = setInterval(fetchData, 30000);
+      interval = setInterval(() => fetchData(true), 30000);
     }
     return () => clearInterval(interval);
   }, [autoRefresh]);
+
+
 
   const chartData = useMemo(() => {
     if (!data || !data.summary) return [];
@@ -197,6 +228,12 @@ export default function AnalyticsDashboard() {
           <div>
             <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
                Analytics Dashboard
+               {revalidating && (
+                 <span className="flex items-center gap-1.5 text-xs font-medium text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 rounded-full px-2.5 py-0.5 ml-1">
+                   <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                   Refreshing
+                 </span>
+               )}
             </h1>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
                Overview of system performance, assets, and operational metrics.
