@@ -255,8 +255,9 @@ export default function Settings() {
     e.target.value = null; // reset allowing same upload binding securely
   };
 
-  const handleBulkImport = async () => {
-      if(!csvData || csvData.length === 0) return;
+  const handleBulkImport = async (overrideData = null, overrideForce = false) => {
+      const dataToProcess = overrideData || csvData;
+      if(!dataToProcess || dataToProcess.length === 0) return;
       setIsImporting(true);
       setImportStatus(null);
       setUploadProgress(0);
@@ -266,7 +267,7 @@ export default function Settings() {
       try {
          const token = localStorage.getItem('token');
          const chunkSize = 100;
-         const totalChunks = Math.ceil(csvData.length / chunkSize);
+         const totalChunks = Math.ceil(dataToProcess.length / chunkSize);
          
          let aggregatedResults = {
            totalRows: 0,
@@ -281,13 +282,13 @@ export default function Settings() {
          };
 
          for (let i = 0; i < totalChunks; i++) {
-            const chunk = csvData.slice(i * chunkSize, (i + 1) * chunkSize);
+            const chunk = dataToProcess.slice(i * chunkSize, (i + 1) * chunkSize);
             const rowOffset = (i * chunkSize) + 2; // +2 because Excel rows start at 1 and Row 1 is header
 
             const res = await fetch(`${API_URL}/assets/bulk`, {
                method: 'POST',
                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-               body: JSON.stringify({ assets: chunk, rowOffset, forceUpload: forceUploadFlag })
+               body: JSON.stringify({ assets: chunk, rowOffset, forceUpload: forceUploadFlag || overrideForce })
             });
             
             const data = await res.json();
@@ -306,7 +307,7 @@ export default function Settings() {
                 aggregatedResults.errors.push(...data.errors);
             }
             
-            setTransferredCount(Math.min((i + 1) * chunkSize, csvData.length));
+            setTransferredCount(Math.min((i + 1) * chunkSize, dataToProcess.length));
             setUploadProgress(Math.round(((i + 1) / totalChunks) * 100));
          }
 
@@ -530,7 +531,7 @@ export default function Settings() {
                            Cancel
                         </button>
                         <button 
-                           onClick={handleBulkImport}
+                           onClick={() => handleBulkImport()}
                            disabled={isImporting}
                            className="px-5 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 flex items-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                         >
@@ -612,7 +613,7 @@ export default function Settings() {
                     </div>
                     <span className="text-slate-800 font-bold text-xl">Transferring assets to database...</span>
                     <span className="text-slate-500 text-sm text-center">
-                       Processing {selectedFileInfo?.count || csvData.length} records.<br/>
+                       Processing {selectedFileInfo?.count || (csvData && csvData.length) || 0} records.<br/>
                        Please do not close or refresh this window.
                     </span>
                   </div>
@@ -708,8 +709,23 @@ export default function Settings() {
                                  <span className="text-sm font-bold text-orange-800 flex items-center gap-2">
                                    <AlertCircle className="w-4 h-4" /> Import Report: {importStatus.errors.length} Failed Records
                                  </span>
-                                 <button                                      onClick={() => {
-                                        if (!importStatus.errors.length) return;
+                                 <div className="flex gap-2">
+                                    {user?.role === 'ADMIN' && (
+                                       <button 
+                                          onClick={() => {
+                                             const failedData = importStatus.errors.map(e => e.originalData).filter(Boolean);
+                                             if(failedData.length > 0) {
+                                                handleBulkImport(failedData, true);
+                                             }
+                                          }}
+                                          className="px-4 py-2 bg-red-600 text-white border border-red-700 rounded-lg hover:bg-red-700 flex items-center gap-2 text-xs font-bold shadow-sm transition-colors"
+                                       >
+                                          <Play className="w-4 h-4" /> Force Upload Failed
+                                       </button>
+                                    )}
+                                    <button 
+                                        onClick={() => {
+                                            if (!importStatus.errors.length) return;
                                         
                                         const headers = ['Row Number', 'Asset Code', 'Column Name', 'Current Value', 'Failure Reason'];
                                         const csvRows = [headers.join(',')];
@@ -738,6 +754,7 @@ export default function Settings() {
                                  >
                                     <DownloadCloud className="w-4 h-4" /> Download Error Report (CSV)
                                  </button>
+                                 </div>
                               </div>
                               <div className="overflow-x-auto max-h-64 overflow-y-auto">
                                  <table className="w-full text-sm text-left">
