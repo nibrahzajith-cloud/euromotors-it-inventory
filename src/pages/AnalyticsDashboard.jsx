@@ -11,6 +11,8 @@ import {
   ResponsiveContainer, PieChart, Pie, Cell, Sector
 } from 'recharts';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import StorageOverview from '../components/Admin/StorageOverview';
 
 const _rawApi = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 const API_URL = _rawApi.endsWith('/api') ? _rawApi : `${_rawApi.replace(/\/$/, '')}/api`;
@@ -121,6 +123,7 @@ const saveCache = (data) => {
 
 export default function AnalyticsDashboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   // Stale-while-revalidate: load cached data instantly on mount
   const cached = React.useMemo(() => loadCache(), []);
@@ -577,6 +580,13 @@ export default function AnalyticsDashboard() {
             </GlassCard>
           </div>
         </div>
+
+        {/* Admin Storage Overview (Admin Only) */}
+        {user?.role === 'ADMIN' && (
+          <div className="pt-2">
+            <StorageOverview embedded={true} />
+          </div>
+        )}
 
         {/* Quick Links Section */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">

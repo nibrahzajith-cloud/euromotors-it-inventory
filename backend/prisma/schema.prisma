@@ -190,10 +190,11 @@ model MaintenanceLog {
 }
 
 model SystemSettings {
-  id              String   @id @default("global")
-  assetCodePrefix String   @default("AST")
-  warrantyPeriod  Int      @default(12)
-  updatedAt       DateTime @updatedAt
+  id               String   @id @default("global")
+  assetCodePrefix  String   @default("AST")
+  warrantyPeriod   Int      @default(12)
+  dbStorageLimitMB Int?
+  updatedAt        DateTime @updatedAt
 }
 
 model AuditLog {

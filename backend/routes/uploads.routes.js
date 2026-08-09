@@ -4,9 +4,10 @@ const router = express.Router();
 const prisma = require('../prismaClient');
 const { authenticate, authorize } = require('../middleware/auth.middleware');
 const { uploadImageMiddleware, uploadDocumentMiddleware } = require('../middleware/upload.middleware');
-const { uploadFile, deleteFile, getPresignedUrl } = require('../utils/s3Client');
+const { uploadFile, deleteFile, getPresignedUrl, getR2StorageStats } = require('../utils/s3Client');
 
 const mediaEditorsOnly = authorize(['ADMIN', 'IT_OFFICER']);
+const adminOnly = authorize(['ADMIN']);
 
 function storageErrorResponse(res, error, fallbackMessage) {
     if (error?.code === 'R2_NOT_CONFIGURED') {
@@ -22,6 +23,122 @@ async function writeAuditLog(data) {
         console.error('Failed to write asset media audit log:', error);
     }
 }
+
+// -----------------------------------------------------------------------------
+// ADMIN-ONLY STORAGE MONITORING
+// -----------------------------------------------------------------------------
+
+router.get('/storage/stats', authenticate, adminOnly, async (req, res) => {
+    try {
+        const forceRefresh = req.query.refresh === 'true';
+
+        // 1. Calculate actual R2 stats
+        const r2Stats = await getR2StorageStats(forceRefresh);
+
+        // 2. Calculate actual PostgreSQL Database size & table breakdown
+        const dbSizeResult = await prisma.$queryRawUnsafe(`
+            SELECT 
+                pg_database_size(current_database())::text AS total_bytes,
+                pg_size_pretty(pg_database_size(current_database())) AS pretty_size
+        `);
+
+        const tableSizes = await prisma.$queryRawUnsafe(`
+            SELECT 
+                relname AS table_name,
+                pg_total_relation_size(relid)::text AS total_bytes,
+                pg_relation_size(relid)::text AS table_bytes,
+                pg_indexes_size(relid)::text AS index_bytes,
+                pg_size_pretty(pg_total_relation_size(relid)) AS pretty_total_size
+            FROM pg_catalog.pg_statio_user_tables
+            ORDER BY pg_total_relation_size(relid) DESC
+        `);
+
+        // 3. Fetch configured DB reference limit from SystemSettings
+        let configuredReferenceLimitMB = null;
+        try {
+            const settings = await prisma.systemSettings.findUnique({
+                where: { id: 'global' },
+                select: { dbStorageLimitMB: true },
+            });
+            configuredReferenceLimitMB = settings?.dbStorageLimitMB ?? null;
+        } catch (_) {}
+
+        const dbTotalBytes = Number(dbSizeResult[0]?.total_bytes) || 0;
+        const dbPrettySize = dbSizeResult[0]?.pretty_size || '0 MB';
+
+        res.json({
+            r2: {
+                isConfigured: r2Stats.isConfigured,
+                totalBytes: r2Stats.totalBytes,
+                totalCount: r2Stats.totalCount,
+                breakdown: r2Stats.breakdown,
+                referenceLimitBytes: r2Stats.referenceLimitBytes, // 10 GB
+                cachedAt: r2Stats.cachedAt,
+            },
+            database: {
+                totalBytes: dbTotalBytes,
+                prettySize: dbPrettySize,
+                tables: (tableSizes || []).map((t) => ({
+                    tableName: t.table_name,
+                    totalBytes: Number(t.total_bytes) || 0,
+                    tableBytes: Number(t.table_bytes) || 0,
+                    indexBytes: Number(t.index_bytes) || 0,
+                    prettyTotalSize: t.pretty_total_size,
+                })),
+                configuredReferenceLimitMB: configuredReferenceLimitMB,
+            },
+        });
+    } catch (error) {
+        console.error('Storage Stats Error:', error);
+        res.status(500).json({ error: 'Failed to retrieve storage statistics' });
+    }
+});
+
+// Configure Database Reference Capacity (Admin Only)
+router.post('/storage/db-capacity', authenticate, adminOnly, async (req, res) => {
+    try {
+        const { capacityMB } = req.body;
+        let valueToSet = null;
+
+        if (capacityMB !== null && capacityMB !== undefined && capacityMB !== '') {
+            const num = Number(capacityMB);
+            if (isNaN(num) || num <= 0 || !Number.isInteger(num)) {
+                return res.status(400).json({ error: 'Capacity must be a positive integer in Megabytes (MB) or null to unconfigure.' });
+            }
+            valueToSet = num;
+        }
+
+        const updated = await prisma.systemSettings.upsert({
+            where: { id: 'global' },
+            update: { dbStorageLimitMB: valueToSet },
+            create: {
+                id: 'global',
+                assetCodePrefix: 'AST',
+                warrantyPeriod: 12,
+                dbStorageLimitMB: valueToSet,
+            },
+        });
+
+        await writeAuditLog({
+            userId: req.user.id,
+            userName: req.user.fullName,
+            userRole: req.user.role,
+            action: 'UPDATE_STORAGE_CAPACITY',
+            module: 'SYSTEM_SETTINGS',
+            description: valueToSet 
+                ? `Admin set Database Reference Capacity to ${valueToSet} MB`
+                : 'Admin cleared Database Reference Capacity configuration',
+        });
+
+        res.json({
+            success: true,
+            dbStorageLimitMB: updated.dbStorageLimitMB,
+        });
+    } catch (error) {
+        console.error('Update DB Capacity Error:', error);
+        res.status(500).json({ error: 'Failed to update database reference capacity' });
+    }
+});
 
 // -----------------------------------------------------------------------------
 // ASSET IMAGE ROUTES
@@ -49,8 +166,8 @@ router.post('/image/:assetId', authenticate, mediaEditorsOnly, uploadImageMiddle
             'image/png': 'png',
             'image/webp': 'webp'
         };
-        const imageExtension = extensionByMime[imageFile.mimetype];
-        const thumbExtension = thumbFile ? extensionByMime[thumbFile.mimetype] : null;
+        const imageExtension = extensionByMime[imageFile.mimetype] || 'webp';
+        const thumbExtension = thumbFile ? (extensionByMime[thumbFile.mimetype] || 'webp') : 'webp';
         const imageKey = `assets/images/${safeCode}_${timestamp}.${imageExtension}`;
         const thumbKey = thumbFile
             ? `assets/thumbnails/${safeCode}_${timestamp}.${thumbExtension}`
@@ -84,7 +201,7 @@ router.post('/image/:assetId', authenticate, mediaEditorsOnly, uploadImageMiddle
             throw error;
         }
 
-        // The database now points at the new objects, so old objects can be removed safely.
+        // Clean up previous image objects from R2
         if (asset.imageStorageKey) {
             const oldKeys = [asset.imageStorageKey];
             if (asset.thumbnailUrl) {
@@ -97,15 +214,15 @@ router.post('/image/:assetId', authenticate, mediaEditorsOnly, uploadImageMiddle
 
         // Audit Log
         await writeAuditLog({
-                userId: req.user.id,
-                userName: req.user.fullName,
-                userRole: req.user.role,
-                action: 'UPLOAD_IMAGE',
-                module: 'ASSET_MEDIA',
-                entityType: 'ASSET',
-                entityId: assetId,
-                entityCode: asset.assetCode,
-                description: `Uploaded new asset image for ${asset.assetCode}`
+            userId: req.user.id,
+            userName: req.user.fullName,
+            userRole: req.user.role,
+            action: 'UPLOAD_IMAGE',
+            module: 'ASSET_MEDIA',
+            entityType: 'ASSET',
+            entityId: assetId,
+            entityCode: asset.assetCode,
+            description: `Uploaded high-quality asset image for ${asset.assetCode}`
         });
 
         res.json({
@@ -155,15 +272,15 @@ router.delete('/image/:assetId', authenticate, mediaEditorsOnly, async (req, res
         });
 
         await writeAuditLog({
-                userId: req.user.id,
-                userName: req.user.fullName,
-                userRole: req.user.role,
-                action: 'DELETE_IMAGE',
-                module: 'ASSET_MEDIA',
-                entityType: 'ASSET',
-                entityId: assetId,
-                entityCode: asset.assetCode,
-                description: `Deleted asset image for ${asset.assetCode}`
+            userId: req.user.id,
+            userName: req.user.fullName,
+            userRole: req.user.role,
+            action: 'DELETE_IMAGE',
+            module: 'ASSET_MEDIA',
+            entityType: 'ASSET',
+            entityId: assetId,
+            entityCode: asset.assetCode,
+            description: `Deleted asset image for ${asset.assetCode}`
         });
 
         res.json({ success: true, message: 'Image deleted successfully' });
@@ -204,12 +321,11 @@ router.get('/image/:assetId/:type', authenticate, async (req, res) => {
     }
 });
 
-
 // -----------------------------------------------------------------------------
 // ASSET DOCUMENTS ROUTES
 // -----------------------------------------------------------------------------
 
-// Upload Asset Document (Merged PDF)
+// Upload Asset Document (Combined or Categorized PDF)
 router.post('/document/:assetId', authenticate, mediaEditorsOnly, uploadDocumentMiddleware.single('document'), async (req, res) => {
     try {
         const { assetId } = req.params;
@@ -234,7 +350,7 @@ router.post('/document/:assetId', authenticate, mediaEditorsOnly, uploadDocument
                     id: documentId,
                     assetId: asset.id,
                     documentName: file.originalname,
-                    documentType: documentType || 'Asset Document',
+                    documentType: documentType || 'Other Supporting Document',
                     fileUrl: `/api/uploads/document/${documentId}/view`,
                     storageKey: docKey,
                     fileSize: file.size,
@@ -251,15 +367,15 @@ router.post('/document/:assetId', authenticate, mediaEditorsOnly, uploadDocument
         }
 
         await writeAuditLog({
-                userId: req.user.id,
-                userName: req.user.fullName,
-                userRole: req.user.role,
-                action: 'UPLOAD_DOCUMENT',
-                module: 'ASSET_MEDIA',
-                entityType: 'ASSET',
-                entityId: assetId,
-                entityCode: asset.assetCode,
-                description: `Uploaded document ${file.originalname} for ${asset.assetCode}`
+            userId: req.user.id,
+            userName: req.user.fullName,
+            userRole: req.user.role,
+            action: 'UPLOAD_DOCUMENT',
+            module: 'ASSET_MEDIA',
+            entityType: 'ASSET',
+            entityId: assetId,
+            entityCode: asset.assetCode,
+            description: `Uploaded document (${documentType || 'Procurement Document'}) for ${asset.assetCode}`
         });
 
         res.json(updatedDoc);
@@ -289,15 +405,15 @@ router.delete('/document/:docId', authenticate, mediaEditorsOnly, async (req, re
         await prisma.assetDocument.delete({ where: { id: docId } });
 
         await writeAuditLog({
-                userId: req.user.id,
-                userName: req.user.fullName,
-                userRole: req.user.role,
-                action: 'DELETE_DOCUMENT',
-                module: 'ASSET_MEDIA',
-                entityType: 'ASSET',
-                entityId: document.assetId,
-                entityCode: document.asset.assetCode,
-                description: `Deleted document ${document.documentName} for ${document.asset.assetCode}`
+            userId: req.user.id,
+            userName: req.user.fullName,
+            userRole: req.user.role,
+            action: 'DELETE_DOCUMENT',
+            module: 'ASSET_MEDIA',
+            entityType: 'ASSET',
+            entityId: document.assetId,
+            entityCode: document.asset?.assetCode || 'N/A',
+            description: `Deleted document ${document.documentName}`
         });
 
         res.json({ success: true, message: 'Document deleted successfully' });

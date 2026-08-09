@@ -3,6 +3,7 @@ const {
   PutObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  ListObjectsV2Command,
 } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
@@ -15,6 +16,16 @@ const REQUIRED_ENV_VARS = [
 ];
 
 let client;
+let storageCache = {
+  data: null,
+  timestamp: 0,
+};
+const CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes cache
+
+function isR2Configured() {
+  const missing = REQUIRED_ENV_VARS.filter((key) => !process.env[key]?.trim());
+  return missing.length === 0;
+}
 
 function assertR2Configured() {
   const missing = REQUIRED_ENV_VARS.filter((key) => !process.env[key]?.trim());
@@ -61,6 +72,9 @@ async function uploadFile(buffer, key, mimeType) {
     ContentType: mimeType || 'application/octet-stream',
   }));
 
+  // Invalidate cache on new upload
+  storageCache.timestamp = 0;
+
   return { storageKey: key };
 }
 
@@ -70,6 +84,9 @@ async function deleteFile(key) {
     Bucket: process.env.R2_BUCKET_NAME,
     Key: key,
   }));
+
+  // Invalidate cache on delete
+  storageCache.timestamp = 0;
 }
 
 async function getPresignedUrl(key, expiresIn = 300, downloadName) {
@@ -90,9 +107,94 @@ async function getPresignedUrl(key, expiresIn = 300, downloadName) {
   });
 }
 
+async function getR2StorageStats(forceRefresh = false) {
+  if (!isR2Configured()) {
+    return {
+      isConfigured: false,
+      totalBytes: 0,
+      totalCount: 0,
+      breakdown: {
+        images: { count: 0, bytes: 0 },
+        thumbnails: { count: 0, bytes: 0 },
+        documents: { count: 0, bytes: 0 },
+        other: { count: 0, bytes: 0 },
+      },
+      referenceLimitBytes: 10 * 1024 * 1024 * 1024,
+    };
+  }
+
+  const now = Date.now();
+  if (!forceRefresh && storageCache.data && (now - storageCache.timestamp < CACHE_TTL_MS)) {
+    return storageCache.data;
+  }
+
+  const r2 = getR2Client();
+  let isTruncated = true;
+  let continuationToken = undefined;
+  let totalBytes = 0;
+  let totalCount = 0;
+
+  const breakdown = {
+    images: { count: 0, bytes: 0 },
+    thumbnails: { count: 0, bytes: 0 },
+    documents: { count: 0, bytes: 0 },
+    other: { count: 0, bytes: 0 },
+  };
+
+  while (isTruncated) {
+    const response = await r2.send(new ListObjectsV2Command({
+      Bucket: process.env.R2_BUCKET_NAME,
+      ContinuationToken: continuationToken,
+    }));
+
+    const contents = response.Contents || [];
+    for (const item of contents) {
+      const size = Number(item.Size) || 0;
+      const key = item.Key || '';
+      totalCount++;
+      totalBytes += size;
+
+      if (key.startsWith('assets/images/')) {
+        breakdown.images.count++;
+        breakdown.images.bytes += size;
+      } else if (key.startsWith('assets/thumbnails/')) {
+        breakdown.thumbnails.count++;
+        breakdown.thumbnails.bytes += size;
+      } else if (key.startsWith('assets/documents/')) {
+        breakdown.documents.count++;
+        breakdown.documents.bytes += size;
+      } else {
+        breakdown.other.count++;
+        breakdown.other.bytes += size;
+      }
+    }
+
+    isTruncated = Boolean(response.IsTruncated);
+    continuationToken = response.NextContinuationToken;
+  }
+
+  const result = {
+    isConfigured: true,
+    totalBytes,
+    totalCount,
+    breakdown,
+    referenceLimitBytes: 10 * 1024 * 1024 * 1024, // 10 GB Reference Level
+    cachedAt: new Date().toISOString(),
+  };
+
+  storageCache = {
+    data: result,
+    timestamp: now,
+  };
+
+  return result;
+}
+
 module.exports = {
+  isR2Configured,
   assertR2Configured,
   uploadFile,
   deleteFile,
   getPresignedUrl,
+  getR2StorageStats,
 };
