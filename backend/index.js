@@ -7,9 +7,39 @@ const prisma = require('./prismaClient');
 const app = express();
 
 // Middleware
+const allowedOrigins = process.env.FRONTEND_URL 
+  ? process.env.FRONTEND_URL.split(',').map(url => url.trim().replace(/\/$/, ''))
+  : [];
+
 const corsOptions = {
-   origin: process.env.FRONTEND_URL || '*',
-   optionsSuccessStatus: 200
+  origin: (origin, callback) => {
+    // Allow non-browser requests (e.g. mobile apps, curl, server-to-server)
+    if (!origin) return callback(null, true);
+    
+    // If FRONTEND_URL is explicitly '*' or unset, allow all
+    if (!process.env.FRONTEND_URL || process.env.FRONTEND_URL === '*') {
+      return callback(null, true);
+    }
+    
+    // Allow configured frontend domains
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    
+    // Allow any Vercel deployment (preview or production: *.vercel.app)
+    if (/^https:\/\/([a-zA-Z0-9_-]+\.)*vercel\.app$/.test(origin)) {
+      return callback(null, true);
+    }
+    
+    // Allow local development ports
+    if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+      return callback(null, true);
+    }
+
+    callback(null, false);
+  },
+  credentials: true,
+  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  optionsSuccessStatus: 200
 };
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '50mb' }));

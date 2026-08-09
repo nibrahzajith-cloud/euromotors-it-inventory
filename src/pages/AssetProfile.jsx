@@ -33,8 +33,8 @@ export default function AssetProfile() {
   const fetchAssetProfile = async () => {
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`\${API_URL}/assets/code/\${encodeURIComponent(assetCode)}`, {
-        headers: { 'Authorization': `Bearer \${token}` }
+      const res = await fetch(`${API_URL}/assets/code/${encodeURIComponent(assetCode)}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
       });
       
       if (!res.ok) {
@@ -46,13 +46,13 @@ export default function AssetProfile() {
       setAsset(data);
 
       // Fetch Timeline
-      const timelineRes = await fetch(`\${API_URL}/assets/\${data.id}/timeline`, { headers: { 'Authorization': `Bearer \${token}` } });
+      const timelineRes = await fetch(`${API_URL}/assets/${data.id}/timeline`, { headers: { 'Authorization': `Bearer ${token}` } });
       if (timelineRes.ok) setTimeline(await timelineRes.json());
 
       // Fetch locations & departments for dropdowns
       const [locRes, deptRes] = await Promise.all([
-        fetch(`\${API_URL}/locations`, { headers: { 'Authorization': `Bearer \${token}` } }),
-        fetch(`\${API_URL}/departments`, { headers: { 'Authorization': `Bearer \${token}` } })
+        fetch(`${API_URL}/locations`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch(`${API_URL}/departments`, { headers: { 'Authorization': `Bearer ${token}` } })
       ]);
       if (locRes.ok) setLocations(await locRes.json());
       if (deptRes.ok) setDepartments(await deptRes.json());
