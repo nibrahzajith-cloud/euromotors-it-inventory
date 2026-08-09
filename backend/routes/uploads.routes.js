@@ -1,67 +1,34 @@
 const express = require('express');
+const { randomUUID } = require('crypto');
 const router = express.Router();
-
-// =============================================================================
-// ASSET MEDIA MODULE — TEMPORARILY DISABLED FOR PRODUCTION
-// =============================================================================
-//
-// Status: Under Development
-// Feature Branch: feature/enterprise-asset-media-r2
-//
-// All upload, download, preview, delete, compression, PDF merge, and presigned
-// URL routes are commented out below. They will be re-enabled once:
-//
-//   1. Cloudflare R2 integration is fully tested on localhost
-//   2. Image optimization pipeline is validated
-//   3. PDF merge and document versioning is approved
-//   4. Presigned URL security model is reviewed
-//   5. Integration is merged from feature/enterprise-asset-media-r2 → main
-//
-// To re-enable: uncomment the block below and restore the original imports.
-// DO NOT DELETE — all original code is preserved.
-//
-// Original imports (restore when re-enabling):
-//   const prisma = require('../prismaClient');
-//   const { authenticate } = require('../middleware/auth.middleware');
-//   const { uploadImageMiddleware, uploadDocumentMiddleware } = require('../middleware/upload.middleware');
-//   const { uploadFile, deleteFile, getPresignedUrl } = require('../utils/s3Client');
-//
-// =============================================================================
-
-// Return 503 with a clear message for any /uploads/* request that reaches the server.
-// This makes the disabled state explicit rather than silently failing.
-const DISABLED_RESPONSE = {
-    error: 'Asset Media Module is under development and not available in this release.',
-    code: 'FEATURE_UNDER_DEVELOPMENT',
-    module: 'ASSET_MEDIA',
-    availableIn: 'future-release'
-};
-
-router.use((req, res) => {
-    res.status(503).json(DISABLED_RESPONSE);
-});
-
-module.exports = router;
-
-
-// =============================================================================
-// PRESERVED IMPLEMENTATION — DO NOT DELETE
-// Uncomment this entire block to restore full functionality.
-// =============================================================================
-
-/*
-
 const prisma = require('../prismaClient');
-const { authenticate } = require('../middleware/auth.middleware');
+const { authenticate, authorize } = require('../middleware/auth.middleware');
 const { uploadImageMiddleware, uploadDocumentMiddleware } = require('../middleware/upload.middleware');
 const { uploadFile, deleteFile, getPresignedUrl } = require('../utils/s3Client');
+
+const mediaEditorsOnly = authorize(['ADMIN', 'IT_OFFICER']);
+
+function storageErrorResponse(res, error, fallbackMessage) {
+    if (error?.code === 'R2_NOT_CONFIGURED') {
+        return res.status(503).json({ error: 'Private file storage is not configured' });
+    }
+    return res.status(500).json({ error: fallbackMessage });
+}
+
+async function writeAuditLog(data) {
+    try {
+        await prisma.auditLog.create({ data });
+    } catch (error) {
+        console.error('Failed to write asset media audit log:', error);
+    }
+}
 
 // -----------------------------------------------------------------------------
 // ASSET IMAGE ROUTES
 // -----------------------------------------------------------------------------
 
 // Upload or Replace Asset Image
-router.post('/image/:assetId', authenticate, uploadImageMiddleware.fields([
+router.post('/image/:assetId', authenticate, mediaEditorsOnly, uploadImageMiddleware.fields([
     { name: 'image', maxCount: 1 },
     { name: 'thumbnail', maxCount: 1 }
 ]), async (req, res) => {
@@ -75,42 +42,61 @@ router.post('/image/:assetId', authenticate, uploadImageMiddleware.fields([
 
         if (!imageFile) return res.status(400).json({ error: 'Image file is required' });
 
-        // If replacing an existing image, delete the old one from S3 first
-        if (asset.imageStorageKey) {
-            try { await deleteFile(asset.imageStorageKey); } catch (e) { console.error('Failed to delete old image:', e); }
-            const oldThumbKey = asset.imageStorageKey.replace('assets/images/', 'assets/thumbnails/');
-            try { await deleteFile(oldThumbKey); } catch (e) {}
-        }
-
         const timestamp = Date.now();
         const safeCode = asset.assetCode.replace(/[^a-zA-Z0-9_-]/g, '_');
-        const imageKey = `assets/images/${safeCode}_${timestamp}.webp`;
-        const thumbKey = `assets/thumbnails/${safeCode}_${timestamp}.webp`;
+        const extensionByMime = {
+            'image/jpeg': 'jpg',
+            'image/png': 'png',
+            'image/webp': 'webp'
+        };
+        const imageExtension = extensionByMime[imageFile.mimetype];
+        const thumbExtension = thumbFile ? extensionByMime[thumbFile.mimetype] : null;
+        const imageKey = `assets/images/${safeCode}_${timestamp}.${imageExtension}`;
+        const thumbKey = thumbFile
+            ? `assets/thumbnails/${safeCode}_${timestamp}.${thumbExtension}`
+            : null;
 
-        // Upload to S3
-        await uploadFile(imageFile.buffer, imageKey, imageFile.mimetype);
-        if (thumbFile) {
-            await uploadFile(thumbFile.buffer, thumbKey, thumbFile.mimetype);
+        const newlyUploadedKeys = [];
+        let updatedAsset;
+        try {
+            await uploadFile(imageFile.buffer, imageKey, imageFile.mimetype);
+            newlyUploadedKeys.push(imageKey);
+            if (thumbFile) {
+                await uploadFile(thumbFile.buffer, thumbKey, thumbFile.mimetype);
+                newlyUploadedKeys.push(thumbKey);
+            }
+
+            updatedAsset = await prisma.asset.update({
+                where: { id: assetId },
+                data: {
+                    imageUrl: `/api/uploads/image/${assetId}/view`,
+                    thumbnailUrl: thumbFile ? `/api/uploads/image/${assetId}/thumb` : null,
+                    imageStorageKey: imageKey,
+                    imageFileName: imageFile.originalname,
+                    imageFileSize: imageFile.size,
+                    imageMimeType: imageFile.mimetype,
+                    imageUploadedAt: new Date(),
+                    imageUploadedBy: req.user.id
+                }
+            });
+        } catch (error) {
+            await Promise.allSettled(newlyUploadedKeys.map((key) => deleteFile(key)));
+            throw error;
         }
 
-        // Update Database
-        const updatedAsset = await prisma.asset.update({
-            where: { id: assetId },
-            data: {
-                imageUrl: `/api/uploads/image/${assetId}/view`,
-                thumbnailUrl: thumbFile ? `/api/uploads/image/${assetId}/thumb` : null,
-                imageStorageKey: imageKey,
-                imageFileName: imageFile.originalname,
-                imageFileSize: imageFile.size,
-                imageMimeType: imageFile.mimetype,
-                imageUploadedAt: new Date(),
-                imageUploadedBy: req.user.id
+        // The database now points at the new objects, so old objects can be removed safely.
+        if (asset.imageStorageKey) {
+            const oldKeys = [asset.imageStorageKey];
+            if (asset.thumbnailUrl) {
+                oldKeys.push(asset.imageStorageKey.replace('assets/images/', 'assets/thumbnails/'));
             }
-        });
+            const cleanup = await Promise.allSettled(oldKeys.map((key) => deleteFile(key)));
+            cleanup.filter((result) => result.status === 'rejected')
+                .forEach((result) => console.error('Failed to remove replaced R2 object:', result.reason));
+        }
 
         // Audit Log
-        await prisma.auditLog.create({
-            data: {
+        await writeAuditLog({
                 userId: req.user.id,
                 userName: req.user.fullName,
                 userRole: req.user.role,
@@ -120,7 +106,6 @@ router.post('/image/:assetId', authenticate, uploadImageMiddleware.fields([
                 entityId: assetId,
                 entityCode: asset.assetCode,
                 description: `Uploaded new asset image for ${asset.assetCode}`
-            }
         });
 
         res.json({
@@ -133,12 +118,12 @@ router.post('/image/:assetId', authenticate, uploadImageMiddleware.fields([
         });
     } catch (error) {
         console.error('Image Upload Error:', error);
-        res.status(500).json({ error: 'Failed to upload image. Ensure storage variables are configured.' });
+        return storageErrorResponse(res, error, 'Failed to upload image');
     }
 });
 
 // Delete Asset Image
-router.delete('/image/:assetId', authenticate, async (req, res) => {
+router.delete('/image/:assetId', authenticate, mediaEditorsOnly, async (req, res) => {
     try {
         const { assetId } = req.params;
         const asset = await prisma.asset.findUnique({ where: { id: assetId } });
@@ -147,10 +132,12 @@ router.delete('/image/:assetId', authenticate, async (req, res) => {
             return res.status(404).json({ error: 'Image not found' });
         }
 
-        // Delete from S3
+        // Delete from R2
         await deleteFile(asset.imageStorageKey);
-        const thumbKey = asset.imageStorageKey.replace('assets/images/', 'assets/thumbnails/');
-        try { await deleteFile(thumbKey); } catch(e) {}
+        if (asset.thumbnailUrl) {
+            const thumbKey = asset.imageStorageKey.replace('assets/images/', 'assets/thumbnails/');
+            await deleteFile(thumbKey);
+        }
 
         // Update DB
         await prisma.asset.update({
@@ -167,8 +154,7 @@ router.delete('/image/:assetId', authenticate, async (req, res) => {
             }
         });
 
-        await prisma.auditLog.create({
-            data: {
+        await writeAuditLog({
                 userId: req.user.id,
                 userName: req.user.fullName,
                 userRole: req.user.role,
@@ -178,17 +164,16 @@ router.delete('/image/:assetId', authenticate, async (req, res) => {
                 entityId: assetId,
                 entityCode: asset.assetCode,
                 description: `Deleted asset image for ${asset.assetCode}`
-            }
         });
 
         res.json({ success: true, message: 'Image deleted successfully' });
     } catch (error) {
         console.error('Image Delete Error:', error);
-        res.status(500).json({ error: 'Failed to delete image' });
+        return storageErrorResponse(res, error, 'Failed to delete image');
     }
 });
 
-// View / Download Image (Redirects to Presigned URL)
+// Return a short-lived private URL after authenticating the application user.
 router.get('/image/:assetId/:type', authenticate, async (req, res) => {
     try {
         const { assetId, type } = req.params;
@@ -206,16 +191,16 @@ router.get('/image/:assetId/:type', authenticate, async (req, res) => {
             key = key.replace('assets/images/', 'assets/thumbnails/');
         }
 
-        const url = await getPresignedUrl(key, 3600); // 1 hour expiry
+        const url = await getPresignedUrl(
+            key,
+            300,
+            type === 'download' ? (asset.imageFileName || `${asset.assetCode}.webp`) : undefined
+        );
         
-        if (type === 'download') {
-            return res.json({ url });
-        } else {
-            return res.redirect(url);
-        }
+        return res.json({ url, expiresIn: 300 });
     } catch (error) {
         console.error('Presigned URL Error:', error);
-        res.status(500).json({ error: 'Failed to generate secure URL' });
+        return storageErrorResponse(res, error, 'Failed to generate secure URL');
     }
 });
 
@@ -225,7 +210,7 @@ router.get('/image/:assetId/:type', authenticate, async (req, res) => {
 // -----------------------------------------------------------------------------
 
 // Upload Asset Document (Merged PDF)
-router.post('/document/:assetId', authenticate, uploadDocumentMiddleware.single('document'), async (req, res) => {
+router.post('/document/:assetId', authenticate, mediaEditorsOnly, uploadDocumentMiddleware.single('document'), async (req, res) => {
     try {
         const { assetId } = req.params;
         const { documentType } = req.body;
@@ -240,34 +225,32 @@ router.post('/document/:assetId', authenticate, uploadDocumentMiddleware.single(
         const safeCode = asset.assetCode.replace(/[^a-zA-Z0-9_-]/g, '_');
         const docKey = `assets/documents/${safeCode}_${timestamp}.pdf`;
 
-        // Upload to S3
+        const documentId = randomUUID();
+        let updatedDoc;
         await uploadFile(file.buffer, docKey, file.mimetype);
+        try {
+            updatedDoc = await prisma.assetDocument.create({
+                data: {
+                    id: documentId,
+                    assetId: asset.id,
+                    documentName: file.originalname,
+                    documentType: documentType || 'Asset Document',
+                    fileUrl: `/api/uploads/document/${documentId}/view`,
+                    storageKey: docKey,
+                    fileSize: file.size,
+                    mimeType: file.mimetype,
+                    uploadedBy: req.user.id,
+                    uploadedByName: req.user.fullName
+                }
+            });
+        } catch (error) {
+            await deleteFile(docKey).catch((cleanupError) => {
+                console.error('Failed to clean up R2 object after database error:', cleanupError);
+            });
+            throw error;
+        }
 
-        // Create DB record
-        const newDoc = await prisma.assetDocument.create({
-            data: {
-                assetId: asset.id,
-                documentName: file.originalname,
-                documentType: documentType || 'Asset Document',
-                fileUrl: '', // Will update with custom route
-                storageKey: docKey,
-                fileSize: file.size,
-                mimeType: file.mimetype,
-                uploadedBy: req.user.id,
-                uploadedByName: req.user.fullName
-            }
-        });
-
-        // Update the URL to point to our secure proxy endpoint
-        const updatedDoc = await prisma.assetDocument.update({
-            where: { id: newDoc.id },
-            data: {
-                fileUrl: `/api/uploads/document/${newDoc.id}/view`
-            }
-        });
-
-        await prisma.auditLog.create({
-            data: {
+        await writeAuditLog({
                 userId: req.user.id,
                 userName: req.user.fullName,
                 userRole: req.user.role,
@@ -277,18 +260,17 @@ router.post('/document/:assetId', authenticate, uploadDocumentMiddleware.single(
                 entityId: assetId,
                 entityCode: asset.assetCode,
                 description: `Uploaded document ${file.originalname} for ${asset.assetCode}`
-            }
         });
 
         res.json(updatedDoc);
     } catch (error) {
         console.error('Document Upload Error:', error);
-        res.status(500).json({ error: 'Failed to upload document. Ensure storage variables are configured.' });
+        return storageErrorResponse(res, error, 'Failed to upload document');
     }
 });
 
 // Delete Asset Document
-router.delete('/document/:docId', authenticate, async (req, res) => {
+router.delete('/document/:docId', authenticate, mediaEditorsOnly, async (req, res) => {
     try {
         const { docId } = req.params;
         const document = await prisma.assetDocument.findUnique({ 
@@ -298,7 +280,7 @@ router.delete('/document/:docId', authenticate, async (req, res) => {
         
         if (!document) return res.status(404).json({ error: 'Document not found' });
 
-        // Delete from S3
+        // Delete from R2
         if (document.storageKey) {
             await deleteFile(document.storageKey);
         }
@@ -306,8 +288,7 @@ router.delete('/document/:docId', authenticate, async (req, res) => {
         // Delete DB record
         await prisma.assetDocument.delete({ where: { id: docId } });
 
-        await prisma.auditLog.create({
-            data: {
+        await writeAuditLog({
                 userId: req.user.id,
                 userName: req.user.fullName,
                 userRole: req.user.role,
@@ -317,17 +298,16 @@ router.delete('/document/:docId', authenticate, async (req, res) => {
                 entityId: document.assetId,
                 entityCode: document.asset.assetCode,
                 description: `Deleted document ${document.documentName} for ${document.asset.assetCode}`
-            }
         });
 
         res.json({ success: true, message: 'Document deleted successfully' });
     } catch (error) {
         console.error('Document Delete Error:', error);
-        res.status(500).json({ error: 'Failed to delete document' });
+        return storageErrorResponse(res, error, 'Failed to delete document');
     }
 });
 
-// View / Download Document (Redirects to Presigned URL)
+// Return a short-lived private URL after authenticating the application user.
 router.get('/document/:docId/:type', authenticate, async (req, res) => {
     try {
         const { docId, type } = req.params;
@@ -340,16 +320,16 @@ router.get('/document/:docId/:type', authenticate, async (req, res) => {
             return res.status(404).json({ error: 'Document not found' });
         }
 
-        const url = await getPresignedUrl(document.storageKey, 3600); // 1 hour expiry
+        const url = await getPresignedUrl(
+            document.storageKey,
+            300,
+            type === 'download' ? document.documentName : undefined
+        );
         
-        if (type === 'download') {
-            return res.json({ url });
-        } else {
-            return res.redirect(url);
-        }
+        return res.json({ url, expiresIn: 300 });
     } catch (error) {
         console.error('Presigned URL Error:', error);
-        res.status(500).json({ error: 'Failed to generate secure URL' });
+        return storageErrorResponse(res, error, 'Failed to generate secure URL');
     }
 });
 
@@ -366,4 +346,4 @@ router.get('/documents/:assetId', authenticate, async (req, res) => {
     }
 });
 
-*/
+module.exports = router;

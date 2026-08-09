@@ -1,48 +1,36 @@
 const multer = require('multer');
 
-// Memory storage is used because we will stream directly to S3 without saving to disk first
-const storage = multer.memoryStorage();
+const memoryStorage = multer.memoryStorage();
 
-// Validate images for Asset Image Module
-const imageFileFilter = (req, file, cb) => {
-    // Check mime types for JPG, PNG, WEBP
-    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
-    
-    if (allowedMimeTypes.includes(file.mimetype)) {
-        cb(null, true);
-    } else {
-        cb(new Error('Invalid image format. Only JPEG, PNG, and WEBP are supported.'), false);
-    }
+const imageMimeTypes = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+]);
+
+const imageFilter = (req, file, cb) => {
+  if (imageMimeTypes.has(file.mimetype)) return cb(null, true);
+  return cb(new Error('Only JPG, PNG and WEBP images are allowed'));
 };
 
-// Validate documents for Asset Documents Module
-const documentFileFilter = (req, file, cb) => {
-    // Check mime types for PDF
-    if (file.mimetype === 'application/pdf') {
-        cb(null, true);
-    } else {
-        cb(new Error('Invalid document format. Only PDF files are supported.'), false);
-    }
-};
-
-// 15MB absolute limit for memory protection, though files should be heavily compressed client-side first
-const limits = {
-    fileSize: 15 * 1024 * 1024,
+const documentFilter = (req, file, cb) => {
+  if (file.mimetype === 'application/pdf') return cb(null, true);
+  return cb(new Error('Only PDF documents are allowed'));
 };
 
 const uploadImageMiddleware = multer({
-    storage: storage,
-    fileFilter: imageFileFilter,
-    limits: limits
+  storage: memoryStorage,
+  limits: { files: 2, fileSize: 5 * 1024 * 1024 },
+  fileFilter: imageFilter,
 });
 
 const uploadDocumentMiddleware = multer({
-    storage: storage,
-    fileFilter: documentFileFilter,
-    limits: limits
+  storage: memoryStorage,
+  limits: { files: 1, fileSize: 10 * 1024 * 1024 },
+  fileFilter: documentFilter,
 });
 
 module.exports = {
-    uploadImageMiddleware,
-    uploadDocumentMiddleware
+  uploadImageMiddleware,
+  uploadDocumentMiddleware,
 };

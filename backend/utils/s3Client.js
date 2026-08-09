@@ -1,82 +1,98 @@
-const { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const {
+  S3Client,
+  PutObjectCommand,
+  DeleteObjectCommand,
+  GetObjectCommand,
+} = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
-require('dotenv').config();
 
-// Create the S3 Client
-// Configured to support AWS S3, Cloudflare R2, MinIO, or Supabase Storage dynamically.
-const s3Config = {
-    region: process.env.AWS_REGION || 'auto',
-    credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    }
-};
+const REQUIRED_ENV_VARS = [
+  'R2_ACCOUNT_ID',
+  'R2_ACCESS_KEY_ID',
+  'R2_SECRET_ACCESS_KEY',
+  'R2_BUCKET_NAME',
+  'R2_ENDPOINT',
+];
 
-// Only add endpoint if it is defined (required for R2/Supabase)
-if (process.env.AWS_ENDPOINT) {
-    s3Config.endpoint = process.env.AWS_ENDPOINT;
+let client;
+
+function assertR2Configured() {
+  const missing = REQUIRED_ENV_VARS.filter((key) => !process.env[key]?.trim());
+  if (missing.length > 0) {
+    const error = new Error(`R2 storage is not configured. Missing: ${missing.join(', ')}`);
+    error.code = 'R2_NOT_CONFIGURED';
+    throw error;
+  }
 }
 
-const s3Client = new S3Client(s3Config);
-const BUCKET_NAME = process.env.AWS_BUCKET_NAME;
-
-/**
- * Uploads a file buffer to S3-compatible storage
- * @param {Buffer} fileBuffer - The file content
- * @param {string} fileName - Destination key path in bucket
- * @param {string} mimeType - The content type of the file
- * @returns {Promise<string>} The uploaded file key
- */
-const uploadFile = async (fileBuffer, fileName, mimeType) => {
-    if (!BUCKET_NAME) throw new Error("AWS_BUCKET_NAME is not configured.");
-    
-    const command = new PutObjectCommand({
-        Bucket: BUCKET_NAME,
-        Key: fileName,
-        Body: fileBuffer,
-        ContentType: mimeType,
+function getR2Client() {
+  assertR2Configured();
+  if (!client) {
+    client = new S3Client({
+      region: 'auto',
+      endpoint: process.env.R2_ENDPOINT,
+      credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+      },
+      forcePathStyle: true,
     });
+  }
+  return client;
+}
 
-    await s3Client.send(command);
-    return fileName;
-};
+function validateObjectKey(key) {
+  if (!key || typeof key !== 'string' || key.includes('..') || key.startsWith('/')) {
+    throw new Error('Invalid R2 object key');
+  }
+}
 
-/**
- * Deletes a file from S3-compatible storage
- * @param {string} fileName - The key path in bucket to delete
- */
-const deleteFile = async (fileName) => {
-    if (!BUCKET_NAME) throw new Error("AWS_BUCKET_NAME is not configured.");
-    
-    const command = new DeleteObjectCommand({
-        Bucket: BUCKET_NAME,
-        Key: fileName,
-    });
+async function uploadFile(buffer, key, mimeType) {
+  if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
+    throw new Error('A non-empty file buffer is required');
+  }
+  validateObjectKey(key);
 
-    await s3Client.send(command);
-};
+  await getR2Client().send(new PutObjectCommand({
+    Bucket: process.env.R2_BUCKET_NAME,
+    Key: key,
+    Body: buffer,
+    ContentLength: buffer.length,
+    ContentType: mimeType || 'application/octet-stream',
+  }));
 
-/**
- * Generates a presigned URL to view/download a private file securely
- * @param {string} fileName - The key path in bucket
- * @param {number} expiresIn - Time in seconds until URL expires (default 1 hour)
- * @returns {Promise<string>} Secure URL string
- */
-const getPresignedUrl = async (fileName, expiresIn = 3600) => {
-    if (!BUCKET_NAME) throw new Error("AWS_BUCKET_NAME is not configured.");
-    
-    const command = new GetObjectCommand({
-        Bucket: BUCKET_NAME,
-        Key: fileName,
-    });
+  return { storageKey: key };
+}
 
-    const url = await getSignedUrl(s3Client, command, { expiresIn });
-    return url;
-};
+async function deleteFile(key) {
+  validateObjectKey(key);
+  await getR2Client().send(new DeleteObjectCommand({
+    Bucket: process.env.R2_BUCKET_NAME,
+    Key: key,
+  }));
+}
+
+async function getPresignedUrl(key, expiresIn = 300, downloadName) {
+  validateObjectKey(key);
+  const safeExpiry = Math.min(Math.max(Number(expiresIn) || 300, 60), 3600);
+  const input = {
+    Bucket: process.env.R2_BUCKET_NAME,
+    Key: key,
+  };
+
+  if (downloadName) {
+    const safeName = downloadName.replace(/[\r\n"\\]/g, '_');
+    input.ResponseContentDisposition = `attachment; filename="${safeName}"`;
+  }
+
+  return getSignedUrl(getR2Client(), new GetObjectCommand(input), {
+    expiresIn: safeExpiry,
+  });
+}
 
 module.exports = {
-    s3Client,
-    uploadFile,
-    deleteFile,
-    getPresignedUrl
+  assertR2Configured,
+  uploadFile,
+  deleteFile,
+  getPresignedUrl,
 };

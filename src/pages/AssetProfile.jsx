@@ -30,43 +30,41 @@ export default function AssetProfile() {
   const [locations, setLocations] = useState([]);
   const [departments, setDepartments] = useState([]);
 
+  const fetchAssetProfile = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/assets/code/${encodeURIComponent(assetCode)}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (!res.ok) {
+         if (res.status === 404) throw new Error("Asset Code not found in database.");
+         throw new Error("Failed fetching asset logic bounds.");
+      }
+      
+      const data = await res.json();
+      setAsset(data);
 
+      // Fetch Timeline
+      const timelineRes = await fetch(`${API_URL}/assets/${data.id}/timeline`, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (timelineRes.ok) setTimeline(await timelineRes.json());
+
+      // Fetch locations & departments for dropdowns
+      const [locRes, deptRes] = await Promise.all([
+        fetch(`${API_URL}/locations`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch(`${API_URL}/departments`, { headers: { 'Authorization': `Bearer ${token}` } })
+      ]);
+      if (locRes.ok) setLocations(await locRes.json());
+      if (deptRes.ok) setDepartments(await deptRes.json());
+
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchAssetProfile = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        const res = await fetch(`${API_URL}/assets/code/${encodeURIComponent(assetCode)}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (!res.ok) {
-           if (res.status === 404) throw new Error("Asset Code not found in database.");
-           throw new Error("Failed fetching asset logic bounds.");
-        }
-        
-        const data = await res.json();
-        setAsset(data);
-
-        // Fetch Timeline
-        const timelineRes = await fetch(`${API_URL}/assets/${data.id}/timeline`, { headers: { 'Authorization': `Bearer ${token}` } });
-        if (timelineRes.ok) setTimeline(await timelineRes.json());
-
-        // Fetch locations & departments for dropdowns
-        const [locRes, deptRes] = await Promise.all([
-          fetch(`${API_URL}/locations`, { headers: { 'Authorization': `Bearer ${token}` } }),
-          fetch(`${API_URL}/departments`, { headers: { 'Authorization': `Bearer ${token}` } })
-        ]);
-        if (locRes.ok) setLocations(await locRes.json());
-        if (deptRes.ok) setDepartments(await deptRes.json());
-
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
     fetchAssetProfile();
   }, [assetCode]);
 
@@ -394,16 +392,11 @@ export default function AssetProfile() {
                 </div>
               </div>
 
-              {/* Enterprise Asset Media Module */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <AssetImage asset={asset} onUpdate={() => {
-                  const token = localStorage.getItem('token');
-                  fetch(`${API_URL}/assets/code/${encodeURIComponent(assetCode)}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                  }).then(res => res.json()).then(data => setAsset(data));
-                }} />
-                <AssetDocuments asset={asset} />
-              </div>
+              {/* Asset Image Card */}
+              <AssetImage asset={asset} onUpdate={fetchAssetProfile} />
+
+              {/* Asset Documents Card */}
+              <AssetDocuments asset={asset} onUpdate={fetchAssetProfile} />
             </div>
           </div>
         ) : (
@@ -420,5 +413,75 @@ export default function AssetProfile() {
          </div>
       </div>
     </>
+  );
+}
+
+function AssetTimeline({ timeline }) {
+  if (!timeline || timeline.length === 0) {
+    return (
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-12 text-center">
+        <div className="w-16 h-16 bg-slate-50 dark:bg-slate-700 rounded-full flex items-center justify-center mx-auto mb-4">
+          <History className="w-8 h-8 text-slate-300 dark:text-slate-500" />
+        </div>
+        <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-1">No History Yet</h3>
+        <p className="text-slate-500 dark:text-slate-400 text-sm">No lifecycle events have been recorded for this asset.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
+      <div className="p-6 border-b border-slate-100 dark:border-slate-700">
+        <h3 className="font-bold text-slate-800 dark:text-white">Lifecycle History</h3>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Chronological record of all actions performed on this asset.</p>
+      </div>
+      <div className="p-8">
+        <div className="relative space-y-8 before:absolute before:inset-0 before:ml-5 before:h-full before:w-0.5 before:bg-slate-100 dark:before:bg-slate-700">
+          {timeline.map((item) => (
+            <div key={item.id} className="relative flex items-start gap-6 group">
+              <div className={`absolute left-0 mt-1 w-10 h-10 rounded-full border-4 border-white dark:border-slate-800 shadow-sm flex items-center justify-center z-10 ${
+                item.eventType === 'CREATED' ? 'bg-green-500' :
+                item.eventType === 'ASSIGNED' ? 'bg-blue-600' :
+                item.eventType === 'RETURNED' ? 'bg-indigo-500' :
+                item.eventType.includes('MAINTENANCE') ? 'bg-orange-500' :
+                'bg-slate-500'
+              }`}>
+                {item.eventType === 'CREATED' ? <CheckCircle2 className="w-5 h-5 text-white" /> :
+                 item.eventType === 'ASSIGNED' ? <UserCheck className="w-5 h-5 text-white" /> :
+                 item.eventType === 'RETURNED' ? <ArrowLeft className="w-5 h-5 text-white" /> :
+                 <History className="w-5 h-5 text-white" />
+                }
+              </div>
+              <div className="ml-12 flex-1">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-1 gap-1">
+                  <h4 className="font-bold text-slate-800 dark:text-white">{item.title}</h4>
+                  <span className="text-[10px] font-bold text-slate-400 bg-slate-50 dark:bg-slate-700 px-2 py-0.5 rounded border border-slate-100 dark:border-slate-600">
+                    {new Date(item.createdAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+                  </span>
+                </div>
+                <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed mb-3">{item.description}</p>
+                
+                <div className="flex flex-wrap gap-3">
+                  {item.oldStatus && item.newStatus && (
+                    <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-700 px-2 py-1 rounded-lg border border-slate-100 dark:border-slate-600">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Status</span>
+                      <span className="text-xs text-slate-500 line-through opacity-50">{item.oldStatus}</span>
+                      <ArrowRight className="w-3 h-3 text-slate-300" />
+                      <span className="text-xs font-bold text-blue-600 dark:text-blue-400">{item.newStatus}</span>
+                    </div>
+                  )}
+                  {item.performedByName && (
+                    <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-700 px-2 py-1 rounded-lg border border-slate-100 dark:border-slate-600">
+                      <User className="w-3 h-3 text-slate-400" />
+                      <span className="text-[10px] font-medium text-slate-600 dark:text-slate-400">By {item.performedByName}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
