@@ -447,7 +447,7 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
           // Validate duplicate assetCode within batch
           if (inputCode) {
               const codeKey = inputCode.toUpperCase();
-              if (seenAssetCodesInBatch.has(codeKey)) {
+              if (seenAssetCodesInBatch.has(codeKey) && !req.body.forceUpload) {
                   const e = new Error("Duplicate Asset Code in uploaded file.");
                   e.column = 'assetCode';
                   e.value = inputCode;
@@ -463,21 +463,34 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
               const serialKey = finalSerial.toUpperCase();
               
               if (seenSerialsInBatch.has(serialKey)) {
-                  const e = new Error("Duplicate Serial Number in uploaded file.");
-                  e.column = 'serialNumber';
-                  e.value = finalSerial;
-                  throw e;
+                  if (!req.body.forceUpload) {
+                      const e = new Error("Duplicate Serial Number in uploaded file.");
+                      e.column = 'serialNumber';
+                      e.value = finalSerial;
+                      throw e;
+                  } else {
+                      finalSerial = null;
+                  }
               }
               
               // Check if serial exists in DB on ANOTHER asset
-              const dbSerialAsset = serialToAsset.get(serialKey);
-              if (dbSerialAsset && (!existingAsset || dbSerialAsset.id !== existingAsset.id)) {
-                  const e = new Error("This Serial Number already exists in the database.");
-                  e.column = 'serialNumber';
-                  e.value = finalSerial;
-                  throw e;
+              if (finalSerial) {
+                  const dbSerialAsset = serialToAsset.get(serialKey);
+                  if (dbSerialAsset && (!existingAsset || dbSerialAsset.id !== existingAsset.id)) {
+                      if (!req.body.forceUpload) {
+                          const e = new Error("This Serial Number already exists in the database.");
+                          e.column = 'serialNumber';
+                          e.value = finalSerial;
+                          throw e;
+                      } else {
+                          finalSerial = null;
+                      }
+                  }
               }
-              seenSerialsInBatch.add(serialKey);
+              
+              if (finalSerial) {
+                  seenSerialsInBatch.add(serialKey);
+              }
           }
 
           // Status determination

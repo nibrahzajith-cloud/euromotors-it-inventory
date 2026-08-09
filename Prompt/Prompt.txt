@@ -1,0 +1,194 @@
+The Enterprise Asset Media Module is approved. Do not make any further UI changes.
+
+We will now configure Cloudflare R2 step by step, but do not modify the deployed application until the R2 setup has been completed and tested locally.
+
+Please guide me through the process one stage at a time and wait for my confirmation before continuing.
+
+STAGE 1 — Create Cloudflare R2
+
+Guide me to:
+
+1. Sign in to Cloudflare.
+2. Open R2 Object Storage.
+3. Create a new private bucket.
+4. Use this recommended bucket name:
+   euromotors-it-assets
+5. Keep the bucket private.
+6. Do not enable public access or a public custom domain.
+7. Confirm the bucket has been created successfully.
+
+After I confirm Stage 1, continue to Stage 2.
+
+STAGE 2 — Create R2 API Credentials
+
+Guide me to:
+
+1. Open Manage R2 API Tokens.
+2. Create a new API token for this application.
+3. Give it permission to read and write objects only for the euromotors-it-assets bucket.
+4. Do not give unnecessary account-wide permissions.
+5. Show me where to copy:
+   - Access Key ID
+   - Secret Access Key
+6. Clearly warn me that the Secret Access Key is shown only once.
+7. Do not ask me to paste the secret into the Antigravity chat.
+8. Tell me to save the credentials securely.
+
+After I confirm Stage 2, continue to Stage 3.
+
+STAGE 3 — Find Account ID and Endpoint
+
+Guide me to locate:
+
+1. Cloudflare Account ID
+2. R2 S3 endpoint
+
+The endpoint should follow this format:
+
+https://<ACCOUNT_ID>.r2.cloudflarestorage.com
+
+Confirm the exact endpoint format before continuing.
+
+After I confirm Stage 3, continue to Stage 4.
+
+STAGE 4 — Configure Local backend/.env
+
+Tell me to open:
+
+backend/.env
+
+Add these variables using my actual values:
+
+AWS_REGION=auto
+AWS_ACCESS_KEY_ID=<R2_ACCESS_KEY_ID>
+AWS_SECRET_ACCESS_KEY=<R2_SECRET_ACCESS_KEY>
+AWS_BUCKET_NAME=euromotors-it-assets
+AWS_ENDPOINT=https://<ACCOUNT_ID>.r2.cloudflarestorage.com
+
+Requirements:
+
+- Do not put these values in the frontend .env file.
+- Do not commit backend/.env to GitHub.
+- Verify .gitignore contains .env.
+- Do not print secret values in terminal logs.
+- Do not hardcode credentials in source code.
+
+After I confirm Stage 4, continue to Stage 5.
+
+STAGE 5 — Test Locally Before Deployment
+
+Run and test the backend locally.
+
+Verify:
+
+1. Backend starts without storage errors.
+2. Image upload works.
+3. Camera-captured image upload works.
+4. Image compression works.
+5. PDF upload works.
+6. Multiple files merge into one PDF.
+7. Preview works using a temporary presigned URL.
+8. Download works using a temporary presigned URL.
+9. Replace works.
+10. Delete removes the object from R2.
+11. Delete also clears or removes the related Neon PostgreSQL metadata.
+12. No original uncompressed file is stored.
+13. No file is stored in a local Render-style uploads folder.
+
+Do not push code to GitHub until every local test passes.
+
+After I confirm Stage 5, continue to Stage 6.
+
+STAGE 6 — Configure Render Environment Variables
+
+Guide me to open the existing Render backend service and add:
+
+AWS_REGION=auto
+AWS_ACCESS_KEY_ID=<R2_ACCESS_KEY_ID>
+AWS_SECRET_ACCESS_KEY=<R2_SECRET_ACCESS_KEY>
+AWS_BUCKET_NAME=euromotors-it-assets
+AWS_ENDPOINT=https://<ACCOUNT_ID>.r2.cloudflarestorage.com
+
+Requirements:
+
+- Add them as separate environment variables.
+- Do not paste JWT_SECRET inside DATABASE_URL.
+- Do not modify DATABASE_URL, JWT_SECRET, or FRONTEND_URL.
+- Save the variables before pushing code.
+- Do not expose secret values in logs.
+
+After I confirm Stage 6, continue to Stage 7.
+
+STAGE 7 — Deploy Safely
+
+Only after Render has the R2 variables:
+
+1. Commit the R2 integration changes.
+2. Push to GitHub.
+3. Allow Render to redeploy.
+4. Check Render startup logs.
+5. Confirm the backend starts successfully.
+6. Verify that all existing modules still work:
+   - Login
+   - Dashboard
+   - Assets
+   - Employees
+   - Bulk Upload
+   - Assignments
+   - Returns
+   - Reports
+7. If deployment fails, roll back to the last working Git commit.
+
+Do not modify Vercel unless the frontend API contract has changed.
+
+After I confirm Stage 7, continue to Stage 8.
+
+STAGE 8 — Production Verification
+
+Test in the deployed system:
+
+- Upload image
+- Capture image
+- Preview image
+- Download image
+- Replace image
+- Delete image
+- Upload PDF
+- Merge multiple documents
+- Preview PDF
+- Download PDF
+- Replace PDF
+- Delete PDF
+
+Then verify in Cloudflare R2:
+
+- The file exists after upload.
+- The old file is removed after replace.
+- The file is removed after delete.
+
+Then verify in Neon PostgreSQL:
+
+- Only file metadata, URL, and storage key are stored.
+- No binary image or PDF data is stored.
+- No orphan database records remain after deletion.
+
+FINAL REPORT
+
+At the end provide:
+
+1. Bucket name
+2. Storage configuration status
+3. Files changed
+4. Environment variables used
+5. Local test results
+6. Render deployment result
+7. R2 verification result
+8. Neon metadata verification result
+9. Confirmation that the bucket remains private
+10. Confirmation that previews and downloads use presigned URLs
+
+Important:
+- Keep the existing deployment safe.
+- Do not touch unrelated modules.
+- Do not expose secrets.
+- Wait for my confirmation after each stage.
