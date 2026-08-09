@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { 
     FileText, UploadCloud, Trash2, RefreshCw, 
     Download, ExternalLink, Loader2, FilePlus
@@ -23,7 +23,9 @@ export default function AssetDocuments({ asset, onUpdate }) {
 
     // Fetch existing documents on mount
     useEffect(() => {
+        let cancelled = false;
         const fetchDocs = async () => {
+            if (!asset?.id) return;
             try {
                 const token = localStorage.getItem('token');
                 const res = await fetch(`${API_URL}/uploads/documents/${asset.id}`, {
@@ -31,14 +33,15 @@ export default function AssetDocuments({ asset, onUpdate }) {
                 });
                 if (res.ok) {
                     const data = await res.json();
-                    setDocuments(data);
+                    if (!cancelled) setDocuments(data);
                 }
             } catch (e) {
                 console.error("Failed to fetch documents", e);
             }
         };
         fetchDocs();
-    }, [asset.id]);
+        return () => { cancelled = true; };
+    }, [asset?.id]);
 
     const formatBytes = (bytes, decimals = 2) => {
         if (!+bytes) return '0 Bytes';
@@ -238,91 +241,122 @@ export default function AssetDocuments({ asset, onUpdate }) {
 
     return (
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 flex flex-col h-full">
-            <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-700 pb-3 mb-4">
-                <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
-                    <FileText className="w-5 h-5 text-blue-600" />
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-3 mb-4">
+                <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2 text-sm sm:text-base">
+                    <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 dark:text-blue-400" />
                     Asset Documents
                 </h3>
+                {hasDocument && (
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/40">
+                        PDF Attached
+                    </span>
+                )}
             </div>
 
             {hasDocument ? (
                 <div className="flex flex-col flex-1">
-                    <div className="flex-1 flex flex-col items-center justify-center p-6 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-700 mb-6">
-                        <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-2xl flex items-center justify-center mb-4">
-                            <FileText className="w-8 h-8" />
+                    {/* Compact Document Info Card */}
+                    <div className="h-44 sm:h-48 w-full p-3.5 bg-slate-50/80 dark:bg-slate-900/40 rounded-xl border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between">
+                        <div className="flex items-start gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-red-100/80 dark:bg-red-950/50 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0 border border-red-200/50 dark:border-red-800/30">
+                                <FileText className="w-5 h-5" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate" title={currentDoc.documentName}>
+                                    {currentDoc.documentName}
+                                </p>
+                                <span className="inline-block px-2 py-0.5 bg-blue-100/70 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-[10px] font-semibold rounded-md mt-1">
+                                    {currentDoc.documentType || 'Purchase Invoice'}
+                                </span>
+                            </div>
                         </div>
-                        <p className="font-semibold text-slate-800 dark:text-slate-200 text-center line-clamp-1 mb-1">{currentDoc.documentName}</p>
-                        <span className="px-2.5 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-[10px] uppercase font-bold rounded-full mb-3 tracking-wider">
-                            {currentDoc.documentType}
-                        </span>
-                        
-                        <div className="flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400 mt-2">
-                            <span>{formatBytes(currentDoc.fileSize)}</span>
-                            <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600"></span>
-                            <span>{new Date(currentDoc.createdAt).toLocaleDateString()}</span>
+
+                        <div className="space-y-1 bg-white/70 dark:bg-slate-800/60 p-2.5 rounded-lg border border-slate-100 dark:border-slate-700/50 text-[11px] text-slate-500 dark:text-slate-400">
+                            <div className="flex items-center justify-between">
+                                <span>Size: <strong className="text-slate-700 dark:text-slate-300 font-medium">{formatBytes(currentDoc.fileSize)}</strong></span>
+                                <span>Date: <strong className="text-slate-700 dark:text-slate-300 font-medium">{new Date(currentDoc.createdAt).toLocaleDateString()}</strong></span>
+                            </div>
+                            {currentDoc.uploadedByName && (
+                                <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate">By: {currentDoc.uploadedByName}</p>
+                            )}
                         </div>
-                        {currentDoc.uploadedByName && (
-                            <p className="text-[11px] text-slate-400 mt-2">Uploaded by {currentDoc.uploadedByName}</p>
-                        )}
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 mt-auto">
-                        <button onClick={handleViewSecure} className="py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-600 transition flex items-center justify-center gap-2">
-                            <ExternalLink className="w-4 h-4" /> View PDF
+                    {/* Actions directly below document info */}
+                    <div className="grid grid-cols-2 gap-2 mt-auto pt-4">
+                        <button 
+                            onClick={handleViewSecure} 
+                            className="py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/70 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5"
+                        >
+                            <ExternalLink className="w-3.5 h-3.5" /> View PDF
                         </button>
-                        <button onClick={() => handleDownload('download')} className="py-2 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-xl text-sm font-medium hover:bg-blue-100 dark:hover:bg-blue-900/40 transition flex items-center justify-center gap-2">
-                            <Download className="w-4 h-4" /> Download
+                        <button 
+                            onClick={() => handleDownload('download')} 
+                            className="py-2 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/30 dark:hover:bg-blue-900/40 text-blue-700 dark:text-blue-400 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5"
+                        >
+                            <Download className="w-3.5 h-3.5" /> Download
                         </button>
-                        <button onClick={() => fileInputRef.current?.click()} className="py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-700 transition flex items-center justify-center gap-2">
-                            {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />} Replace
+                        <button 
+                            onClick={() => fileInputRef.current?.click()} 
+                            disabled={uploading}
+                            className="py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/70 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 disabled:opacity-50"
+                        >
+                            {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />} Replace
                         </button>
-                        <button onClick={() => setShowDeleteConfirm(true)} className="py-2 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-xl text-sm font-medium hover:bg-red-100 dark:hover:bg-red-900/40 transition flex items-center justify-center gap-2">
-                            <Trash2 className="w-4 h-4" /> Delete
+                        <button 
+                            onClick={() => setShowDeleteConfirm(true)} 
+                            className="py-2 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5"
+                        >
+                            <Trash2 className="w-3.5 h-3.5" /> Delete
                         </button>
                     </div>
                 </div>
             ) : (
+                /* Compact Empty State */
                 <div 
                     onDragOver={onDragOver}
                     onDragLeave={onDragLeave}
                     onDrop={onDrop}
-                    className={`flex-1 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center p-6 transition-colors ${
-                        isDragging ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50'
+                    className={`flex-1 min-h-[220px] border-2 border-dashed rounded-xl flex flex-col items-center justify-center p-4 transition-colors text-center ${
+                        isDragging 
+                            ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/20' 
+                            : 'border-slate-200 dark:border-slate-700/80 bg-slate-50/50 dark:bg-slate-900/30'
                     }`}
                 >
                     {uploading ? (
-                        <div className="flex flex-col items-center gap-3">
-                            <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
-                            <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Merging &amp; Uploading...</p>
+                        <div className="flex flex-col items-center gap-2 py-6">
+                            <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                            <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">Merging &amp; Uploading...</p>
                         </div>
                     ) : (
                         <>
-                            <div className="w-12 h-12 bg-white dark:bg-slate-800 shadow-sm rounded-full flex items-center justify-center mb-4">
-                                <FilePlus className="w-6 h-6 text-blue-600" />
+                            <div className="w-10 h-10 bg-white dark:bg-slate-800 shadow-sm border border-slate-100 dark:border-slate-700 rounded-xl flex items-center justify-center mb-2">
+                                <FilePlus className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                             </div>
-                            <p className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-1 text-center">Drag &amp; Drop Documents</p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 text-center max-w-[200px]">
-                                Select multiple PDFs or images to auto-merge into a single PDF
-                            </p>
+                            <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 mb-0.5">Drag &amp; drop documents here</p>
+                            <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-3">Auto-merges PDFs and images into one PDF</p>
 
-                            <select 
-                                value={docType}
-                                onChange={(e) => setDocType(e.target.value)}
-                                className="mb-4 w-full text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
-                            >
-                                <option>Purchase / Proforma Invoice</option>
-                                <option>Warranty Certificate</option>
-                                <option>Delivery Note</option>
-                                <option>Service / Repair Reports</option>
-                                <option>Other</option>
-                            </select>
-                            
-                            <button 
-                                onClick={() => fileInputRef.current?.click()}
-                                className="w-full py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition flex items-center justify-center gap-2 shadow-sm shadow-blue-600/20"
-                            >
-                                <UploadCloud className="w-4 h-4" /> Select Files
-                            </button>
+                            <div className="w-full space-y-2 mt-auto">
+                                <select 
+                                    value={docType}
+                                    onChange={(e) => setDocType(e.target.value)}
+                                    className="w-full text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl px-2.5 py-1.5 outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                    <option>Purchase / Proforma Invoice</option>
+                                    <option>Warranty Certificate</option>
+                                    <option>Delivery Note</option>
+                                    <option>Service / Repair Reports</option>
+                                    <option>Other</option>
+                                </select>
+                                
+                                <button 
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 shadow-sm shadow-blue-600/20"
+                                >
+                                    <UploadCloud className="w-3.5 h-3.5" /> Upload Document
+                                </button>
+                            </div>
                         </>
                     )}
                 </div>

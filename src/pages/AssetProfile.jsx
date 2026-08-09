@@ -392,11 +392,11 @@ export default function AssetProfile() {
                 </div>
               </div>
 
-              {/* Asset Image Card */}
-              <AssetImage asset={asset} onUpdate={fetchAssetProfile} />
-
-              {/* Asset Documents Card */}
-              <AssetDocuments asset={asset} onUpdate={fetchAssetProfile} />
+              {/* Asset Media Section: Image & Documents Side-by-Side */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
+                <AssetImage asset={asset} onUpdate={fetchAssetProfile} />
+                <AssetDocuments asset={asset} onUpdate={fetchAssetProfile} />
+              </div>
             </div>
           </div>
         ) : (
