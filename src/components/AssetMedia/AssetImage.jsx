@@ -96,7 +96,6 @@ export default function AssetImage({ asset, onUpdate }) {
             const compressedThumb = await imageCompression(file, thumbOptions);
 
             const formData = new FormData();
-            // Appending as File to maintain filename and webp extension
             formData.append('image', new File([compressedMain], 'image.webp', { type: 'image/webp' }));
             formData.append('thumbnail', new File([compressedThumb], 'thumb.webp', { type: 'image/webp' }));
 
@@ -221,7 +220,6 @@ export default function AssetImage({ asset, onUpdate }) {
             if (!res.ok) throw new Error('Failed to get secure download link');
             const data = await res.json();
             
-            // Trigger download via anchor
             const a = document.createElement('a');
             a.href = data.url;
             a.download = asset.imageFileName || `asset_${asset.assetCode}.webp`;
@@ -234,90 +232,119 @@ export default function AssetImage({ asset, onUpdate }) {
     };
 
     const hasImage = !!asset?.imageUrl;
+
     return (
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 flex flex-col h-full">
-            <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 pb-3 mb-4">
-                <ImageIcon className="w-5 h-5 text-blue-600" />
-                Asset Image
-            </h3>
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-3 mb-4">
+                <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2 text-sm sm:text-base">
+                    <ImageIcon className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 dark:text-blue-400" />
+                    Asset Image
+                </h3>
+                {hasImage && (
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/40">
+                        Attached
+                    </span>
+                )}
+            </div>
 
             {hasImage ? (
                 <div className="flex flex-col flex-1">
-                    <div className="relative group rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 aspect-video flex items-center justify-center mb-4">
+                    {/* Bounded Preview Container */}
+                    <div className="relative group rounded-xl overflow-hidden bg-slate-900/5 dark:bg-slate-950/40 border border-slate-200/80 dark:border-slate-700/80 h-44 sm:h-48 w-full flex items-center justify-center p-2">
                         {thumbUrl ? (
-                            <img src={thumbUrl} alt={asset.assetCode} className="max-h-full max-w-full object-contain" />
+                            <img 
+                                src={thumbUrl} 
+                                alt={asset.assetCode} 
+                                className="max-h-full max-w-full object-contain rounded-lg" 
+                            />
                         ) : (
-                            <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                            <Loader2 className="w-7 h-7 text-blue-600 animate-spin" />
                         )}
-                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
-                            <button onClick={() => setFullScreen(true)} className="p-2 bg-white/20 hover:bg-white/40 rounded-full text-white backdrop-blur-sm transition">
-                                <Maximize2 className="w-5 h-5" />
+                        <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2.5 rounded-xl">
+                            <button 
+                                onClick={() => setFullScreen(true)} 
+                                title="View Full Image"
+                                className="p-2 bg-white/20 hover:bg-white/30 rounded-lg text-white backdrop-blur-sm transition"
+                            >
+                                <Maximize2 className="w-4 h-4" />
                             </button>
-                            <button onClick={handleDownload} className="p-2 bg-white/20 hover:bg-white/40 rounded-full text-white backdrop-blur-sm transition">
-                                <Download className="w-5 h-5" />
+                            <button 
+                                onClick={handleDownload} 
+                                title="Download Image"
+                                className="p-2 bg-white/20 hover:bg-white/30 rounded-lg text-white backdrop-blur-sm transition"
+                            >
+                                <Download className="w-4 h-4" />
                             </button>
                         </div>
                     </div>
                     
-                    <div className="space-y-1 mb-6 flex-1">
-                        <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate" title={asset.imageFileName}>{asset.imageFileName}</p>
-                        <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400">
+                    {/* Compact Metadata directly below preview */}
+                    <div className="mt-3 mb-4 space-y-1 bg-slate-50/80 dark:bg-slate-900/40 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/50">
+                        <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate" title={asset.imageFileName}>
+                            {asset.imageFileName || `${asset.assetCode}_image.webp`}
+                        </p>
+                        <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
                             <span>{formatBytes(asset.imageFileSize)} • WEBP</span>
-                            <span>{new Date(asset.imageUploadedAt).toLocaleDateString()}</span>
+                            <span>{asset.imageUploadedAt ? new Date(asset.imageUploadedAt).toLocaleDateString() : 'Uploaded'}</span>
                         </div>
                     </div>
 
+                    {/* Actions directly below metadata */}
                     <div className="flex gap-2 mt-auto">
                         <button 
                             onClick={() => fileInputRef.current?.click()} 
                             disabled={uploading}
-                            className="flex-1 py-2 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-xl text-sm font-medium hover:bg-blue-100 dark:hover:bg-blue-900/40 transition flex items-center justify-center gap-2 disabled:opacity-50"
+                            className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/70 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 disabled:opacity-50"
                         >
-                            {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                            {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
                             Replace
                         </button>
                         <button 
                             onClick={() => setShowDeleteConfirm(true)}
-                            className="flex-1 py-2 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-xl text-sm font-medium hover:bg-red-100 dark:hover:bg-red-900/40 transition flex items-center justify-center gap-2"
+                            className="flex-1 py-2 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5"
                         >
-                            <Trash2 className="w-4 h-4" /> Delete
+                            <Trash2 className="w-3.5 h-3.5" /> Delete
                         </button>
                     </div>
                 </div>
             ) : (
+                /* Compact Empty State */
                 <div 
                     onDragOver={onDragOver}
                     onDragLeave={onDragLeave}
                     onDrop={onDrop}
-                    className={`flex-1 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center p-6 transition-colors ${
-                        isDragging ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50'
+                    className={`flex-1 min-h-[220px] border-2 border-dashed rounded-xl flex flex-col items-center justify-center p-4 transition-colors text-center ${
+                        isDragging 
+                            ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/20' 
+                            : 'border-slate-200 dark:border-slate-700/80 bg-slate-50/50 dark:bg-slate-900/30'
                     }`}
                 >
                     {uploading ? (
-                        <div className="flex flex-col items-center gap-3">
-                            <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
-                            <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Optimizing &amp; Uploading...</p>
+                        <div className="flex flex-col items-center gap-2 py-6">
+                            <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                            <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">Optimizing &amp; Uploading...</p>
                         </div>
                     ) : (
                         <>
-                            <div className="w-12 h-12 bg-white dark:bg-slate-800 shadow-sm rounded-full flex items-center justify-center mb-4">
-                                <UploadCloud className="w-6 h-6 text-blue-600" />
+                            <div className="w-10 h-10 bg-white dark:bg-slate-800 shadow-sm border border-slate-100 dark:border-slate-700 rounded-xl flex items-center justify-center mb-2">
+                                <UploadCloud className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                             </div>
-                            <p className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">Drag &amp; drop image here</p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mb-6 text-center">Auto-compresses to lightweight WEBP</p>
+                            <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 mb-0.5">Drag &amp; drop image here</p>
+                            <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-4">Auto-compresses to lightweight WEBP</p>
                             
-                            <div className="flex w-full gap-2">
+                            <div className="flex w-full gap-2 mt-auto">
                                 <button 
                                     onClick={() => fileInputRef.current?.click()}
-                                    className="flex-1 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition flex items-center justify-center gap-2 shadow-sm shadow-blue-600/20"
+                                    className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 shadow-sm shadow-blue-600/20"
                                 >
-                                    <UploadCloud className="w-4 h-4" /> Browse
+                                    <UploadCloud className="w-3.5 h-3.5" /> Upload
                                 </button>
                                 <button 
                                     onClick={startCamera}
-                                    className="flex-1 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-600 transition flex items-center justify-center gap-2"
+                                    className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/70 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5"
                                 >
-                                    <Camera className="w-4 h-4" /> Camera
+                                    <Camera className="w-3.5 h-3.5" /> Camera
                                 </button>
                             </div>
                         </>
