@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { 
     Image as ImageIcon, UploadCloud, Camera, X, 
     Trash2, RefreshCw, Download, Maximize2, Loader2 
@@ -18,9 +18,49 @@ export default function AssetImage({ asset, onUpdate }) {
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [deleting, setDeleting] = useState(false);
     const [fullScreen, setFullScreen] = useState(false);
+    const [viewUrl, setViewUrl] = useState(null);
+    const [thumbUrl, setThumbUrl] = useState(null);
 
     const fileInputRef = useRef(null);
     const videoRef = useRef(null);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadPrivateImageUrls = async () => {
+            if (!asset?.imageUrl) {
+                setViewUrl(null);
+                setThumbUrl(null);
+                return;
+            }
+
+            try {
+                const token = localStorage.getItem('token');
+                const types = asset.thumbnailUrl ? ['view', 'thumb'] : ['view'];
+                const responses = await Promise.all(types.map((type) => fetch(
+                    `${API_URL}/uploads/image/${asset.id}/${type}`,
+                    { headers: { 'Authorization': `Bearer ${token}` } }
+                )));
+                if (responses.some((response) => !response.ok)) {
+                    throw new Error('Failed to load private image');
+                }
+                const links = await Promise.all(responses.map((response) => response.json()));
+                if (!cancelled) {
+                    setViewUrl(links[0].url);
+                    setThumbUrl(links[1]?.url || links[0].url);
+                }
+            } catch (error) {
+                if (!cancelled) {
+                    setViewUrl(null);
+                    setThumbUrl(null);
+                }
+                console.error(error);
+            }
+        };
+
+        loadPrivateImageUrls();
+        return () => { cancelled = true; };
+    }, [asset?.id, asset?.imageUrl, asset?.thumbnailUrl, asset?.imageUploadedAt]);
 
     const formatBytes = (bytes, decimals = 2) => {
         if (!+bytes) return '0 Bytes';
@@ -194,10 +234,6 @@ export default function AssetImage({ asset, onUpdate }) {
     };
 
     const hasImage = !!asset?.imageUrl;
-    // Append timestamp to bypass browser caching when replaced
-    const viewUrl = hasImage ? `${API_URL.replace('/api', '')}${asset.imageUrl}?t=${new Date(asset.imageUploadedAt).getTime()}` : null;
-    const thumbUrl = hasImage && asset.thumbnailUrl ? `${API_URL.replace('/api', '')}${asset.thumbnailUrl}?t=${new Date(asset.imageUploadedAt).getTime()}` : viewUrl;
-
     return (
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 flex flex-col h-full">
             <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 pb-3 mb-4">
@@ -208,12 +244,11 @@ export default function AssetImage({ asset, onUpdate }) {
             {hasImage ? (
                 <div className="flex flex-col flex-1">
                     <div className="relative group rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 aspect-video flex items-center justify-center mb-4">
-                        <img 
-                            src={thumbUrl} 
-                            alt={asset.assetCode} 
-                            className="max-h-full max-w-full object-contain"
-                            crossOrigin="anonymous"
-                        />
+                        {thumbUrl ? (
+                            <img src={thumbUrl} alt={asset.assetCode} className="max-h-full max-w-full object-contain" />
+                        ) : (
+                            <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                        )}
                         <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
                             <button onClick={() => setFullScreen(true)} className="p-2 bg-white/20 hover:bg-white/40 rounded-full text-white backdrop-blur-sm transition">
                                 <Maximize2 className="w-5 h-5" />
@@ -326,12 +361,7 @@ export default function AssetImage({ asset, onUpdate }) {
                         </button>
                     </div>
                     <div className="flex-1 flex items-center justify-center p-4 overflow-hidden">
-                        <img 
-                            src={viewUrl} 
-                            alt="Full Screen" 
-                            className="max-w-full max-h-full object-contain"
-                            crossOrigin="anonymous"
-                        />
+                        {viewUrl && <img src={viewUrl} alt="Full Screen" className="max-w-full max-h-full object-contain" />}
                     </div>
                 </div>
             )}
