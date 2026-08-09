@@ -32,26 +32,70 @@ router.get('/storage/stats', authenticate, adminOnly, async (req, res) => {
     try {
         const forceRefresh = req.query.refresh === 'true';
 
-        // 1. Calculate actual R2 stats
-        const r2Stats = await getR2StorageStats(forceRefresh);
+        // 1. Calculate actual R2 stats (safe fallback if unconfigured or API error)
+        let r2Stats = {
+            isConfigured: false,
+            totalBytes: 0,
+            totalCount: 0,
+            breakdown: {
+                images: { count: 0, bytes: 0 },
+                thumbnails: { count: 0, bytes: 0 },
+                documents: { count: 0, bytes: 0 },
+                other: { count: 0, bytes: 0 },
+            },
+            referenceLimitBytes: 10 * 1024 * 1024 * 1024,
+            cachedAt: new Date().toISOString(),
+        };
+
+        try {
+            const fetched = await getR2StorageStats(forceRefresh);
+            if (fetched) r2Stats = fetched;
+        } catch (r2Err) {
+            console.error('R2 Stats Safe Error:', r2Err.message);
+        }
 
         // 2. Calculate actual PostgreSQL Database size & table breakdown
-        const dbSizeResult = await prisma.$queryRawUnsafe(`
-            SELECT 
-                pg_database_size(current_database())::text AS total_bytes,
-                pg_size_pretty(pg_database_size(current_database())) AS pretty_size
-        `);
+        let dbTotalBytes = 0;
+        let dbPrettySize = '0 MB';
+        let formattedTables = [];
 
-        const tableSizes = await prisma.$queryRawUnsafe(`
-            SELECT 
-                relname AS table_name,
-                pg_total_relation_size(relid)::text AS total_bytes,
-                pg_relation_size(relid)::text AS table_bytes,
-                pg_indexes_size(relid)::text AS index_bytes,
-                pg_size_pretty(pg_total_relation_size(relid)) AS pretty_total_size
-            FROM pg_catalog.pg_statio_user_tables
-            ORDER BY pg_total_relation_size(relid) DESC
-        `);
+        try {
+            const dbSizeResult = await prisma.$queryRawUnsafe(`
+                SELECT 
+                    pg_database_size(current_database())::text AS total_bytes,
+                    pg_size_pretty(pg_database_size(current_database())) AS pretty_size
+            `);
+            if (dbSizeResult && dbSizeResult[0]) {
+                dbTotalBytes = Number(dbSizeResult[0].total_bytes) || 0;
+                dbPrettySize = dbSizeResult[0].pretty_size || '0 MB';
+            }
+        } catch (dbErr) {
+            console.error('Database Size Query Error:', dbErr.message);
+        }
+
+        try {
+            const tableSizes = await prisma.$queryRawUnsafe(`
+                SELECT 
+                    relname AS table_name,
+                    pg_total_relation_size(relid)::text AS total_bytes,
+                    pg_relation_size(relid)::text AS table_bytes,
+                    pg_indexes_size(relid)::text AS index_bytes,
+                    pg_size_pretty(pg_total_relation_size(relid)) AS pretty_total_size
+                FROM pg_catalog.pg_statio_user_tables
+                ORDER BY pg_total_relation_size(relid) DESC
+            `);
+            if (Array.isArray(tableSizes)) {
+                formattedTables = tableSizes.map((t) => ({
+                    tableName: t.table_name,
+                    totalBytes: Number(t.total_bytes) || 0,
+                    tableBytes: Number(t.table_bytes) || 0,
+                    indexBytes: Number(t.index_bytes) || 0,
+                    prettyTotalSize: t.pretty_total_size,
+                }));
+            }
+        } catch (tblErr) {
+            console.error('Table Sizes Query Error:', tblErr.message);
+        }
 
         // 3. Fetch configured DB reference limit from SystemSettings
         let configuredReferenceLimitMB = null;
@@ -61,35 +105,38 @@ router.get('/storage/stats', authenticate, adminOnly, async (req, res) => {
                 select: { dbStorageLimitMB: true },
             });
             configuredReferenceLimitMB = settings?.dbStorageLimitMB ?? null;
-        } catch (_) {}
-
-        const dbTotalBytes = Number(dbSizeResult[0]?.total_bytes) || 0;
-        const dbPrettySize = dbSizeResult[0]?.pretty_size || '0 MB';
+        } catch (_) {
+            try {
+                const settingsRows = await prisma.$queryRawUnsafe(`
+                    SELECT "dbStorageLimitMB" FROM "SystemSettings" WHERE id = 'global' LIMIT 1;
+                `);
+                configuredReferenceLimitMB = settingsRows[0]?.dbStorageLimitMB ?? null;
+            } catch (_) {}
+        }
 
         res.json({
             r2: {
                 isConfigured: r2Stats.isConfigured,
-                totalBytes: r2Stats.totalBytes,
-                totalCount: r2Stats.totalCount,
-                breakdown: r2Stats.breakdown,
-                referenceLimitBytes: r2Stats.referenceLimitBytes, // 10 GB
-                cachedAt: r2Stats.cachedAt,
+                totalBytes: r2Stats.totalBytes || 0,
+                totalCount: r2Stats.totalCount || 0,
+                breakdown: r2Stats.breakdown || {
+                    images: { count: 0, bytes: 0 },
+                    thumbnails: { count: 0, bytes: 0 },
+                    documents: { count: 0, bytes: 0 },
+                    other: { count: 0, bytes: 0 },
+                },
+                referenceLimitBytes: r2Stats.referenceLimitBytes || (10 * 1024 * 1024 * 1024),
+                cachedAt: r2Stats.cachedAt || new Date().toISOString(),
             },
             database: {
                 totalBytes: dbTotalBytes,
                 prettySize: dbPrettySize,
-                tables: (tableSizes || []).map((t) => ({
-                    tableName: t.table_name,
-                    totalBytes: Number(t.total_bytes) || 0,
-                    tableBytes: Number(t.table_bytes) || 0,
-                    indexBytes: Number(t.index_bytes) || 0,
-                    prettyTotalSize: t.pretty_total_size,
-                })),
+                tables: formattedTables,
                 configuredReferenceLimitMB: configuredReferenceLimitMB,
             },
         });
     } catch (error) {
-        console.error('Storage Stats Error:', error);
+        console.error('Storage Stats Fatal Error:', error);
         res.status(500).json({ error: 'Failed to retrieve storage statistics' });
     }
 });
@@ -108,16 +155,34 @@ router.post('/storage/db-capacity', authenticate, adminOnly, async (req, res) =>
             valueToSet = num;
         }
 
-        const updated = await prisma.systemSettings.upsert({
-            where: { id: 'global' },
-            update: { dbStorageLimitMB: valueToSet },
-            create: {
-                id: 'global',
-                assetCodePrefix: 'AST',
-                warrantyPeriod: 12,
-                dbStorageLimitMB: valueToSet,
-            },
-        });
+        let savedVal = valueToSet;
+        try {
+            const updated = await prisma.systemSettings.upsert({
+                where: { id: 'global' },
+                update: { dbStorageLimitMB: valueToSet },
+                create: {
+                    id: 'global',
+                    assetCodePrefix: 'AST',
+                    warrantyPeriod: 12,
+                    dbStorageLimitMB: valueToSet,
+                },
+            });
+            savedVal = updated.dbStorageLimitMB;
+        } catch (_) {
+            if (valueToSet !== null) {
+                await prisma.$executeRawUnsafe(`
+                    UPDATE "SystemSettings" 
+                    SET "dbStorageLimitMB" = ${valueToSet}, "updatedAt" = NOW() 
+                    WHERE id = 'global';
+                `);
+            } else {
+                await prisma.$executeRawUnsafe(`
+                    UPDATE "SystemSettings" 
+                    SET "dbStorageLimitMB" = NULL, "updatedAt" = NOW() 
+                    WHERE id = 'global';
+                `);
+            }
+        }
 
         await writeAuditLog({
             userId: req.user.id,
@@ -132,7 +197,7 @@ router.post('/storage/db-capacity', authenticate, adminOnly, async (req, res) =>
 
         res.json({
             success: true,
-            dbStorageLimitMB: updated.dbStorageLimitMB,
+            dbStorageLimitMB: savedVal,
         });
     } catch (error) {
         console.error('Update DB Capacity Error:', error);

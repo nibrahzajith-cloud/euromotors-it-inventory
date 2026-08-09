@@ -89,8 +89,13 @@ const serverStart = Date.now();
 // Eagerly establish the DB connection at startup so the very first
 // user request doesn't pay the connection setup cost.
 prisma.$connect()
-  .then(() => {
+  .then(async () => {
     console.log(`[STARTUP] Database connection established.`);
+    try {
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE "SystemSettings" ADD COLUMN IF NOT EXISTS "dbStorageLimitMB" INTEGER;
+      `);
+    } catch (_) {}
   })
   .catch((err) => {
     console.error('[STARTUP] Failed to connect to database:', err.message);
