@@ -1,90 +1,98 @@
-const { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const {
+  S3Client,
+  PutObjectCommand,
+  DeleteObjectCommand,
+  GetObjectCommand,
+} = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
-const fs = require('fs');
 
-const s3Client = new S3Client({
-  region: process.env.S3_REGION || 'auto',
-  endpoint: process.env.S3_ENDPOINT || 'https://example.r2.cloudflarestorage.com',
-  credentials: {
-    accessKeyId: process.env.S3_ACCESS_KEY_ID || 'dummy_key',
-    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || 'dummy_secret',
-  },
-  // Necessary for R2 or Supabase
-  forcePathStyle: true,
-});
+const REQUIRED_ENV_VARS = [
+  'R2_ACCOUNT_ID',
+  'R2_ACCESS_KEY_ID',
+  'R2_SECRET_ACCESS_KEY',
+  'R2_BUCKET_NAME',
+  'R2_ENDPOINT',
+];
 
-const BUCKET_NAME = process.env.S3_BUCKET_NAME || 'it-inventory-assets';
-const PUBLIC_URL_PREFIX = process.env.S3_PUBLIC_URL_PREFIX || 'https://pub-example.r2.dev';
+let client;
 
-/**
- * Upload a local file to S3 and return its public URL
- */
-async function uploadToS3(filePath, s3Key, mimeType) {
-  const fileStream = fs.createReadStream(filePath);
-
-  const command = new PutObjectCommand({
-    Bucket: BUCKET_NAME,
-    Key: s3Key,
-    Body: fileStream,
-    ContentType: mimeType,
-  });
-
-  try {
-    await s3Client.send(command);
-    return {
-      url: `${PUBLIC_URL_PREFIX}/${s3Key}`,
-      storageKey: s3Key
-    };
-  } catch (error) {
-    console.error("S3 Upload Error:", error);
-    // Return null instead of throwing to trigger local fallback
-    return null;
+function assertR2Configured() {
+  const missing = REQUIRED_ENV_VARS.filter((key) => !process.env[key]?.trim());
+  if (missing.length > 0) {
+    const error = new Error(`R2 storage is not configured. Missing: ${missing.join(', ')}`);
+    error.code = 'R2_NOT_CONFIGURED';
+    throw error;
   }
 }
 
-/**
- * Delete a file from S3 given its public URL or key
- */
-async function deleteFromS3(urlOrKey) {
-  let key = urlOrKey;
-  if (urlOrKey.startsWith('http')) {
-    key = urlOrKey.replace(`${PUBLIC_URL_PREFIX}/`, '');
-  }
-
-  const command = new DeleteObjectCommand({
-    Bucket: BUCKET_NAME,
-    Key: key,
-  });
-
-  try {
-    await s3Client.send(command);
-    return true;
-  } catch (error) {
-    console.error("S3 Delete Error:", error);
-    return false;
-  }
-}
-
-/**
- * Generate a pre-signed URL for downloading an object
- */
-async function getSignedDownloadUrl(s3Key, expiresIn = 3600) {
-  try {
-    const command = new GetObjectCommand({
-      Bucket: BUCKET_NAME,
-      Key: s3Key,
+function getR2Client() {
+  assertR2Configured();
+  if (!client) {
+    client = new S3Client({
+      region: 'auto',
+      endpoint: process.env.R2_ENDPOINT,
+      credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+      },
+      forcePathStyle: true,
     });
-    // Create a signed URL that expires in 1 hour
-    const url = await getSignedUrl(s3Client, command, { expiresIn });
-    return url;
-  } catch (err) {
-    console.error("Error generating signed URL", err);
-    return null;
   }
+  return client;
+}
+
+function validateObjectKey(key) {
+  if (!key || typeof key !== 'string' || key.includes('..') || key.startsWith('/')) {
+    throw new Error('Invalid R2 object key');
+  }
+}
+
+async function uploadFile(buffer, key, mimeType) {
+  if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
+    throw new Error('A non-empty file buffer is required');
+  }
+  validateObjectKey(key);
+
+  await getR2Client().send(new PutObjectCommand({
+    Bucket: process.env.R2_BUCKET_NAME,
+    Key: key,
+    Body: buffer,
+    ContentLength: buffer.length,
+    ContentType: mimeType || 'application/octet-stream',
+  }));
+
+  return { storageKey: key };
+}
+
+async function deleteFile(key) {
+  validateObjectKey(key);
+  await getR2Client().send(new DeleteObjectCommand({
+    Bucket: process.env.R2_BUCKET_NAME,
+    Key: key,
+  }));
+}
+
+async function getPresignedUrl(key, expiresIn = 300, downloadName) {
+  validateObjectKey(key);
+  const safeExpiry = Math.min(Math.max(Number(expiresIn) || 300, 60), 3600);
+  const input = {
+    Bucket: process.env.R2_BUCKET_NAME,
+    Key: key,
+  };
+
+  if (downloadName) {
+    const safeName = downloadName.replace(/[\r\n"\\]/g, '_');
+    input.ResponseContentDisposition = `attachment; filename="${safeName}"`;
+  }
+
+  return getSignedUrl(getR2Client(), new GetObjectCommand(input), {
+    expiresIn: safeExpiry,
+  });
 }
 
 module.exports = {
-  uploadToS3,
-  deleteFromS3,
-  getSignedDownloadUrl
+  assertR2Configured,
+  uploadFile,
+  deleteFile,
+  getPresignedUrl,
 };

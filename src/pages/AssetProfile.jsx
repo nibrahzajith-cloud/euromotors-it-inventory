@@ -35,6 +35,7 @@ export default function AssetProfile() {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const [docType, setDocType] = useState('Other');
+  const [privateImageUrl, setPrivateImageUrl] = useState(null);
   
   const fileInputRef = useRef(null);
   const docInputRef = useRef(null);
@@ -97,6 +98,34 @@ export default function AssetProfile() {
     
     fetchAssetProfile();
   }, [assetCode]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadPrivateImageUrl = async () => {
+      if (!asset?.imageUrl) {
+        setPrivateImageUrl(null);
+        return;
+      }
+
+      try {
+        const token = localStorage.getItem('token');
+        const type = asset.thumbnailUrl ? 'thumb' : 'view';
+        const response = await fetch(`${API_URL}/uploads/image/${asset.id}/${type}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!response.ok) throw new Error('Failed to load private image');
+        const data = await response.json();
+        if (!cancelled) setPrivateImageUrl(data.url);
+      } catch (error) {
+        if (!cancelled) setPrivateImageUrl(null);
+        console.error(error);
+      }
+    };
+
+    loadPrivateImageUrl();
+    return () => { cancelled = true; };
+  }, [asset?.id, asset?.imageUrl, asset?.thumbnailUrl, asset?.imageUploadedAt]);
 
   const startEditing = () => {
     setEditData({
@@ -871,7 +900,11 @@ export default function AssetProfile() {
                       <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
                     ) : asset.imageUrl ? (
                       <>
-                        <img src={`${API_URL.replace('/api', '')}${asset.imageUrl}`} alt={asset.model} className="w-full h-full object-cover" />
+                        {privateImageUrl ? (
+                          <img src={privateImageUrl} alt={asset.model} className="w-full h-full object-cover" />
+                        ) : (
+                          <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                        )}
                         <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                            <button onClick={handleDownloadSecureImage} className="p-2 bg-blue-500/80 hover:bg-blue-600 rounded-full text-white backdrop-blur-sm transition-colors" title="Download Image">
                              <Download className="w-4 h-4" />
