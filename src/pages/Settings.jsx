@@ -434,7 +434,7 @@ export default function Settings() {
                   <option>No Date Formatting</option>
                 </select>
               </div>
-              <p className="text-xs text-slate-500 mt-2">Example of generated code: <strong>AST-2024-001</strong></p>
+              <p className="text-xs text-slate-500 mt-2">Example of generated code: <strong>AST-000000001</strong></p>
             </div>
 
             <div>

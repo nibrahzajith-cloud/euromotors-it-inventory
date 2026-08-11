@@ -1,9 +1,8 @@
-const generateNextCode = async (prisma, modelName, fieldName, prefix, suffix) => {
+const generateNextCode = async (prisma, modelName, fieldName, prefix) => {
   const lastRecord = await prisma[modelName].findFirst({
     where: {
       [fieldName]: {
-        startsWith: `${prefix}-`,
-        endsWith: `-${suffix}`
+        startsWith: `${prefix}-`
       }
     },
     orderBy: {
@@ -14,8 +13,8 @@ const generateNextCode = async (prisma, modelName, fieldName, prefix, suffix) =>
   let nextNumber = 1;
   if (lastRecord) {
     const code = lastRecord[fieldName];
-    // Attempt to extract the middle number part
-    const regex = new RegExp(`^${prefix}-(\\d+)-${suffix}$`);
+    // Attempt to extract the number part
+    const regex = new RegExp(`^${prefix}-(\\d{9})$`);
     const match = code.match(regex);
     if (match) {
       nextNumber = parseInt(match[1], 10) + 1;
@@ -26,18 +25,18 @@ const generateNextCode = async (prisma, modelName, fieldName, prefix, suffix) =>
     }
   }
 
-  const paddedNumber = nextNumber.toString().padStart(5, '0');
-  return `${prefix}-${paddedNumber}-${suffix}`;
+  const paddedNumber = nextNumber.toString().padStart(9, '0');
+  return `${prefix}-${paddedNumber}`;
 };
 
 const generateEmployeeCode = async (prisma) => {
-  return await generateNextCode(prisma, 'employee', 'employeeCode', 'EMP', '001');
+  return await generateNextCode(prisma, 'employee', 'employeeCode', 'EMP');
 };
 
 const generateAssetCode = async (prisma) => {
   const settings = await prisma.systemSettings.findUnique({ where: { id: 'global' } });
   const prefix = settings?.assetCodePrefix || 'AST';
-  return await generateNextCode(prisma, 'asset', 'assetCode', prefix, '001');
+  return await generateNextCode(prisma, 'asset', 'assetCode', prefix);
 };
 
 module.exports = {

@@ -295,7 +295,7 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
     const assetPrefix = settings?.assetCodePrefix || 'AST';
 
     let highestAssetSequence = 0;
-    const assetRegex = new RegExp(`^${assetPrefix}-(\\d+)-001$`, 'i');
+    const assetRegex = new RegExp(`^${assetPrefix}-(\\d{9})$`, 'i');
     existingAssetRecords.forEach(a => {
         const match = a.assetCode.match(assetRegex);
         if (match) {
@@ -308,7 +308,7 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
     const existingEmployeeCodes = new Set(existingEmployeeCodesArray.filter(Boolean));
     
     let highestEmployeeSequence = 0;
-    const empRegex = new RegExp(`^EMP-(\\d+)-001$`, 'i');
+    const empRegex = new RegExp(`^EMP-(\\d{9})$`, 'i');
     existingEmployeeCodesArray.forEach(code => {
         if (!code) return;
         const match = code.match(empRegex);
@@ -345,7 +345,7 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
           const aType = a.assignmentType ? a.assignmentType.toUpperCase() : 'EMPLOYEE';
           if (aType === 'EMPLOYEE' && !a.employeeCode) {
              highestEmployeeSequence++;
-             a.employeeCode = `EMP-${highestEmployeeSequence.toString().padStart(5, '0')}-001`;
+             a.employeeCode = `EMP-${highestEmployeeSequence.toString().padStart(9, '0')}`;
              existingEmployeeCodes.add(a.employeeCode);
           }
           if (aType === 'DEPARTMENT' && !a.departmentName) {
@@ -441,7 +441,7 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
 
           if (!inputCode && !existingAsset) {
               highestAssetSequence++;
-              inputCode = `${assetPrefix}-${highestAssetSequence.toString().padStart(5, '0')}-001`;
+              inputCode = `${assetPrefix}-${highestAssetSequence.toString().padStart(9, '0')}`;
           }
 
           // Validate duplicate assetCode within batch

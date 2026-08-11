@@ -20,7 +20,7 @@ export default function QrCodePage() {
   
   // Single Scanner/Generator State
   const [scanInput, setScanInput] = useState('');
-  const [generateInput, setGenerateInput] = useState(presetCode || 'AST-2023-001');
+  const [generateInput, setGenerateInput] = useState(presetCode || 'AST-000000001');
 
   // Bulk Generator State
   const [assets, setAssets] = useState([]);
@@ -217,7 +217,7 @@ export default function QrCodePage() {
                     type="text" 
                     value={scanInput}
                     onChange={(e) => setScanInput(e.target.value)}
-                    placeholder="e.g., AST-2023-001"
+                    placeholder="e.g., AST-000000001"
                     className="w-full bg-slate-50 border border-slate-200 text-slate-700 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 text-center font-mono placeholder:font-sans"
                   />
                   <button type="submit" className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white rounded-xl py-3 font-medium hover:bg-blue-700 transition-colors shadow-sm shadow-blue-600/20">

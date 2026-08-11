@@ -147,7 +147,7 @@ export default function Employees() {
     } else {
       setEditingEmp(null);
       setFormData({
-        employeeCode: `EMP-${Date.now().toString().slice(-4)}-${Math.floor(Math.random()*100)}`,
+        employeeCode: `EMP-${Math.floor(Math.random()*1000000000).toString().padStart(9, '0')}`,
         fullName: '',
         email: '',
         designation: '',
