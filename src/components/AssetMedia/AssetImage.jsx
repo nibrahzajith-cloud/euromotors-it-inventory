@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { 
-    Image as ImageIcon, UploadCloud, Camera, X, 
+import {
+    Image as ImageIcon, UploadCloud, Camera, X,
     Trash2, RefreshCw, Download, Maximize2, Loader2, Sparkles
 } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
@@ -156,12 +156,12 @@ export default function AssetImage({ asset, onUpdate }) {
 
     const startCamera = async () => {
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { 
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: {
                     facingMode: 'environment',
                     width: { ideal: 1920 },
                     height: { ideal: 1080 }
-                } 
+                }
             });
             setCameraStream(stream);
             setShowCamera(true);
@@ -189,7 +189,7 @@ export default function AssetImage({ asset, onUpdate }) {
         canvas.width = videoRef.current.videoWidth || 1920;
         canvas.height = videoRef.current.videoHeight || 1080;
         canvas.getContext('2d').drawImage(videoRef.current, 0, 0);
-        
+
         canvas.toBlob((blob) => {
             const file = new File([blob], "camera-capture.jpg", { type: "image/jpeg" });
             stopCamera();
@@ -225,7 +225,7 @@ export default function AssetImage({ asset, onUpdate }) {
             });
             if (!res.ok) throw new Error('Failed to get secure download link');
             const data = await res.json();
-            
+
             const a = document.createElement('a');
             a.href = data.url;
             a.download = asset.imageFileName || `asset_${asset.assetCode}.webp`;
@@ -259,24 +259,24 @@ export default function AssetImage({ asset, onUpdate }) {
                     {/* Bounded Preview Container with High-Res Zoom */}
                     <div className="relative group rounded-xl overflow-hidden bg-slate-900/5 dark:bg-slate-950/40 border border-slate-200/80 dark:border-slate-700/80 h-44 sm:h-48 w-full flex items-center justify-center p-2">
                         {thumbUrl ? (
-                            <img 
-                                src={thumbUrl} 
-                                alt={asset.assetCode} 
-                                className="max-h-full max-w-full object-contain rounded-lg" 
+                            <img
+                                src={thumbUrl}
+                                alt={asset.assetCode}
+                                className="max-h-full max-w-full object-contain rounded-lg"
                             />
                         ) : (
                             <Loader2 className="w-7 h-7 text-blue-600 animate-spin" />
                         )}
                         <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2.5 rounded-xl">
-                            <button 
-                                onClick={() => setFullScreen(true)} 
+                            <button
+                                onClick={() => setFullScreen(true)}
                                 title="View Full High-Resolution Image"
                                 className="p-2 bg-white/20 hover:bg-white/30 rounded-lg text-white backdrop-blur-sm transition flex items-center gap-1.5 text-xs"
                             >
                                 <Maximize2 className="w-4 h-4" /> Full View
                             </button>
-                            <button 
-                                onClick={handleDownload} 
+                            <button
+                                onClick={handleDownload}
                                 title="Download Image"
                                 className="p-2 bg-white/20 hover:bg-white/30 rounded-lg text-white backdrop-blur-sm transition flex items-center gap-1.5 text-xs"
                             >
@@ -284,7 +284,7 @@ export default function AssetImage({ asset, onUpdate }) {
                             </button>
                         </div>
                     </div>
-                    
+
                     {/* Compact Metadata */}
                     <div className="mt-3 mb-4 space-y-1 bg-slate-50/80 dark:bg-slate-900/40 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/50">
                         <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate" title={asset.imageFileName}>
@@ -298,15 +298,15 @@ export default function AssetImage({ asset, onUpdate }) {
 
                     {/* Actions */}
                     <div className="flex gap-2 mt-auto">
-                        <button 
-                            onClick={() => fileInputRef.current?.click()} 
+                        <button
+                            onClick={() => fileInputRef.current?.click()}
                             disabled={uploading}
                             className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/70 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 disabled:opacity-50"
                         >
                             {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
                             Replace
                         </button>
-                        <button 
+                        <button
                             onClick={() => setShowDeleteConfirm(true)}
                             className="flex-1 py-2 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5"
                         >
@@ -321,15 +321,14 @@ export default function AssetImage({ asset, onUpdate }) {
             ) : (
                 /* Compact Empty State */
                 <div className="flex flex-col flex-1">
-                    <div 
+                    <div
                         onDragOver={onDragOver}
                         onDragLeave={onDragLeave}
                         onDrop={onDrop}
-                        className={`flex-1 min-h-[200px] border-2 border-dashed rounded-xl flex flex-col items-center justify-center p-4 transition-colors text-center ${
-                            isDragging 
-                                ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/20' 
+                        className={`flex-1 min-h-[200px] border-2 border-dashed rounded-xl flex flex-col items-center justify-center p-4 transition-colors text-center ${isDragging
+                                ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/20'
                                 : 'border-slate-200 dark:border-slate-700/80 bg-slate-50/50 dark:bg-slate-900/30'
-                        }`}
+                            }`}
                     >
                         {uploading ? (
                             <div className="flex flex-col items-center gap-2 py-6">
@@ -343,15 +342,15 @@ export default function AssetImage({ asset, onUpdate }) {
                                 </div>
                                 <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 mb-0.5">Drag &amp; drop image here</p>
                                 <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-4">High-detail 2K/4K resolution preserved</p>
-                                
+
                                 <div className="flex w-full gap-2 mt-auto">
-                                    <button 
+                                    <button
                                         onClick={() => fileInputRef.current?.click()}
                                         className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 shadow-sm shadow-blue-600/20"
                                     >
                                         <UploadCloud className="w-3.5 h-3.5" /> Browse Image
                                     </button>
-                                    <button 
+                                    <button
                                         onClick={startCamera}
                                         className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/70 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5"
                                     >
@@ -368,11 +367,11 @@ export default function AssetImage({ asset, onUpdate }) {
                 </div>
             )}
 
-            <input 
-                type="file" 
-                ref={fileInputRef} 
-                className="hidden" 
-                accept="image/jpeg,image/png,image/webp" 
+            <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                accept="image/jpeg,image/png,image/webp"
                 onChange={handleFileChange}
             />
 
@@ -425,7 +424,7 @@ export default function AssetImage({ asset, onUpdate }) {
                         <video ref={videoRef} autoPlay playsInline className="min-w-full min-h-full object-cover"></video>
                     </div>
                     <div className="h-32 bg-black flex items-center justify-center pb-8 pt-4">
-                        <button 
+                        <button
                             onClick={capturePhoto}
                             className="w-16 h-16 rounded-full border-4 border-white/50 flex items-center justify-center hover:border-white transition-all group"
                         >
