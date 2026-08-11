@@ -80,8 +80,8 @@ export default function AssetDocuments({ asset, onUpdate }) {
             return showToast('Only PDF format is supported for combined upload', 'error');
         }
 
-        if (file.size > 25 * 1024 * 1024) {
-            return showToast('Combined PDF exceeds the maximum 25 MB limit', 'error');
+        if (file.size > 2 * 1024 * 1024) {
+            return showToast('Combined PDF exceeds the maximum 2 MB limit', 'error');
         }
 
         setUploading(true);
@@ -129,8 +129,8 @@ export default function AssetDocuments({ asset, onUpdate }) {
         }
 
         for (const file of files) {
-            if (file.size > 10 * 1024 * 1024) {
-                return showToast(`File "${file.name}" exceeds the 10 MB per-file limit`, 'error');
+            if (file.size > 2 * 1024 * 1024) {
+                return showToast(`File "${file.name}" exceeds the 2 MB per-file limit`, 'error');
             }
             if (file.type !== 'application/pdf' && !file.type.startsWith('image/')) {
                 return showToast(`File "${file.name}" is not a supported PDF or JPG/PNG image`, 'error');
@@ -221,8 +221,8 @@ export default function AssetDocuments({ asset, onUpdate }) {
             const pdfBytes = await pdfDoc.save();
             const mergedBlob = new Blob([pdfBytes], { type: 'application/pdf' });
 
-            if (mergedBlob.size > 25 * 1024 * 1024) {
-                throw new Error('Final merged PDF exceeds the 25 MB limit. Please compress source images.');
+            if (mergedBlob.size > 2 * 1024 * 1024) {
+                throw new Error('Final merged PDF exceeds the 2 MB limit. Please compress source images.');
             }
 
             setUploadProgressText('Uploading to Private R2 Storage...');
@@ -411,7 +411,7 @@ export default function AssetDocuments({ asset, onUpdate }) {
                     </div>
 
                     <p className="text-[10px] text-center text-slate-400 dark:text-slate-500 mt-2">
-                        PDF/JPG/PNG supported • Max 10 MB per file • Combined PDF max 25 MB
+                        PDF, JPG, PNG supported • Maximum document size: 2 MB
                     </p>
                 </div>
             ) : (
@@ -442,7 +442,7 @@ export default function AssetDocuments({ asset, onUpdate }) {
                                         <span className="flex items-center gap-1.5">
                                             <UploadCloud className="w-3.5 h-3.5" /> Option A: Upload Combined PDF
                                         </span>
-                                        <span className="text-[10px] opacity-80">Max 25MB</span>
+                                        <span className="text-[10px] opacity-80">Max 2MB</span>
                                     </button>
 
                                     {/* Option B */}
@@ -461,7 +461,7 @@ export default function AssetDocuments({ asset, onUpdate }) {
                     </div>
 
                     <p className="text-[10px] text-center text-slate-400 dark:text-slate-500 mt-2">
-                        PDF, JPG, PNG supported • Max 10 MB per file • Up to 10 files • Final combined PDF max 25 MB
+                        PDF, JPG, PNG supported • Maximum document size: 2 MB
                     </p>
                 </div>
             )}
@@ -510,7 +510,7 @@ export default function AssetDocuments({ asset, onUpdate }) {
                                 </div>
                                 <div>
                                     <p className="text-xs font-bold text-slate-800 dark:text-white">Option A: Upload Single Combined PDF</p>
-                                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Upload an already-prepared combined PDF file (Max 25 MB).</p>
+                                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Upload an already-prepared combined PDF file (Max 2 MB).</p>
                                 </div>
                             </button>
 

@@ -76,7 +76,7 @@ export default function AssetImage({ asset, onUpdate }) {
         try {
             // High-quality options for main image (Up to 2560px 2K/4K detail, max 2MB, quality 0.88)
             const mainOptions = {
-                maxSizeMB: 2.0, // 2MB target max
+                maxSizeMB: 1.0, // 1MB target max
                 maxWidthOrHeight: 2560,
                 useWebWorker: true,
                 fileType: 'image/webp',
@@ -315,7 +315,7 @@ export default function AssetImage({ asset, onUpdate }) {
                     </div>
 
                     <p className="text-[10px] text-center text-slate-400 dark:text-slate-500 mt-2">
-                        Supported: JPG, PNG, WEBP • Maximum optimized image size: 2 MB
+                        Supported: JPG, PNG, WEBP • Maximum optimized image size: 1 MB
                     </p>
                 </div>
             ) : (
@@ -363,7 +363,7 @@ export default function AssetImage({ asset, onUpdate }) {
                     </div>
 
                     <p className="text-[10px] text-center text-slate-400 dark:text-slate-500 mt-2">
-                        Supported: JPG, PNG, WEBP • Maximum optimized image size: 2 MB
+                        Supported: JPG, PNG, WEBP • Maximum optimized image size: 1 MB
                     </p>
                 </div>
             )}

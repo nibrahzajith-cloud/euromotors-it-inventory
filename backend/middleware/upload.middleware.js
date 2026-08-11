@@ -27,13 +27,13 @@ const documentFilter = (req, file, cb) => {
 
 const uploadImageMiddleware = multer({
   storage: memoryStorage,
-  limits: { files: 2, fileSize: 10 * 1024 * 1024 }, // 10 MB buffer limit
+  limits: { files: 2, fileSize: 1 * 1024 * 1024 }, // 1 MB buffer limit
   fileFilter: imageFilter,
 });
 
 const uploadDocumentMiddleware = multer({
   storage: memoryStorage,
-  limits: { files: 10, fileSize: 25 * 1024 * 1024 }, // 25 MB combined limit
+  limits: { files: 10, fileSize: 2 * 1024 * 1024 }, // 2 MB combined limit
   fileFilter: documentFilter,
 });
 

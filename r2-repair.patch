@@ -1,0 +1,841 @@
+From 96a1e2a2df2c824900f513762d2bd0db0f68e30a Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Sat, 8 Aug 2026 22:49:16 +0200
+Subject: [PATCH] fix: repair private R2 asset media flow
+
+---
+ backend/index.js                         |   4 -
+ backend/middleware/upload.middleware.js  |  83 +++------
+ backend/routes/uploads.routes.js         | 209 +++++++++++++----------
+ backend/utils/s3Client.js                | 148 ++++++++--------
+ src/components/AssetMedia/AssetImage.jsx |  64 +++++--
+ src/pages/AssetProfile.jsx               |  35 +++-
+ 6 files changed, 299 insertions(+), 244 deletions(-)
+
+diff --git a/backend/index.js b/backend/index.js
+index 6ad8d22..6365690 100644
+--- a/backend/index.js
++++ b/backend/index.js
+@@ -15,9 +15,6 @@ app.use(cors(corsOptions));
+ app.use(express.json({ limit: '50mb' }));
+ app.use(express.urlencoded({ limit: '50mb', extended: true }));
+ 
+-// Serve uploaded files statically
+-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+-
+ // Routes
+ const authRoutes = require('./routes/auth.routes');
+ const usersRoutes = require('./routes/users.routes');
+@@ -72,4 +69,3 @@ prisma.$connect()
+ app.listen(PORT, () => {
+   console.log(`[STARTUP] Server running on port ${PORT} (ready in ${Date.now() - serverStart}ms)`);
+ });
+-
+diff --git a/backend/middleware/upload.middleware.js b/backend/middleware/upload.middleware.js
+index 3968d13..ecd8cc1 100644
+--- a/backend/middleware/upload.middleware.js
++++ b/backend/middleware/upload.middleware.js
+@@ -1,79 +1,36 @@
+ const multer = require('multer');
+-const path = require('path');
+-const fs = require('fs');
+ 
+-// Ensure upload directories exist
+-const ensureDir = (dirPath) => {
+-  if (!fs.existsSync(dirPath)) {
+-    fs.mkdirSync(dirPath, { recursive: true });
+-  }
+-};
+-
+-const imagesDir = path.join(__dirname, '../uploads/images');
+-const documentsDir = path.join(__dirname, '../uploads/documents');
+-
+-ensureDir(imagesDir);
+-ensureDir(documentsDir);
+-
+-// Configure Storage for Images
+-const imageStorage = multer.diskStorage({
+-  destination: (req, file, cb) => {
+-    cb(null, imagesDir);
+-  },
+-  filename: (req, file, cb) => {
+-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+-    cb(null, 'asset-img-' + uniqueSuffix + path.extname(file.originalname));
+-  }
+-});
++const memoryStorage = multer.memoryStorage();
+ 
+-// Configure Storage for Documents
+-const documentStorage = multer.diskStorage({
+-  destination: (req, file, cb) => {
+-    cb(null, documentsDir);
+-  },
+-  filename: (req, file, cb) => {
+-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+-    cb(null, 'asset-doc-' + uniqueSuffix + path.extname(file.originalname));
+-  }
+-});
++const imageMimeTypes = new Set([
++  'image/jpeg',
++  'image/png',
++  'image/webp',
++]);
+ 
+-// File Filter for Images
+ const imageFilter = (req, file, cb) => {
+-  const allowedTypes = /jpeg|jpg|png|webp/;
+-  const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+-  const mimetype = allowedTypes.test(file.mimetype);
+-
+-  if (mimetype && extname) {
+-    return cb(null, true);
+-  }
+-  cb(new Error('Only image files are allowed (JPG, JPEG, PNG, WEBP)'));
++  if (imageMimeTypes.has(file.mimetype)) return cb(null, true);
++  return cb(new Error('Only JPG, PNG and WEBP images are allowed'));
+ };
+ 
+-// File Filter for Documents
+ const documentFilter = (req, file, cb) => {
+-  const allowedTypes = /jpeg|jpg|png|pdf|doc|docx|xls|xlsx/;
+-  const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+-  const mimetype = file.mimetype.match(/(image\/|application\/pdf|application\/msword|application\/vnd.openxmlformats-officedocument|application\/vnd.ms-excel)/);
+-
+-  if (mimetype && extname) {
+-    return cb(null, true);
+-  }
+-  cb(new Error('Only document files are allowed (PDF, JPG, PNG, DOC, DOCX, XLS, XLSX)'));
++  if (file.mimetype === 'application/pdf') return cb(null, true);
++  return cb(new Error('Only PDF documents are allowed'));
+ };
+ 
+-const uploadImage = multer({
+-  storage: imageStorage,
+-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+-  fileFilter: imageFilter
++const uploadImageMiddleware = multer({
++  storage: memoryStorage,
++  limits: { files: 2, fileSize: 5 * 1024 * 1024 },
++  fileFilter: imageFilter,
+ });
+ 
+-const uploadDocument = multer({
+-  storage: documentStorage,
+-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+-  fileFilter: documentFilter
++const uploadDocumentMiddleware = multer({
++  storage: memoryStorage,
++  limits: { files: 1, fileSize: 10 * 1024 * 1024 },
++  fileFilter: documentFilter,
+ });
+ 
+ module.exports = {
+-  uploadImage,
+-  uploadDocument
++  uploadImageMiddleware,
++  uploadDocumentMiddleware,
+ };
+diff --git a/backend/routes/uploads.routes.js b/backend/routes/uploads.routes.js
+index 9bba08b..c271524 100644
+--- a/backend/routes/uploads.routes.js
++++ b/backend/routes/uploads.routes.js
+@@ -1,16 +1,34 @@
+ const express = require('express');
++const { randomUUID } = require('crypto');
+ const router = express.Router();
+ const prisma = require('../prismaClient');
+-const { authenticate } = require('../middleware/auth.middleware');
++const { authenticate, authorize } = require('../middleware/auth.middleware');
+ const { uploadImageMiddleware, uploadDocumentMiddleware } = require('../middleware/upload.middleware');
+ const { uploadFile, deleteFile, getPresignedUrl } = require('../utils/s3Client');
+ 
++const mediaEditorsOnly = authorize(['ADMIN', 'IT_OFFICER']);
++
++function storageErrorResponse(res, error, fallbackMessage) {
++    if (error?.code === 'R2_NOT_CONFIGURED') {
++        return res.status(503).json({ error: 'Private file storage is not configured' });
++    }
++    return res.status(500).json({ error: fallbackMessage });
++}
++
++async function writeAuditLog(data) {
++    try {
++        await prisma.auditLog.create({ data });
++    } catch (error) {
++        console.error('Failed to write asset media audit log:', error);
++    }
++}
++
+ // -----------------------------------------------------------------------------
+ // ASSET IMAGE ROUTES
+ // -----------------------------------------------------------------------------
+ 
+ // Upload or Replace Asset Image
+-router.post('/image/:assetId', authenticate, uploadImageMiddleware.fields([
++router.post('/image/:assetId', authenticate, mediaEditorsOnly, uploadImageMiddleware.fields([
+     { name: 'image', maxCount: 1 },
+     { name: 'thumbnail', maxCount: 1 }
+ ]), async (req, res) => {
+@@ -24,42 +42,61 @@ router.post('/image/:assetId', authenticate, uploadImageMiddleware.fields([
+ 
+         if (!imageFile) return res.status(400).json({ error: 'Image file is required' });
+ 
+-        // If replacing an existing image, delete the old one from S3 first
+-        if (asset.imageStorageKey) {
+-            try { await deleteFile(asset.imageStorageKey); } catch (e) { console.error('Failed to delete old image:', e); }
+-            const oldThumbKey = asset.imageStorageKey.replace('assets/images/', 'assets/thumbnails/');
+-            try { await deleteFile(oldThumbKey); } catch (e) {}
+-        }
+-
+         const timestamp = Date.now();
+         const safeCode = asset.assetCode.replace(/[^a-zA-Z0-9_-]/g, '_');
+-        const imageKey = `assets/images/${safeCode}_${timestamp}.webp`;
+-        const thumbKey = `assets/thumbnails/${safeCode}_${timestamp}.webp`;
++        const extensionByMime = {
++            'image/jpeg': 'jpg',
++            'image/png': 'png',
++            'image/webp': 'webp'
++        };
++        const imageExtension = extensionByMime[imageFile.mimetype];
++        const thumbExtension = thumbFile ? extensionByMime[thumbFile.mimetype] : null;
++        const imageKey = `assets/images/${safeCode}_${timestamp}.${imageExtension}`;
++        const thumbKey = thumbFile
++            ? `assets/thumbnails/${safeCode}_${timestamp}.${thumbExtension}`
++            : null;
++
++        const newlyUploadedKeys = [];
++        let updatedAsset;
++        try {
++            await uploadFile(imageFile.buffer, imageKey, imageFile.mimetype);
++            newlyUploadedKeys.push(imageKey);
++            if (thumbFile) {
++                await uploadFile(thumbFile.buffer, thumbKey, thumbFile.mimetype);
++                newlyUploadedKeys.push(thumbKey);
++            }
+ 
+-        // Upload to S3/R2
+-        await uploadFile(imageFile.buffer, imageKey, imageFile.mimetype);
+-        if (thumbFile) {
+-            await uploadFile(thumbFile.buffer, thumbKey, thumbFile.mimetype);
++            updatedAsset = await prisma.asset.update({
++                where: { id: assetId },
++                data: {
++                    imageUrl: `/api/uploads/image/${assetId}/view`,
++                    thumbnailUrl: thumbFile ? `/api/uploads/image/${assetId}/thumb` : null,
++                    imageStorageKey: imageKey,
++                    imageFileName: imageFile.originalname,
++                    imageFileSize: imageFile.size,
++                    imageMimeType: imageFile.mimetype,
++                    imageUploadedAt: new Date(),
++                    imageUploadedBy: req.user.id
++                }
++            });
++        } catch (error) {
++            await Promise.allSettled(newlyUploadedKeys.map((key) => deleteFile(key)));
++            throw error;
+         }
+ 
+-        // Update Database
+-        const updatedAsset = await prisma.asset.update({
+-            where: { id: assetId },
+-            data: {
+-                imageUrl: `/api/uploads/image/${assetId}/view`,
+-                thumbnailUrl: thumbFile ? `/api/uploads/image/${assetId}/thumb` : null,
+-                imageStorageKey: imageKey,
+-                imageFileName: imageFile.originalname,
+-                imageFileSize: imageFile.size,
+-                imageMimeType: imageFile.mimetype,
+-                imageUploadedAt: new Date(),
+-                imageUploadedBy: req.user.id
++        // The database now points at the new objects, so old objects can be removed safely.
++        if (asset.imageStorageKey) {
++            const oldKeys = [asset.imageStorageKey];
++            if (asset.thumbnailUrl) {
++                oldKeys.push(asset.imageStorageKey.replace('assets/images/', 'assets/thumbnails/'));
+             }
+-        });
++            const cleanup = await Promise.allSettled(oldKeys.map((key) => deleteFile(key)));
++            cleanup.filter((result) => result.status === 'rejected')
++                .forEach((result) => console.error('Failed to remove replaced R2 object:', result.reason));
++        }
+ 
+         // Audit Log
+-        await prisma.auditLog.create({
+-            data: {
++        await writeAuditLog({
+                 userId: req.user.id,
+                 userName: req.user.fullName,
+                 userRole: req.user.role,
+@@ -69,7 +106,6 @@ router.post('/image/:assetId', authenticate, uploadImageMiddleware.fields([
+                 entityId: assetId,
+                 entityCode: asset.assetCode,
+                 description: `Uploaded new asset image for ${asset.assetCode}`
+-            }
+         });
+ 
+         res.json({
+@@ -82,12 +118,12 @@ router.post('/image/:assetId', authenticate, uploadImageMiddleware.fields([
+         });
+     } catch (error) {
+         console.error('Image Upload Error:', error);
+-        res.status(500).json({ error: 'Failed to upload image. Ensure R2 storage variables are configured.' });
++        return storageErrorResponse(res, error, 'Failed to upload image');
+     }
+ });
+ 
+ // Delete Asset Image
+-router.delete('/image/:assetId', authenticate, async (req, res) => {
++router.delete('/image/:assetId', authenticate, mediaEditorsOnly, async (req, res) => {
+     try {
+         const { assetId } = req.params;
+         const asset = await prisma.asset.findUnique({ where: { id: assetId } });
+@@ -98,8 +134,10 @@ router.delete('/image/:assetId', authenticate, async (req, res) => {
+ 
+         // Delete from R2
+         await deleteFile(asset.imageStorageKey);
+-        const thumbKey = asset.imageStorageKey.replace('assets/images/', 'assets/thumbnails/');
+-        try { await deleteFile(thumbKey); } catch(e) {}
++        if (asset.thumbnailUrl) {
++            const thumbKey = asset.imageStorageKey.replace('assets/images/', 'assets/thumbnails/');
++            await deleteFile(thumbKey);
++        }
+ 
+         // Update DB
+         await prisma.asset.update({
+@@ -116,8 +154,7 @@ router.delete('/image/:assetId', authenticate, async (req, res) => {
+             }
+         });
+ 
+-        await prisma.auditLog.create({
+-            data: {
++        await writeAuditLog({
+                 userId: req.user.id,
+                 userName: req.user.fullName,
+                 userRole: req.user.role,
+@@ -127,17 +164,16 @@ router.delete('/image/:assetId', authenticate, async (req, res) => {
+                 entityId: assetId,
+                 entityCode: asset.assetCode,
+                 description: `Deleted asset image for ${asset.assetCode}`
+-            }
+         });
+ 
+         res.json({ success: true, message: 'Image deleted successfully' });
+     } catch (error) {
+         console.error('Image Delete Error:', error);
+-        res.status(500).json({ error: 'Failed to delete image' });
++        return storageErrorResponse(res, error, 'Failed to delete image');
+     }
+ });
+ 
+-// View / Download Image (Redirects to Presigned URL)
++// Return a short-lived private URL after authenticating the application user.
+ router.get('/image/:assetId/:type', authenticate, async (req, res) => {
+     try {
+         const { assetId, type } = req.params;
+@@ -155,16 +191,16 @@ router.get('/image/:assetId/:type', authenticate, async (req, res) => {
+             key = key.replace('assets/images/', 'assets/thumbnails/');
+         }
+ 
+-        const url = await getPresignedUrl(key, 3600); // 1 hour expiry
++        const url = await getPresignedUrl(
++            key,
++            300,
++            type === 'download' ? (asset.imageFileName || `${asset.assetCode}.webp`) : undefined
++        );
+         
+-        if (type === 'download') {
+-            return res.json({ url });
+-        } else {
+-            return res.redirect(url);
+-        }
++        return res.json({ url, expiresIn: 300 });
+     } catch (error) {
+         console.error('Presigned URL Error:', error);
+-        res.status(500).json({ error: 'Failed to generate secure URL' });
++        return storageErrorResponse(res, error, 'Failed to generate secure URL');
+     }
+ });
+ 
+@@ -174,7 +210,7 @@ router.get('/image/:assetId/:type', authenticate, async (req, res) => {
+ // -----------------------------------------------------------------------------
+ 
+ // Upload Asset Document (Merged PDF)
+-router.post('/document/:assetId', authenticate, uploadDocumentMiddleware.single('document'), async (req, res) => {
++router.post('/document/:assetId', authenticate, mediaEditorsOnly, uploadDocumentMiddleware.single('document'), async (req, res) => {
+     try {
+         const { assetId } = req.params;
+         const { documentType } = req.body;
+@@ -189,34 +225,32 @@ router.post('/document/:assetId', authenticate, uploadDocumentMiddleware.single(
+         const safeCode = asset.assetCode.replace(/[^a-zA-Z0-9_-]/g, '_');
+         const docKey = `assets/documents/${safeCode}_${timestamp}.pdf`;
+ 
+-        // Upload to R2
++        const documentId = randomUUID();
++        let updatedDoc;
+         await uploadFile(file.buffer, docKey, file.mimetype);
++        try {
++            updatedDoc = await prisma.assetDocument.create({
++                data: {
++                    id: documentId,
++                    assetId: asset.id,
++                    documentName: file.originalname,
++                    documentType: documentType || 'Asset Document',
++                    fileUrl: `/api/uploads/document/${documentId}/view`,
++                    storageKey: docKey,
++                    fileSize: file.size,
++                    mimeType: file.mimetype,
++                    uploadedBy: req.user.id,
++                    uploadedByName: req.user.fullName
++                }
++            });
++        } catch (error) {
++            await deleteFile(docKey).catch((cleanupError) => {
++                console.error('Failed to clean up R2 object after database error:', cleanupError);
++            });
++            throw error;
++        }
+ 
+-        // Create DB record
+-        const newDoc = await prisma.assetDocument.create({
+-            data: {
+-                assetId: asset.id,
+-                documentName: file.originalname,
+-                documentType: documentType || 'Asset Document',
+-                fileUrl: '',
+-                storageKey: docKey,
+-                fileSize: file.size,
+-                mimeType: file.mimetype,
+-                uploadedBy: req.user.id,
+-                uploadedByName: req.user.fullName
+-            }
+-        });
+-
+-        // Update the URL to point to our secure proxy endpoint
+-        const updatedDoc = await prisma.assetDocument.update({
+-            where: { id: newDoc.id },
+-            data: {
+-                fileUrl: `/api/uploads/document/${newDoc.id}/view`
+-            }
+-        });
+-
+-        await prisma.auditLog.create({
+-            data: {
++        await writeAuditLog({
+                 userId: req.user.id,
+                 userName: req.user.fullName,
+                 userRole: req.user.role,
+@@ -226,18 +260,17 @@ router.post('/document/:assetId', authenticate, uploadDocumentMiddleware.single(
+                 entityId: assetId,
+                 entityCode: asset.assetCode,
+                 description: `Uploaded document ${file.originalname} for ${asset.assetCode}`
+-            }
+         });
+ 
+         res.json(updatedDoc);
+     } catch (error) {
+         console.error('Document Upload Error:', error);
+-        res.status(500).json({ error: 'Failed to upload document. Ensure R2 storage variables are configured.' });
++        return storageErrorResponse(res, error, 'Failed to upload document');
+     }
+ });
+ 
+ // Delete Asset Document
+-router.delete('/document/:docId', authenticate, async (req, res) => {
++router.delete('/document/:docId', authenticate, mediaEditorsOnly, async (req, res) => {
+     try {
+         const { docId } = req.params;
+         const document = await prisma.assetDocument.findUnique({ 
+@@ -255,8 +288,7 @@ router.delete('/document/:docId', authenticate, async (req, res) => {
+         // Delete DB record
+         await prisma.assetDocument.delete({ where: { id: docId } });
+ 
+-        await prisma.auditLog.create({
+-            data: {
++        await writeAuditLog({
+                 userId: req.user.id,
+                 userName: req.user.fullName,
+                 userRole: req.user.role,
+@@ -266,17 +298,16 @@ router.delete('/document/:docId', authenticate, async (req, res) => {
+                 entityId: document.assetId,
+                 entityCode: document.asset.assetCode,
+                 description: `Deleted document ${document.documentName} for ${document.asset.assetCode}`
+-            }
+         });
+ 
+         res.json({ success: true, message: 'Document deleted successfully' });
+     } catch (error) {
+         console.error('Document Delete Error:', error);
+-        res.status(500).json({ error: 'Failed to delete document' });
++        return storageErrorResponse(res, error, 'Failed to delete document');
+     }
+ });
+ 
+-// View / Download Document (Redirects to Presigned URL)
++// Return a short-lived private URL after authenticating the application user.
+ router.get('/document/:docId/:type', authenticate, async (req, res) => {
+     try {
+         const { docId, type } = req.params;
+@@ -289,16 +320,16 @@ router.get('/document/:docId/:type', authenticate, async (req, res) => {
+             return res.status(404).json({ error: 'Document not found' });
+         }
+ 
+-        const url = await getPresignedUrl(document.storageKey, 3600); // 1 hour expiry
++        const url = await getPresignedUrl(
++            document.storageKey,
++            300,
++            type === 'download' ? document.documentName : undefined
++        );
+         
+-        if (type === 'download') {
+-            return res.json({ url });
+-        } else {
+-            return res.redirect(url);
+-        }
++        return res.json({ url, expiresIn: 300 });
+     } catch (error) {
+         console.error('Presigned URL Error:', error);
+-        res.status(500).json({ error: 'Failed to generate secure URL' });
++        return storageErrorResponse(res, error, 'Failed to generate secure URL');
+     }
+ });
+ 
+diff --git a/backend/utils/s3Client.js b/backend/utils/s3Client.js
+index 1297b3f..52cc4ad 100644
+--- a/backend/utils/s3Client.js
++++ b/backend/utils/s3Client.js
+@@ -1,90 +1,98 @@
+-const { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
++const {
++  S3Client,
++  PutObjectCommand,
++  DeleteObjectCommand,
++  GetObjectCommand,
++} = require('@aws-sdk/client-s3');
+ const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+-const fs = require('fs');
+ 
+-const s3Client = new S3Client({
+-  region: process.env.S3_REGION || 'auto',
+-  endpoint: process.env.S3_ENDPOINT || 'https://example.r2.cloudflarestorage.com',
+-  credentials: {
+-    accessKeyId: process.env.S3_ACCESS_KEY_ID || 'dummy_key',
+-    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || 'dummy_secret',
+-  },
+-  // Necessary for R2 or Supabase
+-  forcePathStyle: true,
+-});
++const REQUIRED_ENV_VARS = [
++  'R2_ACCOUNT_ID',
++  'R2_ACCESS_KEY_ID',
++  'R2_SECRET_ACCESS_KEY',
++  'R2_BUCKET_NAME',
++  'R2_ENDPOINT',
++];
+ 
+-const BUCKET_NAME = process.env.S3_BUCKET_NAME || 'it-inventory-assets';
+-const PUBLIC_URL_PREFIX = process.env.S3_PUBLIC_URL_PREFIX || 'https://pub-example.r2.dev';
++let client;
+ 
+-/**
+- * Upload a local file to S3 and return its public URL
+- */
+-async function uploadToS3(filePath, s3Key, mimeType) {
+-  const fileStream = fs.createReadStream(filePath);
++function assertR2Configured() {
++  const missing = REQUIRED_ENV_VARS.filter((key) => !process.env[key]?.trim());
++  if (missing.length > 0) {
++    const error = new Error(`R2 storage is not configured. Missing: ${missing.join(', ')}`);
++    error.code = 'R2_NOT_CONFIGURED';
++    throw error;
++  }
++}
+ 
+-  const command = new PutObjectCommand({
+-    Bucket: BUCKET_NAME,
+-    Key: s3Key,
+-    Body: fileStream,
+-    ContentType: mimeType,
+-  });
++function getR2Client() {
++  assertR2Configured();
++  if (!client) {
++    client = new S3Client({
++      region: 'auto',
++      endpoint: process.env.R2_ENDPOINT,
++      credentials: {
++        accessKeyId: process.env.R2_ACCESS_KEY_ID,
++        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
++      },
++      forcePathStyle: true,
++    });
++  }
++  return client;
++}
+ 
+-  try {
+-    await s3Client.send(command);
+-    return {
+-      url: `${PUBLIC_URL_PREFIX}/${s3Key}`,
+-      storageKey: s3Key
+-    };
+-  } catch (error) {
+-    console.error("S3 Upload Error:", error);
+-    // Return null instead of throwing to trigger local fallback
+-    return null;
++function validateObjectKey(key) {
++  if (!key || typeof key !== 'string' || key.includes('..') || key.startsWith('/')) {
++    throw new Error('Invalid R2 object key');
+   }
+ }
+ 
+-/**
+- * Delete a file from S3 given its public URL or key
+- */
+-async function deleteFromS3(urlOrKey) {
+-  let key = urlOrKey;
+-  if (urlOrKey.startsWith('http')) {
+-    key = urlOrKey.replace(`${PUBLIC_URL_PREFIX}/`, '');
++async function uploadFile(buffer, key, mimeType) {
++  if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
++    throw new Error('A non-empty file buffer is required');
+   }
++  validateObjectKey(key);
+ 
+-  const command = new DeleteObjectCommand({
+-    Bucket: BUCKET_NAME,
++  await getR2Client().send(new PutObjectCommand({
++    Bucket: process.env.R2_BUCKET_NAME,
+     Key: key,
+-  });
++    Body: buffer,
++    ContentLength: buffer.length,
++    ContentType: mimeType || 'application/octet-stream',
++  }));
+ 
+-  try {
+-    await s3Client.send(command);
+-    return true;
+-  } catch (error) {
+-    console.error("S3 Delete Error:", error);
+-    return false;
+-  }
++  return { storageKey: key };
+ }
+ 
+-/**
+- * Generate a pre-signed URL for downloading an object
+- */
+-async function getSignedDownloadUrl(s3Key, expiresIn = 3600) {
+-  try {
+-    const command = new GetObjectCommand({
+-      Bucket: BUCKET_NAME,
+-      Key: s3Key,
+-    });
+-    // Create a signed URL that expires in 1 hour
+-    const url = await getSignedUrl(s3Client, command, { expiresIn });
+-    return url;
+-  } catch (err) {
+-    console.error("Error generating signed URL", err);
+-    return null;
++async function deleteFile(key) {
++  validateObjectKey(key);
++  await getR2Client().send(new DeleteObjectCommand({
++    Bucket: process.env.R2_BUCKET_NAME,
++    Key: key,
++  }));
++}
++
++async function getPresignedUrl(key, expiresIn = 300, downloadName) {
++  validateObjectKey(key);
++  const safeExpiry = Math.min(Math.max(Number(expiresIn) || 300, 60), 3600);
++  const input = {
++    Bucket: process.env.R2_BUCKET_NAME,
++    Key: key,
++  };
++
++  if (downloadName) {
++    const safeName = downloadName.replace(/[\r\n"\\]/g, '_');
++    input.ResponseContentDisposition = `attachment; filename="${safeName}"`;
+   }
++
++  return getSignedUrl(getR2Client(), new GetObjectCommand(input), {
++    expiresIn: safeExpiry,
++  });
+ }
+ 
+ module.exports = {
+-  uploadToS3,
+-  deleteFromS3,
+-  getSignedDownloadUrl
++  assertR2Configured,
++  uploadFile,
++  deleteFile,
++  getPresignedUrl,
+ };
+diff --git a/src/components/AssetMedia/AssetImage.jsx b/src/components/AssetMedia/AssetImage.jsx
+index d44e514..81ee8e0 100644
+--- a/src/components/AssetMedia/AssetImage.jsx
++++ b/src/components/AssetMedia/AssetImage.jsx
+@@ -1,4 +1,4 @@
+-import React, { useState, useRef, useCallback } from 'react';
++import { useState, useRef, useCallback, useEffect } from 'react';
+ import { 
+     Image as ImageIcon, UploadCloud, Camera, X, 
+     Trash2, RefreshCw, Download, Maximize2, Loader2 
+@@ -18,10 +18,50 @@ export default function AssetImage({ asset, onUpdate }) {
+     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+     const [deleting, setDeleting] = useState(false);
+     const [fullScreen, setFullScreen] = useState(false);
++    const [viewUrl, setViewUrl] = useState(null);
++    const [thumbUrl, setThumbUrl] = useState(null);
+ 
+     const fileInputRef = useRef(null);
+     const videoRef = useRef(null);
+ 
++    useEffect(() => {
++        let cancelled = false;
++
++        const loadPrivateImageUrls = async () => {
++            if (!asset?.imageUrl) {
++                setViewUrl(null);
++                setThumbUrl(null);
++                return;
++            }
++
++            try {
++                const token = localStorage.getItem('token');
++                const types = asset.thumbnailUrl ? ['view', 'thumb'] : ['view'];
++                const responses = await Promise.all(types.map((type) => fetch(
++                    `${API_URL}/uploads/image/${asset.id}/${type}`,
++                    { headers: { 'Authorization': `Bearer ${token}` } }
++                )));
++                if (responses.some((response) => !response.ok)) {
++                    throw new Error('Failed to load private image');
++                }
++                const links = await Promise.all(responses.map((response) => response.json()));
++                if (!cancelled) {
++                    setViewUrl(links[0].url);
++                    setThumbUrl(links[1]?.url || links[0].url);
++                }
++            } catch (error) {
++                if (!cancelled) {
++                    setViewUrl(null);
++                    setThumbUrl(null);
++                }
++                console.error(error);
++            }
++        };
++
++        loadPrivateImageUrls();
++        return () => { cancelled = true; };
++    }, [asset?.id, asset?.imageUrl, asset?.thumbnailUrl, asset?.imageUploadedAt]);
++
+     const formatBytes = (bytes, decimals = 2) => {
+         if (!+bytes) return '0 Bytes';
+         const k = 1024;
+@@ -194,10 +234,6 @@ export default function AssetImage({ asset, onUpdate }) {
+     };
+ 
+     const hasImage = !!asset?.imageUrl;
+-    // Append timestamp to bypass browser caching when replaced
+-    const viewUrl = hasImage ? `${API_URL.replace('/api', '')}${asset.imageUrl}?t=${new Date(asset.imageUploadedAt).getTime()}` : null;
+-    const thumbUrl = hasImage && asset.thumbnailUrl ? `${API_URL.replace('/api', '')}${asset.thumbnailUrl}?t=${new Date(asset.imageUploadedAt).getTime()}` : viewUrl;
+-
+     return (
+         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 flex flex-col h-full">
+             <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 pb-3 mb-4">
+@@ -208,12 +244,11 @@ export default function AssetImage({ asset, onUpdate }) {
+             {hasImage ? (
+                 <div className="flex flex-col flex-1">
+                     <div className="relative group rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 aspect-video flex items-center justify-center mb-4">
+-                        <img 
+-                            src={thumbUrl} 
+-                            alt={asset.assetCode} 
+-                            className="max-h-full max-w-full object-contain"
+-                            crossOrigin="anonymous"
+-                        />
++                        {thumbUrl ? (
++                            <img src={thumbUrl} alt={asset.assetCode} className="max-h-full max-w-full object-contain" />
++                        ) : (
++                            <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
++                        )}
+                         <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                             <button onClick={() => setFullScreen(true)} className="p-2 bg-white/20 hover:bg-white/40 rounded-full text-white backdrop-blur-sm transition">
+                                 <Maximize2 className="w-5 h-5" />
+@@ -326,12 +361,7 @@ export default function AssetImage({ asset, onUpdate }) {
+                         </button>
+                     </div>
+                     <div className="flex-1 flex items-center justify-center p-4 overflow-hidden">
+-                        <img 
+-                            src={viewUrl} 
+-                            alt="Full Screen" 
+-                            className="max-w-full max-h-full object-contain"
+-                            crossOrigin="anonymous"
+-                        />
++                        {viewUrl && <img src={viewUrl} alt="Full Screen" className="max-w-full max-h-full object-contain" />}
+                     </div>
+                 </div>
+             )}
+diff --git a/src/pages/AssetProfile.jsx b/src/pages/AssetProfile.jsx
+index 70a5fee..1ad57d9 100644
+--- a/src/pages/AssetProfile.jsx
++++ b/src/pages/AssetProfile.jsx
+@@ -35,6 +35,7 @@ export default function AssetProfile() {
+   const [uploadingImage, setUploadingImage] = useState(false);
+   const [uploadingDoc, setUploadingDoc] = useState(false);
+   const [docType, setDocType] = useState('Other');
++  const [privateImageUrl, setPrivateImageUrl] = useState(null);
+   
+   const fileInputRef = useRef(null);
+   const docInputRef = useRef(null);
+@@ -98,6 +99,34 @@ export default function AssetProfile() {
+     fetchAssetProfile();
+   }, [assetCode]);
+ 
++  useEffect(() => {
++    let cancelled = false;
++
++    const loadPrivateImageUrl = async () => {
++      if (!asset?.imageUrl) {
++        setPrivateImageUrl(null);
++        return;
++      }
++
++      try {
++        const token = localStorage.getItem('token');
++        const type = asset.thumbnailUrl ? 'thumb' : 'view';
++        const response = await fetch(`${API_URL}/uploads/image/${asset.id}/${type}`, {
++          headers: { 'Authorization': `Bearer ${token}` }
++        });
++        if (!response.ok) throw new Error('Failed to load private image');
++        const data = await response.json();
++        if (!cancelled) setPrivateImageUrl(data.url);
++      } catch (error) {
++        if (!cancelled) setPrivateImageUrl(null);
++        console.error(error);
++      }
++    };
++
++    loadPrivateImageUrl();
++    return () => { cancelled = true; };
++  }, [asset?.id, asset?.imageUrl, asset?.thumbnailUrl, asset?.imageUploadedAt]);
++
+   const startEditing = () => {
+     setEditData({
+       deviceType: asset.deviceType || '',
+@@ -871,7 +900,11 @@ export default function AssetProfile() {
+                       <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                     ) : asset.imageUrl ? (
+                       <>
+-                        <img src={`${API_URL.replace('/api', '')}${asset.imageUrl}`} alt={asset.model} className="w-full h-full object-cover" />
++                        {privateImageUrl ? (
++                          <img src={privateImageUrl} alt={asset.model} className="w-full h-full object-cover" />
++                        ) : (
++                          <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
++                        )}
+                         <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                            <button onClick={handleDownloadSecureImage} className="p-2 bg-blue-500/80 hover:bg-blue-600 rounded-full text-white backdrop-blur-sm transition-colors" title="Download Image">
+                              <Download className="w-4 h-4" />
+-- 
+2.51.1
+
