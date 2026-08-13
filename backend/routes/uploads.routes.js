@@ -2,12 +2,9 @@ const express = require('express');
 const { randomUUID } = require('crypto');
 const router = express.Router();
 const prisma = require('../prismaClient');
-const { authenticate, authorize } = require('../middleware/auth.middleware');
+const { authenticate, requirePermission } = require('../middleware/auth.middleware');
 const { uploadImageMiddleware, uploadDocumentMiddleware } = require('../middleware/upload.middleware');
 const { uploadFile, deleteFile, getPresignedUrl, getR2StorageStats } = require('../utils/s3Client');
-
-const mediaEditorsOnly = authorize(['ADMIN', 'IT_OFFICER']);
-const adminOnly = authorize(['ADMIN']);
 
 function storageErrorResponse(res, error, fallbackMessage) {
     if (error?.code === 'R2_NOT_CONFIGURED') {
@@ -28,7 +25,7 @@ async function writeAuditLog(data) {
 // ADMIN-ONLY STORAGE MONITORING
 // -----------------------------------------------------------------------------
 
-router.get('/storage/stats', authenticate, adminOnly, async (req, res) => {
+router.get('/storage/stats', authenticate, requirePermission('VIEW_STORAGE_STATS'), async (req, res) => {
     try {
         const forceRefresh = req.query.refresh === 'true';
 
@@ -142,7 +139,7 @@ router.get('/storage/stats', authenticate, adminOnly, async (req, res) => {
 });
 
 // Configure Database Reference Capacity (Admin Only)
-router.post('/storage/db-capacity', authenticate, adminOnly, async (req, res) => {
+router.post('/storage/db-capacity', authenticate, requirePermission('CONFIGURE_SYSTEM'), async (req, res) => {
     try {
         const { capacityMB } = req.body;
         let valueToSet = null;
@@ -210,7 +207,7 @@ router.post('/storage/db-capacity', authenticate, adminOnly, async (req, res) =>
 // -----------------------------------------------------------------------------
 
 // Upload or Replace Asset Image
-router.post('/image/:assetId', authenticate, mediaEditorsOnly, uploadImageMiddleware.fields([
+router.post('/image/:assetId', authenticate, requirePermission('UPLOAD_ASSET_IMAGES'), uploadImageMiddleware.fields([
     { name: 'image', maxCount: 1 },
     { name: 'thumbnail', maxCount: 1 }
 ]), async (req, res) => {
@@ -305,7 +302,7 @@ router.post('/image/:assetId', authenticate, mediaEditorsOnly, uploadImageMiddle
 });
 
 // Delete Asset Image
-router.delete('/image/:assetId', authenticate, mediaEditorsOnly, async (req, res) => {
+router.delete('/image/:assetId', authenticate, requirePermission('DELETE_ASSET_IMAGES'), async (req, res) => {
     try {
         const { assetId } = req.params;
         const asset = await prisma.asset.findUnique({ where: { id: assetId } });
@@ -391,7 +388,7 @@ router.get('/image/:assetId/:type', authenticate, async (req, res) => {
 // -----------------------------------------------------------------------------
 
 // Upload Asset Document (Combined or Categorized PDF)
-router.post('/document/:assetId', authenticate, mediaEditorsOnly, uploadDocumentMiddleware.single('document'), async (req, res) => {
+router.post('/document/:assetId', authenticate, requirePermission('UPLOAD_ASSET_DOCUMENTS'), uploadDocumentMiddleware.single('document'), async (req, res) => {
     try {
         const { assetId } = req.params;
         const { documentType } = req.body;
@@ -451,7 +448,7 @@ router.post('/document/:assetId', authenticate, mediaEditorsOnly, uploadDocument
 });
 
 // Delete Asset Document
-router.delete('/document/:docId', authenticate, mediaEditorsOnly, async (req, res) => {
+router.delete('/document/:docId', authenticate, requirePermission('DELETE_ASSET_DOCUMENTS'), async (req, res) => {
     try {
         const { docId } = req.params;
         const document = await prisma.assetDocument.findUnique({ 
@@ -489,7 +486,7 @@ router.delete('/document/:docId', authenticate, mediaEditorsOnly, async (req, re
 });
 
 // Return a short-lived private URL after authenticating the application user.
-router.get('/document/:docId/:type', authenticate, async (req, res) => {
+router.get('/document/:docId/:type', authenticate, requirePermission('DOWNLOAD_ASSET_DOCUMENTS'), async (req, res) => {
     try {
         const { docId, type } = req.params;
         if (!['view', 'download'].includes(type)) {

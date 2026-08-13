@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const prisma = require('../prismaClient');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_jwt_key_for_euro_motors';
 
@@ -26,5 +27,46 @@ exports.authorize = (roles = []) => {
       return res.status(403).json({ error: 'Forbidden: Insufficient privileges' });
     }
     next();
+  };
+};
+
+// Granular Permission Middleware
+exports.requirePermission = (requiredPermission) => {
+  return async (req, res, next) => {
+    if (!req.user || !req.user.role) {
+      return res.status(401).json({ error: 'Unauthorized: User role not found' });
+    }
+
+    try {
+      const rolePerm = await prisma.rolePermission.findUnique({
+        where: { role: req.user.role }
+      });
+
+      // Default fallback logic if DB is not populated yet
+      const defaultPermissions = {
+        ADMIN: true, // Admin fallback has all by default
+        IT_OFFICER: ['VIEW_ASSETS', 'CREATE_ASSETS', 'EDIT_ASSETS', 'ASSIGN_ASSETS', 'TRANSFER_ASSETS', 'UPLOAD_ASSET_IMAGES', 'REPLACE_ASSET_IMAGES', 'UPLOAD_ASSET_DOCUMENTS', 'DOWNLOAD_ASSET_DOCUMENTS', 'EXPORT_REPORTS', 'MANAGE_EMPLOYEES'].includes(requiredPermission),
+        VIEWER: ['VIEW_ASSETS', 'DOWNLOAD_ASSET_DOCUMENTS'].includes(requiredPermission)
+      };
+
+      let hasPermission = false;
+
+      if (rolePerm && rolePerm.permissions) {
+        hasPermission = !!rolePerm.permissions[requiredPermission];
+      } else {
+        hasPermission = typeof defaultPermissions[req.user.role] === 'boolean' 
+          ? defaultPermissions[req.user.role] 
+          : defaultPermissions[req.user.role];
+      }
+
+      if (!hasPermission) {
+        return res.status(403).json({ error: `Forbidden: Missing permission ${requiredPermission}` });
+      }
+
+      next();
+    } catch (err) {
+      console.error('Permission Check Error:', err);
+      return res.status(500).json({ error: 'Internal Server Error verifying permissions' });
+    }
   };
 };

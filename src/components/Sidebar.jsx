@@ -38,38 +38,44 @@ export default function Sidebar() {
   };
 
   const navItems = [
-    { name: 'Control Center', path: '/', icon: LayoutDashboard, roles: ['ADMIN', 'IT_OFFICER', 'VIEWER'] },
+    { name: 'Control Center', path: '/', icon: LayoutDashboard, alwaysShow: true },
     
     { 
       name: 'Operations', 
       isHeader: true,
-      roles: ['ADMIN', 'IT_OFFICER', 'VIEWER'] 
+      alwaysShow: true 
     },
-    { name: 'Assets', path: '/assets', icon: MonitorSmartphone, roles: ['ADMIN', 'IT_OFFICER', 'VIEWER'] },
-    { name: 'Add Asset', path: '/assets/add', icon: PlusCircle, roles: ['ADMIN', 'IT_OFFICER'] },
-    { name: 'Employees', path: '/employees', icon: Users, roles: ['ADMIN', 'IT_OFFICER', 'VIEWER'] },
-    { name: 'Departments', path: '/departments', icon: Building2, roles: ['ADMIN', 'IT_OFFICER', 'VIEWER'] },
-    { name: 'Locations', path: '/locations', icon: MapPin, roles: ['ADMIN', 'IT_OFFICER', 'VIEWER'] },
-    { name: 'Asset Assignment', path: '/assignments', icon: ArrowRightLeft, roles: ['ADMIN', 'IT_OFFICER'] },
-    { name: 'QR Code', path: '/qr-code', icon: QrCode, roles: ['ADMIN', 'IT_OFFICER'] },
-    { name: 'Camera Scanner', path: '/scanner', icon: Camera, roles: ['ADMIN', 'IT_OFFICER'] },
-    { name: 'Maintenance', path: '/maintenance', icon: Wrench, roles: ['ADMIN', 'IT_OFFICER'] },
-    { name: 'Support Desk', path: '/tickets', icon: Ticket, roles: ['ADMIN', 'IT_OFFICER'] },
+    { name: 'Assets', path: '/assets', icon: MonitorSmartphone, permission: 'VIEW_ASSETS' },
+    { name: 'Add Asset', path: '/assets/add', icon: PlusCircle, permission: 'CREATE_ASSETS' },
+    { name: 'Employees', path: '/employees', icon: Users, permission: 'MANAGE_EMPLOYEES' },
+    { name: 'Departments', path: '/departments', icon: Building2, permission: 'MANAGE_DEPARTMENTS' },
+    { name: 'Locations', path: '/locations', icon: MapPin, permission: 'MANAGE_LOCATIONS' },
+    { name: 'Asset Assignment', path: '/assignments', icon: ArrowRightLeft, permission: 'ASSIGN_ASSETS' },
+    { name: 'QR Code', path: '/qr-code', icon: QrCode, permission: 'CREATE_ASSETS' },
+    { name: 'Camera Scanner', path: '/scanner', icon: Camera, permission: 'CREATE_ASSETS' },
+    { name: 'Maintenance', path: '/maintenance', icon: Wrench, permission: 'EDIT_ASSETS' },
+    { name: 'Support Desk', path: '/tickets', icon: Ticket, alwaysShow: true },
     
     { 
       name: 'System', 
       isHeader: true,
-      roles: ['ADMIN'] 
+      roleRequired: 'ADMIN' // Headers for system settings can just stay ADMIN to simplify
     },
-    { name: 'Reports', path: '/reports', icon: FileText, roles: ['ADMIN', 'IT_OFFICER'] },
-    { name: 'Audit Logs', path: '/audit-logs', icon: History, roles: ['ADMIN'] },
-    { name: 'Database', path: '/database', icon: Database, roles: ['ADMIN'] },
-    { name: 'User Management', path: '/users', icon: ShieldCheck, roles: ['ADMIN'] },
-    { name: 'Settings', path: '/settings', icon: Settings, roles: ['ADMIN'] },
+    { name: 'Reports', path: '/reports', icon: FileText, permission: 'EXPORT_REPORTS' },
+    { name: 'Audit Logs', path: '/audit-logs', icon: History, permission: 'VIEW_AUDIT_LOG' },
+    { name: 'Database', path: '/database', icon: Database, permission: 'VIEW_STORAGE_STATS' },
+    { name: 'User Management', path: '/users', icon: ShieldCheck, permission: 'MANAGE_USERS' },
+    { name: 'Role & Permissions', path: '/permissions', icon: ShieldCheck, permission: 'MANAGE_ROLES' },
+    { name: 'Settings', path: '/settings', icon: Settings, permission: 'CONFIGURE_SYSTEM' },
   ];
 
-  // Filter items based on user role
-  const visibleNavItems = navItems.filter(item => item.roles.includes(user?.role));
+  // Filter items based on user granular permissions
+  const visibleNavItems = navItems.filter(item => {
+    if (item.alwaysShow) return true;
+    if (item.roleRequired && user?.role !== item.roleRequired) return false;
+    if (item.permission && (!user?.permissions || !user.permissions[item.permission])) return false;
+    return true;
+  });
 
   const isExpanded = isPinned || isHovered;
 

@@ -61,6 +61,7 @@ const ticketsRoutes = require('./routes/tickets.routes');
 const databaseRoutes = require('./routes/database.routes');
 const uploadsRoutes = require('./routes/uploads.routes');
 const warmupRoutes = require('./routes/warmup.routes');
+const permissionsRoutes = require('./routes/permissions.routes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRoutes);
@@ -77,6 +78,7 @@ app.use('/api/uploads', uploadsRoutes);
 app.use('/api/tickets', ticketsRoutes);
 app.use('/api/database', databaseRoutes);
 app.use('/api/warmup', warmupRoutes);
+app.use('/api/permissions', permissionsRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

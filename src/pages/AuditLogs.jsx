@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { 
   History, Search, User, 
   Tag, Loader2, 
-  RefreshCw, Calendar
+  RefreshCw, Calendar, Download
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 
@@ -15,6 +15,7 @@ export default function AuditLogs() {
   const [filters, setFilters] = useState({
     module: '',
     action: '',
+    status: '',
     startDate: '',
     endDate: ''
   });
@@ -30,7 +31,7 @@ export default function AuditLogs() {
       });
       if (!res.ok) throw new Error('Failed to fetch audit logs');
       const data = await res.json();
-      setLogs(data);
+      setLogs(data.logs || data);
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
@@ -65,18 +66,41 @@ export default function AuditLogs() {
           <h1 className="text-2xl font-bold text-slate-800 dark:text-white">System Audit Logs</h1>
           <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">Traceability and security audit trail for all system actions.</p>
         </div>
-        <button 
-          onClick={fetchLogs}
-          className="p-2 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-colors shadow-sm"
-          title="Refresh Logs"
-        >
-          <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-        </button>
+        <div className="flex gap-2">
+          <button 
+            onClick={fetchLogs}
+            className="p-2 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-colors shadow-sm"
+            title="Refresh Logs"
+          >
+            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+          <button
+            onClick={() => {
+              const queryParams = new URLSearchParams(filters).toString();
+              const token = localStorage.getItem('token');
+              fetch(`${API_URL}/audit-logs/export?${queryParams}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+              })
+                .then(res => res.blob())
+                .then(blob => {
+                  const url = window.URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `Audit_Log_${new Date().toISOString().split('T')[0]}.csv`;
+                  a.click();
+                })
+                .catch(err => showToast(err.message, 'error'));
+            }}
+            className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 transition-colors shadow-sm flex items-center gap-2 font-medium text-sm"
+          >
+            <Download className="w-4 h-4" /> Export CSV
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div>
             <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">Module</label>
             <select 
@@ -106,6 +130,19 @@ export default function AuditLogs() {
               <option value="DELETE">Delete</option>
               <option value="ASSIGN">Assign</option>
               <option value="RETURN">Return</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">Status</label>
+            <select 
+              name="status"
+              value={filters.status}
+              onChange={handleFilterChange}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+            >
+              <option value="">All Statuses</option>
+              <option value="SUCCESS">Success</option>
+              <option value="FAILED">Failed</option>
             </select>
           </div>
           <div>

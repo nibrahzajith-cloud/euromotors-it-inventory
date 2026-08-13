@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prismaClient');
-const { authenticate, authorize } = require('../middleware/auth.middleware');
+const { authenticate, authorize, requirePermission } = require('../middleware/auth.middleware');
 const { logAudit, logAssetTimeline } = require('../utils/logger');
 
 router.use(authenticate);
@@ -15,7 +15,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.post('/', authorize(['ADMIN', 'IT_OFFICER']), async (req, res) => {
+router.post('/', requirePermission('ASSIGN_ASSETS'), async (req, res) => {
   try {
     const asset = await prisma.asset.findUnique({ 
        where: { id: req.body.assetId },
@@ -116,7 +116,7 @@ router.post('/', authorize(['ADMIN', 'IT_OFFICER']), async (req, res) => {
   }
 });
 
-router.put('/:id', authorize(['ADMIN', 'IT_OFFICER']), async (req, res) => {
+router.put('/:id', requirePermission('ASSIGN_ASSETS'), async (req, res) => {
   try {
     const oldAssignment = await prisma.assetAssignment.findUnique({ 
        where: { id: req.params.id },
@@ -168,7 +168,7 @@ router.put('/:id', authorize(['ADMIN', 'IT_OFFICER']), async (req, res) => {
   }
 });
 
-router.delete('/:id', authorize(['ADMIN']), async (req, res) => {
+router.delete('/:id', requirePermission('ASSIGN_ASSETS'), async (req, res) => {
   try {
     const record = await prisma.assetAssignment.findUnique({ 
        where: { id: req.params.id },

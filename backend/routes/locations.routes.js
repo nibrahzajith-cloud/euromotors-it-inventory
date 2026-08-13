@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prismaClient');
-const { authenticate, authorize } = require('../middleware/auth.middleware');
+const { authenticate, requirePermission } = require('../middleware/auth.middleware');
 
 router.use(authenticate);
 
@@ -42,7 +42,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.post('/', authorize(['ADMIN']), async (req, res) => {
+router.post('/', requirePermission('MANAGE_LOCATIONS'), async (req, res) => {
   try {
     const record = await prisma.location.create({ data: req.body });
     res.status(201).json(record);
@@ -51,7 +51,7 @@ router.post('/', authorize(['ADMIN']), async (req, res) => {
   }
 });
 
-router.put('/:id', authorize(['ADMIN']), async (req, res) => {
+router.put('/:id', requirePermission('MANAGE_LOCATIONS'), async (req, res) => {
   try {
     const record = await prisma.location.update({ where: { id: req.params.id }, data: req.body });
     res.json(record);
@@ -60,7 +60,7 @@ router.put('/:id', authorize(['ADMIN']), async (req, res) => {
   }
 });
 
-router.delete('/:id', authorize(['ADMIN']), async (req, res) => {
+router.delete('/:id', requirePermission('MANAGE_LOCATIONS'), async (req, res) => {
   try {
     await prisma.location.delete({ where: { id: req.params.id } });
     res.json({ message: 'Deleted' });

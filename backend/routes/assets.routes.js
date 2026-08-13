@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const ExcelJS = require('exceljs');
 const prisma = require('../prismaClient');
-const { authenticate, authorize } = require('../middleware/auth.middleware');
+const { authenticate, authorize, requirePermission } = require('../middleware/auth.middleware');
 const { logAudit, logAssetTimeline } = require('../utils/logger');
 const { generateAssetCode, generateEmployeeCode } = require('../utils/codeGenerator');
 
@@ -62,7 +62,7 @@ router.get('/code/:code', async (req, res) => {
   }
 });
 
-router.post('/', authorize(['ADMIN', 'IT_OFFICER']), async (req, res) => {
+router.post('/', requirePermission('CREATE_ASSETS'), async (req, res) => {
   try {
     const payload = req.body;
     if (payload.assetCode) {
@@ -256,7 +256,7 @@ router.get('/export/excel', async (req, res) => {
   }
 });
 
-router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
+router.post('/bulk', requirePermission('BULK_IMPORT_ASSETS'), async (req, res) => {
   try {
     const assets = req.body.assets;
     const rowOffset = req.body.rowOffset || 2;
@@ -619,7 +619,7 @@ router.post('/bulk', authorize(['ADMIN']), async (req, res) => {
   }
 });
 
-router.put('/:id', authorize(['ADMIN', 'IT_OFFICER']), async (req, res) => {
+router.put('/:id', requirePermission('EDIT_ASSETS'), async (req, res) => {
   try {
     const oldRecord = await prisma.asset.findUnique({ where: { id: req.params.id } });
     if (!oldRecord) return res.status(404).json({ error: 'Asset not found' });
@@ -698,7 +698,7 @@ router.put('/:id', authorize(['ADMIN', 'IT_OFFICER']), async (req, res) => {
   }
 });
 
-router.delete('/:id', authorize(['ADMIN']), async (req, res) => {
+router.delete('/:id', requirePermission('DELETE_ASSETS'), async (req, res) => {
   try {
     const oldRecord = await prisma.asset.findUnique({ where: { id: req.params.id } });
     if (!oldRecord) return res.status(404).json({ error: 'Asset not found' });

@@ -542,39 +542,76 @@ export default function AnalyticsDashboard() {
               </div>
             </GlassCard>
 
-            {/* Recent Activity */}
+            {/* Asset Attention Required */}
             <GlassCard className="!p-0 overflow-hidden border-slate-200 dark:border-white/10">
               <div className="p-5 border-b border-slate-100 dark:border-white/10 flex justify-between items-center bg-slate-50 dark:bg-white/5">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-slate-800 dark:text-white">Recent Activity</h3>
+                <h3 className="text-xs font-bold uppercase tracking-widest text-slate-800 dark:text-white">Asset Attention Required</h3>
               </div>
-              <div className="p-3 space-y-1 max-h-[300px] overflow-y-auto">
-                {data.activityFeed.length === 0 ? (
-                  <p className="text-xs text-slate-500 text-center py-6">No recent activity found.</p>
-                ) : data.activityFeed.slice(0, 8).map((log) => (
-                  <div key={log.id} className="flex gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-white/10 transition-colors cursor-pointer group" onClick={() => navigate('/audit-logs')}>
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                      log.action.includes('CREATE') ? 'bg-emerald-50 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' :
-                      log.action.includes('DELETE') ? 'bg-rose-50 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400' :
-                      'bg-blue-50 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400'
-                    }`}>
-                      <Activity className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium text-slate-700 dark:text-slate-300 dark:group-hover:text-white transition-colors leading-snug">{log.description}</p>
-                      <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-500">
-                        <span className="font-semibold">{log.userName}</span>
-                        <span>•</span>
-                        <span>{new Date(log.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+              <div className="p-3 space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar">
+                {(data?.attentionRequired?.unassigned?.length === 0 && data?.attentionRequired?.warrantyExpiring?.length === 0 && data?.attentionRequired?.missingDocuments?.length === 0 && data?.attentionRequired?.underRepair?.length === 0) ? (
+                  <p className="text-xs text-slate-500 text-center py-6">No assets require immediate attention.</p>
+                ) : (
+                  <>
+                    {(data?.attentionRequired?.unassigned || []).slice(0, 3).map((asset) => (
+                      <div key={`u-${asset.id}`} className="flex gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-white/10 transition-colors cursor-pointer group" onClick={() => navigate(`/assets/${asset.id}`)}>
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-400">
+                          <MonitorSmartphone className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-slate-700 dark:text-slate-300 dark:group-hover:text-white transition-colors leading-snug">Unassigned Asset: <span className="font-bold">{asset.assetCode}</span></p>
+                          <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-500">
+                            <span>Ready for deployment</span>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                ))}
+                    ))}
+                    {(data?.attentionRequired?.warrantyExpiring || []).slice(0, 3).map((asset) => (
+                      <div key={`w-${asset.id}`} className="flex gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-white/10 transition-colors cursor-pointer group" onClick={() => navigate(`/assets/${asset.id}`)}>
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-rose-50 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400">
+                          <ShieldCheck className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-slate-700 dark:text-slate-300 dark:group-hover:text-white transition-colors leading-snug">Warranty Expiring: <span className="font-bold">{asset.assetCode}</span></p>
+                          <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-500">
+                            <span>Check reports for details</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {(data?.attentionRequired?.missingDocuments || []).slice(0, 3).map((asset) => (
+                      <div key={`d-${asset.id}`} className="flex gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-white/10 transition-colors cursor-pointer group" onClick={() => navigate(`/assets/${asset.id}`)}>
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-amber-50 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400">
+                          <FileText className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-slate-700 dark:text-slate-300 dark:group-hover:text-white transition-colors leading-snug">Missing Documents: <span className="font-bold">{asset.assetCode}</span></p>
+                          <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-500">
+                            <span>Please upload invoice/PO</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {(data?.attentionRequired?.underRepair || []).slice(0, 3).map((asset) => (
+                      <div key={`r-${asset.id}`} className="flex gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-white/10 transition-colors cursor-pointer group" onClick={() => navigate(`/assets/${asset.id}`)}>
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-amber-50 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400">
+                          <Wrench className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-slate-700 dark:text-slate-300 dark:group-hover:text-white transition-colors leading-snug">Under Repair: <span className="font-bold">{asset.assetCode}</span></p>
+                          <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-500">
+                            <span>Currently in maintenance</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )}
               </div>
               <button 
-                onClick={() => navigate('/audit-logs')}
+                onClick={() => navigate('/assets')}
                 className="w-full p-4 text-xs font-bold uppercase tracking-widest text-blue-600 dark:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors border-t border-slate-100 dark:border-white/10 flex items-center justify-center gap-2"
               >
-                View Full Logs <ChevronRight className="w-3 h-3" />
+                View Assets <ChevronRight className="w-3 h-3" />
               </button>
             </GlassCard>
           </div>

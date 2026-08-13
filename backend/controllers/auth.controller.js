@@ -107,7 +107,44 @@ exports.login = async (req, res) => {
 
     if (IS_DEV) console.log(`[LOGIN] Total response time: ${Date.now() - t0}ms (audit log: background)`);
 
-    res.json({ message: 'Login successful', token, user: { id: user.id, fullName: user.fullName, role: user.role, email: user.email, mustChangePassword: user.mustChangePassword } });
+    const rolePerm = await prisma.rolePermission.findUnique({
+      where: { role: user.role }
+    });
+
+    // Default fallback logic
+    const defaultPermissions = {
+      ADMIN: {
+        VIEW_ASSETS: true, CREATE_ASSETS: true, EDIT_ASSETS: true, DELETE_ASSETS: true,
+        ASSIGN_ASSETS: true, TRANSFER_ASSETS: true, 
+        UPLOAD_ASSET_IMAGES: true, REPLACE_ASSET_IMAGES: true, DELETE_ASSET_IMAGES: true,
+        UPLOAD_ASSET_DOCUMENTS: true, DOWNLOAD_ASSET_DOCUMENTS: true, DELETE_ASSET_DOCUMENTS: true,
+        BULK_IMPORT_ASSETS: true, EXPORT_REPORTS: true, VIEW_STORAGE_STATS: true,
+        MANAGE_EMPLOYEES: true, MANAGE_DEPARTMENTS: true, MANAGE_LOCATIONS: true,
+        MANAGE_USERS: true, MANAGE_ROLES: true, VIEW_AUDIT_LOG: true, EXPORT_AUDIT_LOG: true, CONFIGURE_SYSTEM: true
+      },
+      IT_OFFICER: {
+        VIEW_ASSETS: true, CREATE_ASSETS: true, EDIT_ASSETS: true, DELETE_ASSETS: false,
+        ASSIGN_ASSETS: true, TRANSFER_ASSETS: true,
+        UPLOAD_ASSET_IMAGES: true, REPLACE_ASSET_IMAGES: true, DELETE_ASSET_IMAGES: false,
+        UPLOAD_ASSET_DOCUMENTS: true, DOWNLOAD_ASSET_DOCUMENTS: true, DELETE_ASSET_DOCUMENTS: false,
+        BULK_IMPORT_ASSETS: false, EXPORT_REPORTS: true, VIEW_STORAGE_STATS: false,
+        MANAGE_EMPLOYEES: true, MANAGE_DEPARTMENTS: false, MANAGE_LOCATIONS: false,
+        MANAGE_USERS: false, MANAGE_ROLES: false, VIEW_AUDIT_LOG: false, EXPORT_AUDIT_LOG: false, CONFIGURE_SYSTEM: false
+      },
+      VIEWER: {
+        VIEW_ASSETS: true, CREATE_ASSETS: false, EDIT_ASSETS: false, DELETE_ASSETS: false,
+        ASSIGN_ASSETS: false, TRANSFER_ASSETS: false,
+        UPLOAD_ASSET_IMAGES: false, REPLACE_ASSET_IMAGES: false, DELETE_ASSET_IMAGES: false,
+        UPLOAD_ASSET_DOCUMENTS: false, DOWNLOAD_ASSET_DOCUMENTS: true, DELETE_ASSET_DOCUMENTS: false,
+        BULK_IMPORT_ASSETS: false, EXPORT_REPORTS: false, VIEW_STORAGE_STATS: false,
+        MANAGE_EMPLOYEES: false, MANAGE_DEPARTMENTS: false, MANAGE_LOCATIONS: false,
+        MANAGE_USERS: false, MANAGE_ROLES: false, VIEW_AUDIT_LOG: false, EXPORT_AUDIT_LOG: false, CONFIGURE_SYSTEM: false
+      }
+    };
+    
+    const permissions = rolePerm ? rolePerm.permissions : defaultPermissions[user.role];
+
+    res.json({ message: 'Login successful', token, user: { id: user.id, fullName: user.fullName, role: user.role, email: user.email, mustChangePassword: user.mustChangePassword, permissions } });
   } catch (error) {
     res.status(500).json({ error: 'Server error during login', details: error.message });
   }
@@ -120,6 +157,42 @@ exports.getMe = async (req, res) => {
       select: { id: true, fullName: true, email: true, role: true, status: true, mustChangePassword: true }
     });
     if (!user) return res.status(404).json({ error: 'User not found' });
+    const rolePerm = await prisma.rolePermission.findUnique({
+      where: { role: user.role }
+    });
+
+    const defaultPermissions = {
+      ADMIN: {
+        VIEW_ASSETS: true, CREATE_ASSETS: true, EDIT_ASSETS: true, DELETE_ASSETS: true,
+        ASSIGN_ASSETS: true, TRANSFER_ASSETS: true, 
+        UPLOAD_ASSET_IMAGES: true, REPLACE_ASSET_IMAGES: true, DELETE_ASSET_IMAGES: true,
+        UPLOAD_ASSET_DOCUMENTS: true, DOWNLOAD_ASSET_DOCUMENTS: true, DELETE_ASSET_DOCUMENTS: true,
+        BULK_IMPORT_ASSETS: true, EXPORT_REPORTS: true, VIEW_STORAGE_STATS: true,
+        MANAGE_EMPLOYEES: true, MANAGE_DEPARTMENTS: true, MANAGE_LOCATIONS: true,
+        MANAGE_USERS: true, MANAGE_ROLES: true, VIEW_AUDIT_LOG: true, EXPORT_AUDIT_LOG: true, CONFIGURE_SYSTEM: true
+      },
+      IT_OFFICER: {
+        VIEW_ASSETS: true, CREATE_ASSETS: true, EDIT_ASSETS: true, DELETE_ASSETS: false,
+        ASSIGN_ASSETS: true, TRANSFER_ASSETS: true,
+        UPLOAD_ASSET_IMAGES: true, REPLACE_ASSET_IMAGES: true, DELETE_ASSET_IMAGES: false,
+        UPLOAD_ASSET_DOCUMENTS: true, DOWNLOAD_ASSET_DOCUMENTS: true, DELETE_ASSET_DOCUMENTS: false,
+        BULK_IMPORT_ASSETS: false, EXPORT_REPORTS: true, VIEW_STORAGE_STATS: false,
+        MANAGE_EMPLOYEES: true, MANAGE_DEPARTMENTS: false, MANAGE_LOCATIONS: false,
+        MANAGE_USERS: false, MANAGE_ROLES: false, VIEW_AUDIT_LOG: false, EXPORT_AUDIT_LOG: false, CONFIGURE_SYSTEM: false
+      },
+      VIEWER: {
+        VIEW_ASSETS: true, CREATE_ASSETS: false, EDIT_ASSETS: false, DELETE_ASSETS: false,
+        ASSIGN_ASSETS: false, TRANSFER_ASSETS: false,
+        UPLOAD_ASSET_IMAGES: false, REPLACE_ASSET_IMAGES: false, DELETE_ASSET_IMAGES: false,
+        UPLOAD_ASSET_DOCUMENTS: false, DOWNLOAD_ASSET_DOCUMENTS: true, DELETE_ASSET_DOCUMENTS: false,
+        BULK_IMPORT_ASSETS: false, EXPORT_REPORTS: false, VIEW_STORAGE_STATS: false,
+        MANAGE_EMPLOYEES: false, MANAGE_DEPARTMENTS: false, MANAGE_LOCATIONS: false,
+        MANAGE_USERS: false, MANAGE_ROLES: false, VIEW_AUDIT_LOG: false, EXPORT_AUDIT_LOG: false, CONFIGURE_SYSTEM: false
+      }
+    };
+    
+    user.permissions = rolePerm ? rolePerm.permissions : defaultPermissions[user.role];
+
     res.json(user);
   } catch (error) {
     res.status(500).json({ error: 'Server error fetching user details' });

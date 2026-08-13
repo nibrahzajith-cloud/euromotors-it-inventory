@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prismaClient');
-const { authenticate, authorize } = require('../middleware/auth.middleware');
+const { authenticate, requirePermission } = require('../middleware/auth.middleware');
 const { generateEmployeeCode } = require('../utils/codeGenerator');
 
 router.use(authenticate);
@@ -24,7 +24,7 @@ router.get('/', async (req, res) => {
 });
 
 // Admin and IT Officer can modify
-router.post('/', authorize(['ADMIN', 'IT_OFFICER']), async (req, res) => {
+router.post('/', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
   try {
     const payload = { ...req.body };
     if (!payload.employeeCode) {
@@ -37,7 +37,7 @@ router.post('/', authorize(['ADMIN', 'IT_OFFICER']), async (req, res) => {
   }
 });
 
-router.put('/:id', authorize(['ADMIN', 'IT_OFFICER']), async (req, res) => {
+router.put('/:id', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
   try {
     const record = await prisma.employee.update({ where: { id: req.params.id }, data: req.body });
     res.json(record);
@@ -47,7 +47,7 @@ router.put('/:id', authorize(['ADMIN', 'IT_OFFICER']), async (req, res) => {
 });
 
 // Only Admin can delete
-router.delete('/:id', authorize(['ADMIN']), async (req, res) => {
+router.delete('/:id', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
   try {
     // Manual cascade delete
     await prisma.$transaction([

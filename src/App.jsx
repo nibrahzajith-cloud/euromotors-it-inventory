@@ -17,6 +17,7 @@ import QrCodePage from './pages/QrCodePage';
 import ChangePassword from './pages/ChangePassword';
 import AuditLogs from './pages/AuditLogs';
 import Database from './pages/Database';
+import RolePermissions from './pages/RolePermissions';
 import AnalyticsDashboard from './pages/AnalyticsDashboard';
 import Scanner from './pages/Scanner';
 import Tickets from './pages/Tickets';
@@ -25,7 +26,7 @@ import { ToastProvider } from './context/ToastContext';
 import { ConfirmProvider } from './context/ConfirmContext';
 
 // Protected Route Component
-const ProtectedRoute = ({ children, allowedRoles }) => {
+const ProtectedRoute = ({ children, allowedRoles, requiredPermission }) => {
   const { user, loading } = useAuth();
   const location = useLocation();
 
@@ -45,6 +46,10 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     return <Navigate to="/" replace />; // Redirect to dashboard if unauthorized
+  }
+
+  if (requiredPermission && (!user.permissions || !user.permissions[requiredPermission])) {
+    return <Navigate to="/" replace />; // Redirect if missing granular permission
   }
 
   return children;
@@ -78,9 +83,10 @@ const AppRoutes = () => {
         
         <Route path="reports" element={<Reports />} />
         <Route path="settings" element={<ProtectedRoute allowedRoles={['ADMIN']}><Settings /></ProtectedRoute>} />
-        <Route path="users" element={<ProtectedRoute allowedRoles={['ADMIN']}><Users /></ProtectedRoute>} />
-        <Route path="audit-logs" element={<ProtectedRoute allowedRoles={['ADMIN']}><AuditLogs /></ProtectedRoute>} />
+        <Route path="users" element={<ProtectedRoute requiredPermission="MANAGE_USERS"><Users /></ProtectedRoute>} />
+        <Route path="audit-logs" element={<ProtectedRoute requiredPermission="VIEW_AUDIT_LOG"><AuditLogs /></ProtectedRoute>} />
         <Route path="database" element={<ProtectedRoute allowedRoles={['ADMIN']}><Database /></ProtectedRoute>} />
+        <Route path="permissions" element={<ProtectedRoute allowedRoles={['ADMIN']}><RolePermissions /></ProtectedRoute>} />
       </Route>
     </Routes>
   );

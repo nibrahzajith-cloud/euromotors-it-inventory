@@ -37,7 +37,7 @@ router.get('/summary', authenticate, async (req, res) => {
       prisma.employee.count(),
       prisma.department.count(),
       prisma.location.count(),
-      prisma.auditLog.findMany({ orderBy: { createdAt: 'desc' }, take: 10 }),
+      prisma.asset.count({ where: { documents: { none: {} } } }),
       prisma.department.findMany({ include: { _count: { select: { assets: true, employees: true } } } }),
       prisma.location.findMany({ include: { _count: { select: { assets: true } } } }),
       prisma.maintenanceLog.findMany({ where: { status: 'OPEN' }, include: { asset: true }, take: 5 }),
@@ -88,7 +88,12 @@ router.get('/summary', authenticate, async (req, res) => {
         departments: recentDepartments.map(d => ({ fullName: d.name, designation: d.status })),
         locations: recentLocations.map(l => ({ fullName: l.name, designation: l.status }))
       },
-      recentActivity,
+      attentionRequired: {
+        unassigned: assignedCount > 0 ? availableCount : 0, // Just use availableCount
+        expiringWarranty: warrantyAssets.length,
+        underRepair: repairingAssets.length,
+        missingDocuments: recentActivity // we stored the count here
+      },
       distribution: {
         departments: distributionDept.map(d => ({ name: d.name, id: d.id, count: d._count.assets, employeeCount: d._count.employees })),
         locations: distributionLoc.map(l => ({ name: l.name, id: l.id, count: l._count.assets }))
@@ -136,7 +141,7 @@ router.get('/advanced', authenticate, async (req, res) => {
       prisma.asset.count({ where: { status: 'AVAILABLE' } }),
       prisma.asset.count({ where: { status: 'UNDER_REPAIR' } }),
       prisma.asset.count({ where: { warrantyExpiryDate: { lte: thirtyDaysFromNow, gt: new Date() } } }),
-      prisma.auditLog.findMany({ orderBy: { createdAt: 'desc' }, take: 15 }),
+      prisma.asset.count({ where: { documents: { none: {} } } }),
       prisma.department.findMany({ include: { _count: { select: { assets: true, employees: true } }, employees: { take: 5 }, assets: { take: 5 } } }),
       prisma.location.findMany({ include: { _count: { select: { assets: true, employees: true } }, employees: { take: 5 }, assets: { take: 5 } } }),
       prisma.maintenanceLog.findMany({ where: { status: { in: ['OPEN', 'IN_PROGRESS'] } }, include: { asset: true }, orderBy: { createdAt: 'desc' } }),
@@ -293,7 +298,12 @@ router.get('/advanced', authenticate, async (req, res) => {
         days15: expiring15,
         days30: expiring30
       },
-      activityFeed: recentActivity,
+      attentionRequired: {
+        unassigned: unusedAssets.length,
+        expiringWarranty: expiringSoon,
+        underRepair: maintenanceLogs.length,
+        missingDocuments: recentActivity // we stored the count here
+      },
       today: {
         added: assetsAddedToday,
         assigned: assetsAssignedToday,

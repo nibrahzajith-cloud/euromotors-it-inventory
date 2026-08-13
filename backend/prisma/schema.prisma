@@ -240,14 +240,14 @@ model AssetDocument {
   assetId String
   asset   Asset  @relation(fields: [assetId], references: [id], onDelete: Cascade)
 
-  documentName    String
-  documentType    String
-  fileUrl         String?
-  storageKey      String?
-  fileSize        Int
-  mimeType        String?
-  uploadedBy      String?
-  uploadedByName  String?
+  documentName   String
+  documentType   String
+  fileUrl        String?
+  storageKey     String?
+  fileSize       Int
+  mimeType       String?
+  uploadedBy     String?
+  uploadedByName String?
 
   createdAt DateTime @default(now())
 }

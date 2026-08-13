@@ -3,7 +3,7 @@ const router = express.Router();
 const prisma = require('../prismaClient');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
-const { authenticate, authorize } = require('../middleware/auth.middleware');
+const { authenticate, requirePermission } = require('../middleware/auth.middleware');
 const { logAudit } = require('../utils/logger');
 
 const generateTempPassword = () => crypto.randomBytes(4).toString('hex');
@@ -11,7 +11,7 @@ const generateTempPassword = () => crypto.randomBytes(4).toString('hex');
 // All User routes require ADMIN privileges, except GET which maybe IT_OFFICER can view
 router.use(authenticate);
 
-router.get('/', authorize(['ADMIN', 'IT_OFFICER']), async (req, res) => {
+router.get('/', requirePermission(['ADMIN', 'IT_OFFICER']), async (req, res) => {
   try {
     const users = await prisma.user.findMany({ select: { id: true, fullName: true, email: true, role: true, status: true, createdAt: true } });
     res.json(users);
@@ -20,7 +20,7 @@ router.get('/', authorize(['ADMIN', 'IT_OFFICER']), async (req, res) => {
   }
 });
 
-router.post('/', authorize(['ADMIN']), async (req, res) => {
+router.post('/', requirePermission('MANAGE_USERS'), async (req, res) => {
   try {
     const { fullName, email, role, status } = req.body;
     
@@ -58,7 +58,7 @@ router.post('/', authorize(['ADMIN']), async (req, res) => {
   }
 });
 
-router.put('/:id', authorize(['ADMIN']), async (req, res) => {
+router.put('/:id', requirePermission('MANAGE_USERS'), async (req, res) => {
   try {
     const { id } = req.params;
     const { fullName, role, status } = req.body;
@@ -99,7 +99,7 @@ router.put('/:id', authorize(['ADMIN']), async (req, res) => {
   }
 });
 
-router.delete('/:id', authorize(['ADMIN']), async (req, res) => {
+router.delete('/:id', requirePermission('MANAGE_USERS'), async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -135,7 +135,7 @@ router.delete('/:id', authorize(['ADMIN']), async (req, res) => {
   }
 });
 
-router.post('/:id/reset-password', authorize(['ADMIN']), async (req, res) => {
+router.post('/:id/reset-password', requirePermission('MANAGE_USERS'), async (req, res) => {
   try {
     const { id } = req.params;
     const targetUser = await prisma.user.findUnique({ where: { id } });
