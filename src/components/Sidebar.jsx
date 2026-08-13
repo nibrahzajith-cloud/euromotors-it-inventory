@@ -132,32 +132,6 @@ export default function Sidebar() {
           isExpanded ? "w-64" : "w-20"
         )}
       >
-        {/* Brand / Logo Top Bar */}
-        <div className={clsx(
-          "flex items-center h-16 px-4 bg-white/[0.02] shrink-0 overflow-hidden border-b border-white/5",
-          isExpanded ? "justify-between" : "justify-center"
-        )}>
-          <div className="flex items-center gap-3 overflow-hidden">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-lg shadow-blue-500/20 shrink-0 font-black text-sm tracking-wider">
-              IT
-            </div>
-            {isExpanded && (
-              <div className="flex flex-col">
-                <span className="text-sm font-bold text-white tracking-wide whitespace-nowrap">IT Inventory</span>
-                <span className="text-[10px] text-slate-400 font-medium tracking-wider uppercase whitespace-nowrap">EuroMotors</span>
-              </div>
-            )}
-          </div>
-          {isExpanded && (
-            <button 
-              onClick={() => setIsPinned(!isPinned)} 
-              className="p-1.5 hover:bg-slate-800 rounded-lg transition-colors text-slate-400 hover:text-white shrink-0"
-              title={isPinned ? "Unpin sidebar" : "Pin sidebar"}
-            >
-              {isPinned ? <Pin className="w-4 h-4 text-blue-400" /> : <PinOff className="w-4 h-4" />}
-            </button>
-          )}
-        </div>
 
         <nav className="flex-1 overflow-y-auto overflow-x-hidden py-3 px-3 space-y-1 custom-scrollbar">
           {visibleNavItems.map((item) => (
@@ -197,7 +171,21 @@ export default function Sidebar() {
           ))}
         </nav>
 
-        <div className="p-3 bg-white/[0.02] shrink-0 border-t border-white/5 pointer-events-auto overflow-hidden">
+        <div className="p-3 bg-white/[0.02] shrink-0 border-t border-white/5 pointer-events-auto overflow-hidden flex flex-col gap-1.5">
+          <button 
+            onClick={() => setIsPinned(!isPinned)} 
+            title={!isExpanded ? (isPinned ? "Unpin sidebar" : "Pin sidebar") : undefined}
+            className={clsx(
+              "flex items-center w-full py-2.5 rounded-xl text-[13px] font-medium text-slate-400 hover:bg-slate-800 hover:text-white transition-all duration-200 cursor-pointer",
+              isExpanded ? "gap-3 px-3" : "justify-center px-0 gap-0"
+            )}
+          >
+            {isPinned ? <Pin className="w-5 h-5 text-blue-400 shrink-0" /> : <PinOff className="w-5 h-5 shrink-0" />}
+            <span className={clsx("whitespace-nowrap transition-all duration-300", !isExpanded ? "opacity-0 w-0 overflow-hidden" : "opacity-100")}>
+              {isPinned ? "Unpin Sidebar" : "Pin Sidebar"}
+            </span>
+          </button>
+
           <button 
             onClick={handleLogout}
             title={!isExpanded ? 'Logout' : undefined}

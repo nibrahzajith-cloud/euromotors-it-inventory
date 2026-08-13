@@ -192,15 +192,40 @@ export default function RolePermissions() {
                         const isCriticalAdmin = role.id === 'ADMIN' && ['MANAGE_ROLES', 'VIEW_AUDIT_LOG', 'CONFIGURE_SYSTEM'].includes(perm.id);
                         return (
                           <td key={`${role.id}-${perm.id}`} className="px-6 py-4 text-center">
-                            <label className={`relative inline-flex items-center ${isCriticalAdmin ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
+                            <label className={`relative inline-flex items-center ${isCriticalAdmin ? 'cursor-not-allowed opacity-50' : 'cursor-pointer select-none'}`}>
                               <input 
                                 type="checkbox" 
-                                className="sr-only peer" 
+                                className="sr-only" 
                                 checked={isChecked}
                                 disabled={isCriticalAdmin}
                                 onChange={() => handleToggle(role.id, perm.id)}
                               />
-                              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
+                              <div className={`
+                                relative w-16 h-8 rounded-full transition-all duration-300 flex items-center px-1 text-[9px] font-black tracking-wider uppercase
+                                ${isChecked 
+                                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-[0_0_12px_rgba(16,185,129,0.15)]' 
+                                  : 'bg-slate-800 text-slate-500 border border-slate-700/80'}
+                              `}>
+                                {/* Background text */}
+                                {isChecked ? (
+                                  <span className="pl-2.5 text-emerald-400 transition-opacity duration-300">ON</span>
+                                ) : (
+                                  <span className="pr-2.5 ml-auto text-slate-500 transition-opacity duration-300">OFF</span>
+                                )}
+
+                                {/* Knob */}
+                                <div className={`
+                                  absolute w-6 h-6 rounded-full transition-transform duration-300 flex items-center justify-center shadow-md left-1
+                                  ${isChecked 
+                                    ? 'translate-x-8 bg-emerald-400 text-emerald-950' 
+                                    : 'translate-x-0 bg-slate-500 text-slate-100'}
+                                `}>
+                                  {isChecked 
+                                    ? <Check className="w-3.5 h-3.5 stroke-[4]" />
+                                    : <X className="w-3.5 h-3.5 stroke-[4]" />
+                                  }
+                                </div>
+                              </div>
                             </label>
                           </td>
                         );
