@@ -44,6 +44,11 @@ const ProtectedRoute = ({ children, allowedRoles, requiredPermission }) => {
     return <Navigate to="/" replace />;
   }
 
+  // ADMIN always has full access — skip role and permission checks
+  if (user.role === 'ADMIN') {
+    return children;
+  }
+
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     return <Navigate to="/" replace />; // Redirect to dashboard if unauthorized
   }
@@ -68,7 +73,6 @@ const AppRoutes = () => {
         <Route path="assets" element={<Assets />} />
         <Route path="assets/add" element={<ProtectedRoute allowedRoles={['ADMIN', 'IT_OFFICER']}><AddAsset /></ProtectedRoute>} />
         <Route path="assets/edit/:id" element={<ProtectedRoute allowedRoles={['ADMIN', 'IT_OFFICER']}><AddAsset /></ProtectedRoute>} />
-        <Route path="assets/:id" element={<AssetProfile />} />
         <Route path="assets/:id" element={<AssetProfile />} />
         
         <Route path="employees" element={<Employees />} />
