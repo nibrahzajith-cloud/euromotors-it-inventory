@@ -97,7 +97,7 @@ export default function RolePermissions() {
 
   const handleToggle = (role, permissionId) => {
     // Prevent locking out ADMIN from critical permissions
-    if (role === 'ADMIN' && ['MANAGE_ROLES', 'VIEW_AUDIT_LOG', 'CONFIGURE_SYSTEM'].includes(permissionId)) {
+    if (role === 'ADMIN' && ['MANAGE_USERS', 'MANAGE_ROLES', 'VIEW_AUDIT_LOG', 'CONFIGURE_SYSTEM'].includes(permissionId)) {
       return;
     }
 
@@ -189,7 +189,7 @@ export default function RolePermissions() {
                       </td>
                       {ROLES.map(role => {
                         const isChecked = !!matrix[role.id]?.[perm.id];
-                        const isCriticalAdmin = role.id === 'ADMIN' && ['MANAGE_ROLES', 'VIEW_AUDIT_LOG', 'CONFIGURE_SYSTEM'].includes(perm.id);
+                        const isCriticalAdmin = role.id === 'ADMIN' && ['MANAGE_USERS', 'MANAGE_ROLES', 'VIEW_AUDIT_LOG', 'CONFIGURE_SYSTEM'].includes(perm.id);
                         return (
                           <td key={`${role.id}-${perm.id}`} className="px-6 py-4 text-center">
                             <label className={`relative inline-flex items-center ${isCriticalAdmin ? 'cursor-not-allowed opacity-50' : 'cursor-pointer select-none'}`}>

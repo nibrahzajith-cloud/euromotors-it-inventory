@@ -38,13 +38,17 @@ exports.requirePermission = (requiredPermission) => {
     }
 
     try {
+      // ADMIN always has full access — skip DB permission check
+      if (req.user.role === 'ADMIN') {
+        return next();
+      }
+
       const rolePerm = await prisma.rolePermission.findUnique({
         where: { role: req.user.role }
       });
 
       // Default fallback logic if DB is not populated yet
       const defaultPermissions = {
-        ADMIN: true,
         IT_OFFICER: true,
         VIEWER: true
       };
@@ -54,9 +58,7 @@ exports.requirePermission = (requiredPermission) => {
       if (rolePerm && rolePerm.permissions) {
         hasPermission = !!rolePerm.permissions[requiredPermission];
       } else {
-        hasPermission = typeof defaultPermissions[req.user.role] === 'boolean' 
-          ? defaultPermissions[req.user.role] 
-          : defaultPermissions[req.user.role];
+        hasPermission = !!defaultPermissions[req.user.role];
       }
 
       if (!hasPermission) {
