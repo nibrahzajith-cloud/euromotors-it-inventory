@@ -113,8 +113,9 @@ export default function RolePermissions() {
   const handleSave = async () => {
     setSaving(true);
     try {
+      const errors = [];
       for (const role of ROLES) {
-        await fetch(`${API_URL}/permissions/${role.id}`, {
+        const res = await fetch(`${API_URL}/permissions/${role.id}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -122,11 +123,22 @@ export default function RolePermissions() {
           },
           body: JSON.stringify({ permissions: matrix[role.id] })
         });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          errors.push(`${role.label}: ${data.error || res.statusText}`);
+        }
       }
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 3000);
+      if (errors.length > 0) {
+        alert(`Failed to save some permissions:\n${errors.join('\n')}`);
+      } else {
+        setSuccess(true);
+        setTimeout(() => setSuccess(false), 3000);
+      }
+      // Re-fetch to confirm saved state from DB
+      await fetchPermissions();
     } catch (err) {
       console.error('Failed to save permissions', err);
+      alert('Failed to save permissions. Check console for details.');
     } finally {
       setSaving(false);
     }
