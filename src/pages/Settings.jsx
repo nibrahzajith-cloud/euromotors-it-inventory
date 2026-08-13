@@ -327,13 +327,11 @@ export default function Settings() {
          
          // If there are fatal errors or we want to show validation, we could set status
          // But per requirements, on success navigate immediately to dashboard
-         if (aggregatedResults.errors.length > 0) {
-            setImportStatus(aggregatedResults);
-         } else {
+         setImportStatus(aggregatedResults);
+         if (aggregatedResults.errors.length === 0) {
             console.log('Successfully transferred assets to database.');
             console.log('Upload Summary:', aggregatedResults);
             showToast('Bulk import completed successfully!', 'success');
-            navigate('/dashboard');
          }
       } catch (err) {
          setImportStatus({ fatal: err.message });
