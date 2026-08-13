@@ -548,11 +548,14 @@ export default function AnalyticsDashboard() {
                 <h3 className="text-xs font-bold uppercase tracking-widest text-slate-800 dark:text-white">Asset Attention Required</h3>
               </div>
               <div className="p-3 space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar">
-                {(data?.attentionRequired?.unassigned?.length === 0 && data?.attentionRequired?.warrantyExpiring?.length === 0 && data?.attentionRequired?.missingDocuments?.length === 0 && data?.attentionRequired?.underRepair?.length === 0) ? (
+                 {(!Array.isArray(data?.attentionRequired?.unassigned) || data.attentionRequired.unassigned.length === 0) &&
+                 (!Array.isArray(data?.attentionRequired?.warrantyExpiring) || data.attentionRequired.warrantyExpiring.length === 0) &&
+                 (!Array.isArray(data?.attentionRequired?.missingDocuments) || data.attentionRequired.missingDocuments.length === 0) &&
+                 (!Array.isArray(data?.attentionRequired?.underRepair) || data.attentionRequired.underRepair.length === 0) ? (
                   <p className="text-xs text-slate-500 text-center py-6">No assets require immediate attention.</p>
                 ) : (
                   <>
-                    {(data?.attentionRequired?.unassigned || []).slice(0, 3).map((asset) => (
+                    {(Array.isArray(data?.attentionRequired?.unassigned) ? data.attentionRequired.unassigned : []).slice(0, 3).map((asset) => (
                       <div key={`u-${asset.id}`} className="flex gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-white/10 transition-colors cursor-pointer group" onClick={() => navigate(`/assets/${asset.id}`)}>
                         <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-400">
                           <MonitorSmartphone className="w-4 h-4" />
@@ -565,7 +568,7 @@ export default function AnalyticsDashboard() {
                         </div>
                       </div>
                     ))}
-                    {(data?.attentionRequired?.warrantyExpiring || []).slice(0, 3).map((asset) => (
+                    {(Array.isArray(data?.attentionRequired?.warrantyExpiring) ? data.attentionRequired.warrantyExpiring : []).slice(0, 3).map((asset) => (
                       <div key={`w-${asset.id}`} className="flex gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-white/10 transition-colors cursor-pointer group" onClick={() => navigate(`/assets/${asset.id}`)}>
                         <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-rose-50 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400">
                           <ShieldCheck className="w-4 h-4" />
@@ -578,7 +581,7 @@ export default function AnalyticsDashboard() {
                         </div>
                       </div>
                     ))}
-                    {(data?.attentionRequired?.missingDocuments || []).slice(0, 3).map((asset) => (
+                    {(Array.isArray(data?.attentionRequired?.missingDocuments) ? data.attentionRequired.missingDocuments : []).slice(0, 3).map((asset) => (
                       <div key={`d-${asset.id}`} className="flex gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-white/10 transition-colors cursor-pointer group" onClick={() => navigate(`/assets/${asset.id}`)}>
                         <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-amber-50 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400">
                           <FileText className="w-4 h-4" />
@@ -591,7 +594,7 @@ export default function AnalyticsDashboard() {
                         </div>
                       </div>
                     ))}
-                    {(data?.attentionRequired?.underRepair || []).slice(0, 3).map((asset) => (
+                    {(Array.isArray(data?.attentionRequired?.underRepair) ? data.attentionRequired.underRepair : []).slice(0, 3).map((asset) => (
                       <div key={`r-${asset.id}`} className="flex gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-white/10 transition-colors cursor-pointer group" onClick={() => navigate(`/assets/${asset.id}`)}>
                         <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-amber-50 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400">
                           <Wrench className="w-4 h-4" />

@@ -141,7 +141,7 @@ router.get('/advanced', authenticate, async (req, res) => {
       prisma.asset.count({ where: { status: 'AVAILABLE' } }),
       prisma.asset.count({ where: { status: 'UNDER_REPAIR' } }),
       prisma.asset.count({ where: { warrantyExpiryDate: { lte: thirtyDaysFromNow, gt: new Date() } } }),
-      prisma.asset.count({ where: { documents: { none: {} } } }),
+      prisma.asset.findMany({ where: { documents: { none: {} } }, take: 5 }),
       prisma.department.findMany({ include: { _count: { select: { assets: true, employees: true } }, employees: { take: 5 }, assets: { take: 5 } } }),
       prisma.location.findMany({ include: { _count: { select: { assets: true, employees: true } }, employees: { take: 5 }, assets: { take: 5 } } }),
       prisma.maintenanceLog.findMany({ where: { status: { in: ['OPEN', 'IN_PROGRESS'] } }, include: { asset: true }, orderBy: { createdAt: 'desc' } }),
@@ -299,10 +299,10 @@ router.get('/advanced', authenticate, async (req, res) => {
         days30: expiring30
       },
       attentionRequired: {
-        unassigned: unusedAssets.length,
-        expiringWarranty: expiringSoon,
-        underRepair: maintenanceLogs.length,
-        missingDocuments: recentActivity // we stored the count here
+        unassigned: unusedAssets,
+        warrantyExpiring: [...expiring7, ...expiring15, ...expiring30].slice(0, 5),
+        underRepair: maintenanceLogs.map(m => m.asset).filter(Boolean).filter((asset, index, self) => self.findIndex(a => a.id === asset.id) === index).slice(0, 5),
+        missingDocuments: recentActivity
       },
       today: {
         added: assetsAddedToday,
