@@ -40,7 +40,6 @@ const routeModuleMap = [
   { path: '/audit-logs', name: 'Audit Logs', icon: History, category: 'System' },
   { path: '/database', name: 'Database', icon: Database, category: 'System' },
   { path: '/users', name: 'User Management', icon: ShieldCheck, category: 'System' },
-  { path: '/permissions', name: 'Role & Permissions', icon: ShieldCheck, category: 'System' },
   { path: '/settings', name: 'Settings', icon: Settings, category: 'System' },
   { path: '/change-password', name: 'Change Password', icon: KeyRound, category: 'Account' },
   { path: '/', name: 'Control Center', icon: LayoutDashboard, category: 'Dashboard' },
