@@ -70,7 +70,18 @@ export default function Sidebar() {
   ];
 
   // Filter items based on user granular permissions
-  const visibleNavItems = navItems.filter(item => {
+  const visibleNavItems = navItems.filter((item, index, array) => {
+    if (item.isHeader) {
+      // Find items that belong to this header (until next header)
+      const nextHeaderIndex = array.findIndex((el, i) => i > index && el.isHeader);
+      const itemsInGroup = array.slice(index + 1, nextHeaderIndex === -1 ? array.length : nextHeaderIndex);
+      return itemsInGroup.some(child => {
+        if (child.alwaysShow) return true;
+        if (child.roleRequired && user?.role === child.roleRequired) return true;
+        if (child.permission && user?.permissions && user.permissions[child.permission]) return true;
+        return false;
+      });
+    }
     if (item.alwaysShow) return true;
     if (item.roleRequired && user?.role !== item.roleRequired) return false;
     if (item.permission && (!user?.permissions || !user.permissions[item.permission])) return false;
@@ -89,18 +100,31 @@ export default function Sidebar() {
           isExpanded ? "w-64" : "w-20"
         )}
       >
-        <div className="flex items-center justify-end h-14 px-4 bg-white/[0.02] shrink-0 overflow-hidden">
-          <div className="flex items-center gap-2 shrink-0">
+        {/* Brand / Logo Top Bar */}
+        <div className={clsx(
+          "flex items-center h-16 px-4 bg-white/[0.02] shrink-0 overflow-hidden border-b border-white/5",
+          isExpanded ? "justify-between" : "justify-center"
+        )}>
+          <div className="flex items-center gap-3 overflow-hidden">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-lg shadow-blue-500/20 shrink-0 font-black text-sm tracking-wider">
+              IT
+            </div>
+            {isExpanded && (
+              <div className="flex flex-col">
+                <span className="text-sm font-bold text-white tracking-wide whitespace-nowrap">IT Inventory</span>
+                <span className="text-[10px] text-slate-400 font-medium tracking-wider uppercase whitespace-nowrap">EuroMotors</span>
+              </div>
+            )}
+          </div>
+          {isExpanded && (
             <button 
               onClick={() => setIsPinned(!isPinned)} 
-              className={clsx(
-                "hidden md:flex p-1.5 hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-white",
-                !isExpanded && "hidden"
-              )}
+              className="p-1.5 hover:bg-slate-800 rounded-lg transition-colors text-slate-400 hover:text-white shrink-0"
+              title={isPinned ? "Unpin sidebar" : "Pin sidebar"}
             >
               {isPinned ? <Pin className="w-4 h-4 text-blue-400" /> : <PinOff className="w-4 h-4" />}
             </button>
-          </div>
+          )}
         </div>
 
         <nav className="flex-1 overflow-y-auto overflow-x-hidden py-3 px-3 space-y-1 custom-scrollbar">

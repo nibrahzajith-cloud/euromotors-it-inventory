@@ -1,16 +1,69 @@
 import { useState, useRef, useEffect } from 'react';
-import { Menu, Search, Bell, UserCircle, Sun, Moon } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
+import { 
+  Search, Bell, UserCircle, Sun, Moon,
+  LayoutDashboard, 
+  MonitorSmartphone, 
+  PlusCircle, 
+  Users, 
+  Building2, 
+  MapPin, 
+  ArrowRightLeft, 
+  QrCode, 
+  Wrench, 
+  FileText, 
+  Settings, 
+  ShieldCheck, 
+  History, 
+  Camera, 
+  Ticket, 
+  Database,
+  KeyRound
+} from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 
+const routeModuleMap = [
+  { path: '/assets/add', name: 'Add Asset', icon: PlusCircle, category: 'Operations' },
+  { path: '/assets/edit', name: 'Edit Asset', icon: MonitorSmartphone, category: 'Operations' },
+  { path: '/assets/', name: 'Asset Profile', icon: MonitorSmartphone, category: 'Operations' },
+  { path: '/assets', name: 'Assets', icon: MonitorSmartphone, category: 'Operations' },
+  { path: '/employees', name: 'Employees', icon: Users, category: 'Operations' },
+  { path: '/departments', name: 'Departments', icon: Building2, category: 'Operations' },
+  { path: '/locations', name: 'Locations', icon: MapPin, category: 'Operations' },
+  { path: '/assignments', name: 'Asset Assignment', icon: ArrowRightLeft, category: 'Operations' },
+  { path: '/qr-code', name: 'QR Code', icon: QrCode, category: 'Operations' },
+  { path: '/scanner', name: 'Camera Scanner', icon: Camera, category: 'Operations' },
+  { path: '/maintenance', name: 'Maintenance', icon: Wrench, category: 'Operations' },
+  { path: '/tickets', name: 'Support Desk', icon: Ticket, category: 'Operations' },
+  { path: '/reports', name: 'Reports', icon: FileText, category: 'System' },
+  { path: '/audit-logs', name: 'Audit Logs', icon: History, category: 'System' },
+  { path: '/database', name: 'Database', icon: Database, category: 'System' },
+  { path: '/users', name: 'User Management', icon: ShieldCheck, category: 'System' },
+  { path: '/permissions', name: 'Role & Permissions', icon: ShieldCheck, category: 'System' },
+  { path: '/settings', name: 'Settings', icon: Settings, category: 'System' },
+  { path: '/change-password', name: 'Change Password', icon: KeyRound, category: 'Account' },
+  { path: '/', name: 'Control Center', icon: LayoutDashboard, category: 'Dashboard' },
+];
+
+const getModuleInfo = (pathname) => {
+  if (pathname === '/') return routeModuleMap.find(m => m.path === '/');
+  const sorted = [...routeModuleMap].sort((a, b) => b.path.length - a.path.length);
+  return sorted.find(m => pathname.startsWith(m.path)) || { name: 'Control Center', icon: LayoutDashboard, category: 'Dashboard' };
+};
+
 export default function Header() {
   const { user } = useAuth();
-  const { theme, toggleTheme, isDark } = useTheme();
+  const { toggleTheme, isDark } = useTheme();
+  const location = useLocation();
   
   const [showNotifications, setShowNotifications] = useState(false);
   const notifRef = useRef(null);
   const [notifications, setNotifications] = useState([]);
   const unreadCount = notifications.filter(n => !n.read).length;
+
+  const currentModule = getModuleInfo(location.pathname);
+  const ModuleIcon = currentModule.icon;
 
   useEffect(() => {
     const fetchOpenTickets = async () => {
@@ -21,7 +74,6 @@ export default function Header() {
         });
         if (res.ok) {
           const tickets = await res.json();
-          // Map OPEN tickets to notifications
           const openTickets = tickets.filter(t => t.status === 'OPEN');
           setNotifications(openTickets.map(t => ({
             id: t.id,
@@ -36,7 +88,6 @@ export default function Header() {
       }
     };
     
-    // Fetch immediately and then poll every 30 seconds
     fetchOpenTickets();
     const interval = setInterval(fetchOpenTickets, 30000);
     return () => clearInterval(interval);
@@ -54,12 +105,28 @@ export default function Header() {
 
   return (
     <header className="bg-white dark:bg-[#111827] border-b border-slate-200 dark:border-white/[0.06] h-16 flex items-center justify-between px-4 md:px-6 shrink-0 transition-colors duration-300">
-      <div className="flex items-center gap-4 flex-1">
-        
+      <div className="flex items-center gap-3 md:gap-6 flex-1 min-w-0">
+        {/* Module Name Display */}
+        <div className="flex items-center gap-2.5 shrink-0">
+          <div className="p-2 rounded-xl bg-blue-500/10 dark:bg-blue-400/10 text-blue-600 dark:text-blue-400 ring-1 ring-blue-500/20">
+            <ModuleIcon className="w-5 h-5" />
+          </div>
+          <div className="hidden sm:block">
+            <h1 className="text-base md:text-lg font-extrabold text-slate-800 dark:text-white leading-tight tracking-tight whitespace-nowrap">
+              {currentModule.name}
+            </h1>
+            {currentModule.category && (
+              <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 tracking-widest uppercase block -mt-0.5">
+                {currentModule.category}
+              </span>
+            )}
+          </div>
+        </div>
+
         {/* Search Bar */}
         <div 
           onClick={() => window.dispatchEvent(new Event('open-command-palette'))}
-          className="hidden sm:flex items-center bg-slate-100 dark:bg-white/[0.04] px-3 py-2 rounded-lg w-96 hover:bg-slate-200 dark:hover:bg-white/[0.08] border border-transparent dark:border-white/[0.06] transition-all cursor-text group"
+          className="hidden lg:flex items-center bg-slate-100 dark:bg-white/[0.04] px-3 py-2 rounded-lg w-72 xl:w-96 hover:bg-slate-200 dark:hover:bg-white/[0.08] border border-transparent dark:border-white/[0.06] transition-all cursor-text group ml-auto lg:ml-0"
         >
           <Search className="w-5 h-5 text-slate-400 group-hover:text-slate-500 dark:group-hover:text-slate-300 transition-colors" />
           <input 
@@ -71,7 +138,7 @@ export default function Header() {
         </div>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3 md:gap-4 shrink-0">
         {/* Premium Animated Theme Toggle */}
         <button 
           onClick={toggleTheme}
@@ -183,7 +250,7 @@ export default function Header() {
           )}
         </div>
         
-        <div className="flex items-center gap-2 pl-4 border-l border-slate-200 dark:border-white/[0.06] cursor-pointer hover:opacity-80 transition-opacity">
+        <div className="flex items-center gap-2 pl-2 md:pl-4 border-l border-slate-200 dark:border-white/[0.06] cursor-pointer hover:opacity-80 transition-opacity">
           <div className="hidden md:block text-right">
             <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{user?.name || 'Guest'}</p>
             <p className="text-xs text-slate-500 dark:text-slate-400">{user?.role || 'Viewer'}</p>
