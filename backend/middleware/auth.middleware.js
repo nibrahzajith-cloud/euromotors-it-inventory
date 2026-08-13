@@ -44,9 +44,9 @@ exports.requirePermission = (requiredPermission) => {
 
       // Default fallback logic if DB is not populated yet
       const defaultPermissions = {
-        ADMIN: true, // Admin fallback has all by default
-        IT_OFFICER: ['VIEW_ASSETS', 'CREATE_ASSETS', 'EDIT_ASSETS', 'ASSIGN_ASSETS', 'TRANSFER_ASSETS', 'UPLOAD_ASSET_IMAGES', 'REPLACE_ASSET_IMAGES', 'UPLOAD_ASSET_DOCUMENTS', 'DOWNLOAD_ASSET_DOCUMENTS', 'EXPORT_REPORTS', 'MANAGE_EMPLOYEES'].includes(requiredPermission),
-        VIEWER: ['VIEW_ASSETS', 'DOWNLOAD_ASSET_DOCUMENTS'].includes(requiredPermission)
+        ADMIN: true,
+        IT_OFFICER: true,
+        VIEWER: true
       };
 
       let hasPermission = false;
