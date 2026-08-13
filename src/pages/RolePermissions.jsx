@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Shield, Save, Check, X, Loader2 } from 'lucide-react';
-import { GlassCard } from '../components/GlassCard';
+
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -158,7 +158,7 @@ export default function RolePermissions() {
         </button>
       </div>
 
-      <GlassCard className="!p-0 overflow-hidden border-slate-200 dark:border-white/10">
+      <div className="bg-white dark:bg-slate-900/40 rounded-2xl border border-slate-200 dark:border-white/10 overflow-hidden shadow-sm dark:shadow-2xl !p-0 overflow-hidden border-slate-200 dark:border-white/10">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -212,7 +212,7 @@ export default function RolePermissions() {
             </tbody>
           </table>
         </div>
-      </GlassCard>
+      </div>
     </div>
   );
 }
