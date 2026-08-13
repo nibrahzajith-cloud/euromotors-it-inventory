@@ -50,6 +50,7 @@ router.put('/:role', authenticate, authorize(['ADMIN']), async (req, res) => {
 
     // Ensure ADMIN always retains critical permissions
     if (role === 'ADMIN') {
+      permissions.MANAGE_USERS = true;
       permissions.MANAGE_ROLES = true;
       permissions.VIEW_AUDIT_LOG = true;
       permissions.CONFIGURE_SYSTEM = true;

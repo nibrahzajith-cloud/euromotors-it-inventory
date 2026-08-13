@@ -127,7 +127,15 @@ exports.login = async (req, res) => {
       VIEWER: fullPermissions
     };
     
-    const permissions = rolePerm ? rolePerm.permissions : defaultPermissions[user.role];
+    const permissions = rolePerm ? { ...rolePerm.permissions } : defaultPermissions[user.role];
+
+    // Safety net: ADMIN must always retain critical permissions regardless of DB state
+    if (user.role === 'ADMIN') {
+      permissions.MANAGE_USERS = true;
+      permissions.MANAGE_ROLES = true;
+      permissions.VIEW_AUDIT_LOG = true;
+      permissions.CONFIGURE_SYSTEM = true;
+    }
 
     res.json({ message: 'Login successful', token, user: { id: user.id, fullName: user.fullName, role: user.role, email: user.email, mustChangePassword: user.mustChangePassword, permissions } });
   } catch (error) {
@@ -161,7 +169,17 @@ exports.getMe = async (req, res) => {
       VIEWER: fullPermissions
     };
     
-    user.permissions = rolePerm ? rolePerm.permissions : defaultPermissions[user.role];
+    const permissions = rolePerm ? { ...rolePerm.permissions } : defaultPermissions[user.role];
+
+    // Safety net: ADMIN must always retain critical permissions regardless of DB state
+    if (user.role === 'ADMIN') {
+      permissions.MANAGE_USERS = true;
+      permissions.MANAGE_ROLES = true;
+      permissions.VIEW_AUDIT_LOG = true;
+      permissions.CONFIGURE_SYSTEM = true;
+    }
+
+    user.permissions = permissions;
 
     res.json(user);
   } catch (error) {
