@@ -3,7 +3,7 @@ const router = express.Router();
 const prisma = require('../prismaClient');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
-const { authenticate, requirePermission } = require('../middleware/auth.middleware');
+const { authenticate, authorize, requirePermission } = require('../middleware/auth.middleware');
 const { logAudit } = require('../utils/logger');
 
 const generateTempPassword = () => crypto.randomBytes(4).toString('hex');
@@ -11,7 +11,7 @@ const generateTempPassword = () => crypto.randomBytes(4).toString('hex');
 // All User routes require ADMIN privileges, except GET which maybe IT_OFFICER can view
 router.use(authenticate);
 
-router.get('/', requirePermission(['ADMIN', 'IT_OFFICER']), async (req, res) => {
+router.get('/', authorize(['ADMIN', 'IT_OFFICER']), async (req, res) => {
   try {
     const users = await prisma.user.findMany({ select: { id: true, fullName: true, email: true, role: true, status: true, createdAt: true } });
     res.json(users);
