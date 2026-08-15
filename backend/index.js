@@ -62,6 +62,7 @@ const databaseRoutes = require('./routes/database.routes');
 const uploadsRoutes = require('./routes/uploads.routes');
 const warmupRoutes = require('./routes/warmup.routes');
 const permissionsRoutes = require('./routes/permissions.routes');
+const reportsRoutes = require('./routes/reports.routes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRoutes);
@@ -79,6 +80,7 @@ app.use('/api/tickets', ticketsRoutes);
 app.use('/api/database', databaseRoutes);
 app.use('/api/warmup', warmupRoutes);
 app.use('/api/permissions', permissionsRoutes);
+app.use('/api/reports', reportsRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

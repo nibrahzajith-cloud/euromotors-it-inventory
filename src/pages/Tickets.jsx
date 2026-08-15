@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const _rawApi = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const _rawApi = import.meta.env.VITE_API_URL || '/api';
 const API_URL = _rawApi.endsWith('/api') ? _rawApi : `${_rawApi.replace(/\/$/, '')}/api`;
 
 export default function Tickets() {

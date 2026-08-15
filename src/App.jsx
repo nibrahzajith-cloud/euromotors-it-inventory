@@ -84,7 +84,7 @@ const AppRoutes = () => {
         <Route path="scanner" element={<ProtectedRoute allowedRoles={['ADMIN', 'IT_OFFICER']}><Scanner /></ProtectedRoute>} />
         <Route path="tickets" element={<Tickets />} />
         
-        <Route path="reports" element={<Reports />} />
+        <Route path="reports" element={<ProtectedRoute allowedRoles={['ADMIN']}><Reports /></ProtectedRoute>} />
         <Route path="settings" element={<ProtectedRoute allowedRoles={['ADMIN']}><Settings /></ProtectedRoute>} />
         <Route path="users" element={<ProtectedRoute allowedRoles={['ADMIN']} requiredPermission="MANAGE_USERS"><Users /></ProtectedRoute>} />
         <Route path="audit-logs" element={<ProtectedRoute allowedRoles={['ADMIN']} requiredPermission="VIEW_AUDIT_LOG"><AuditLogs /></ProtectedRoute>} />

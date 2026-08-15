@@ -5,7 +5,7 @@ import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { DndContext, useDraggable, useDroppable, PointerSensor, useSensor, useSensors, DragOverlay, closestCenter } from '@dnd-kit/core';
 
-const _rawApi = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const _rawApi = import.meta.env.VITE_API_URL || '/api';
 const API_URL = _rawApi.endsWith('/api') ? _rawApi : `${_rawApi.replace(/\/$/, '')}/api`;
 
 function DraggableAsset({ asset }) {

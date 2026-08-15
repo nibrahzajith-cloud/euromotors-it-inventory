@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Monitor, Users, LayoutDashboard, Settings, Wrench, FileText, QrCode } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '../context/AuthContext';
 
 const COMMANDS = [
   { id: 'dash', name: 'Go to Dashboard', icon: LayoutDashboard, path: '/' },
@@ -20,6 +21,7 @@ export default function CommandPalette() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const navigate = useNavigate();
   const inputRef = useRef(null);
+  const { user } = useAuth();
 
   // Toggle on Ctrl+K or Cmd+K and custom event
   useEffect(() => {
@@ -56,9 +58,11 @@ export default function CommandPalette() {
     }
   }, [isOpen, query]);
 
-  const filteredCommands = COMMANDS.filter((cmd) =>
-    cmd.name.toLowerCase().includes(query.toLowerCase())
-  );
+  const filteredCommands = COMMANDS.filter((cmd) => {
+    if (cmd.id === 'reports' && user?.role !== 'ADMIN') return false;
+    if (cmd.id === 'settings' && user?.role !== 'ADMIN') return false;
+    return cmd.name.toLowerCase().includes(query.toLowerCase());
+  });
 
   const handleExecute = (path) => {
     setIsOpen(false);

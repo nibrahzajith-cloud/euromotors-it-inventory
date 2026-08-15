@@ -61,7 +61,7 @@ export default function Sidebar() {
       isHeader: true,
       roleRequired: 'ADMIN' // Headers for system settings can just stay ADMIN to simplify
     },
-    { name: 'Reports', path: '/reports', icon: FileText, permission: 'EXPORT_REPORTS' },
+    { name: 'Reports', path: '/reports', icon: FileText, roleRequired: 'ADMIN' },
     { name: 'Audit Logs', path: '/audit-logs', icon: History, permission: 'VIEW_AUDIT_LOG', roleRequired: 'ADMIN' },
     { name: 'Database', path: '/database', icon: Database, permission: 'VIEW_STORAGE_STATS', roleRequired: 'ADMIN' },
     { name: 'User Management', path: '/users', icon: ShieldCheck, permission: 'MANAGE_USERS', roleRequired: 'ADMIN' },

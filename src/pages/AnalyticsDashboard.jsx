@@ -13,7 +13,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-const _rawApi = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const _rawApi = import.meta.env.VITE_API_URL || '/api';
 const API_URL = _rawApi.endsWith('/api') ? _rawApi : `${_rawApi.replace(/\/$/, '')}/api`;
 
 const useCountUp = (end, duration = 2000) => {

@@ -68,7 +68,7 @@ export default function Header() {
     const fetchOpenTickets = async () => {
       try {
         const token = localStorage.getItem('token');
-        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/tickets`, {
+        const res = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/tickets`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (res.ok) {

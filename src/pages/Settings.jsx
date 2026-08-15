@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Save, User, Building2, Server, Globe, DownloadCloud, Activity, UploadCloud, Play, FileText, CheckCircle2, AlertCircle, Eye, Download, Search, Loader2 } from 'lucide-react';
+import { Save, User, Building2, Server, Globe, DownloadCloud, Activity, UploadCloud, Play, FileText, CheckCircle2, AlertCircle, Eye, Download, Search, Loader2, ShieldCheck, Shield, ShieldAlert } from 'lucide-react';
+import RolePermissions from '../components/RolePermissions';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useNavigate } from 'react-router-dom';
 import * as ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 
-const _rawApi = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const _rawApi = import.meta.env.VITE_API_URL || '/api';
 const API_URL = _rawApi.endsWith('/api') ? _rawApi : `${_rawApi.replace(/\/$/, '')}/api`;
 
 export default function Settings() {
@@ -785,35 +786,7 @@ export default function Settings() {
           </div>
         </div>
 
-        <div className="p-6 border-t border-slate-100">
-          <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-6 border-b border-slate-100 pb-2">User Roles & Permissions</h2>
-          
-          <div className="space-y-4">
-            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200">
-              <div>
-                <h3 className="font-medium text-slate-800 dark:text-white">Administrator</h3>
-                <p className="text-sm text-slate-500">Full access to all system modules, configurations, and exports.</p>
-              </div>
-              <button className="text-blue-600 hover:text-blue-700 font-medium text-sm">Edit Role</button>
-            </div>
-            
-            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200">
-              <div>
-                <h3 className="font-medium text-slate-800 dark:text-white">IT Support</h3>
-                <p className="text-sm text-slate-500">Can manage assets, log maintenance, and assign equipment.</p>
-              </div>
-              <button className="text-blue-600 hover:text-blue-700 font-medium text-sm">Edit Role</button>
-            </div>
-
-            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200">
-              <div>
-                <h3 className="font-medium text-slate-800 dark:text-white">Viewer</h3>
-                <p className="text-sm text-slate-500">Read-only access to Dashboards and Reports.</p>
-              </div>
-              <button className="text-blue-600 hover:text-blue-700 font-medium text-sm">Edit Role</button>
-            </div>
-          </div>
-        </div>
+        <RolePermissions />
 
         <div className="bg-slate-50 p-4 border-t border-slate-100 flex justify-end gap-4">
           <button type="button" className="px-6 py-2 border border-slate-200 text-slate-700 rounded-xl font-medium hover:bg-slate-100 transition-colors">

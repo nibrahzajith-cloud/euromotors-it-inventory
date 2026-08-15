@@ -6,7 +6,7 @@ import * as XLSX from 'xlsx';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 
-const _rawApi = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const _rawApi = import.meta.env.VITE_API_URL || '/api';
 const API_URL = _rawApi.endsWith('/api') ? _rawApi : `${_rawApi.replace(/\/$/, '')}/api`;
 
 const reportTabs = [
@@ -60,9 +60,9 @@ export default function Reports() {
       const headers = { 'Authorization': `Bearer ${token}` };
 
       const [astRes, asgRes, mntRes] = await Promise.all([
-        fetch(`${API_URL}/assets`, { headers }),
-        fetch(`${API_URL}/assignments`, { headers }),
-        fetch(`${API_URL}/maintenance`, { headers })
+        fetch(`${API_URL}/reports/assets`, { headers }),
+        fetch(`${API_URL}/reports/assignments`, { headers }),
+        fetch(`${API_URL}/reports/maintenance`, { headers })
       ]);
 
       if (!astRes.ok || !asgRes.ok || !mntRes.ok) throw new Error("Failed syncing report logs.");
@@ -255,6 +255,28 @@ export default function Reports() {
     pdf.save(filename);
   };
 
+  const handleDownloadAll = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_URL}/reports/download-all`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!response.ok) throw new Error('Failed to download all data');
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Euro_Motors_IT_Asset_Inventory_${new Date().toISOString().split('T')[0]}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      showToast("Download Complete", "success");
+    } catch (error) {
+      showToast(error.message, 'error');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex h-64 flex-col items-center justify-center space-y-4">
@@ -288,6 +310,13 @@ export default function Reports() {
         </div>
         <div className="flex flex-col md:flex-row items-center gap-3 w-full md:w-auto">
           <button
+            onClick={handleDownloadAll}
+            className="flex items-center w-full md:w-auto justify-center gap-2 bg-indigo-50 text-indigo-700 border border-indigo-200 px-4 py-2 rounded-xl font-medium hover:bg-indigo-100 transition-colors shadow-sm text-sm"
+          >
+            <Download className="w-4 h-4" />
+            Download All Data
+          </button>
+          <button
             onClick={handleExportPDF}
             disabled={dynamicDataMap.length === 0}
             className="flex items-center w-full md:w-auto justify-center gap-2 bg-red-50 text-red-700 border border-red-200 px-4 py-2 rounded-xl font-medium hover:bg-red-100 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed text-sm"
@@ -319,10 +348,10 @@ export default function Reports() {
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all ${isActive ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800 dark:text-white'
+                    className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all ${isActive ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 scale-[1.02]' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                       }`}
                   >
-                    <Icon className={`w-4 h-4 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
+                    <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
                     {tab.name}
                   </button>
                 );

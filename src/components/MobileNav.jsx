@@ -50,7 +50,7 @@ export default function MobileNav() {
     { name: 'Support Desk', path: '/tickets', icon: Ticket, roles: ['ADMIN', 'IT_OFFICER'] },
     
     { name: 'System', isHeader: true, roles: ['ADMIN'] },
-    { name: 'Reports', path: '/reports', icon: FileText, roles: ['ADMIN', 'IT_OFFICER'] },
+    { name: 'Reports', path: '/reports', icon: FileText, roles: ['ADMIN'] },
     { name: 'Audit Logs', path: '/audit-logs', icon: History, roles: ['ADMIN'] },
     { name: 'User Management', path: '/users', icon: ShieldCheck, roles: ['ADMIN'] },
     { name: 'Settings', path: '/settings', icon: Settings, roles: ['ADMIN'] },
