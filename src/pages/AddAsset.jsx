@@ -205,7 +205,24 @@ export default function AddAsset() {
   }, [id]);
 
   const handleChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData(prev => {
+      const newData = { ...prev, [field]: value };
+      
+      // Auto-update status when assigning an employee or department
+      if ((field === 'assignedEmployeeId' || field === 'departmentId' || field === 'locationId') && value) {
+         if (newData.status === 'AVAILABLE' && newData.assignmentType !== 'STORE') {
+            newData.status = 'ASSIGNED';
+         }
+      }
+      // If assignment type changes to STORE, set status back to AVAILABLE
+      if (field === 'assignmentType' && value === 'STORE') {
+         if (newData.status === 'ASSIGNED') {
+            newData.status = 'AVAILABLE';
+         }
+      }
+
+      return newData;
+    });
   };
 
   const handleSubmit = async (e) => {

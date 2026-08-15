@@ -94,7 +94,26 @@ router.post('/', requirePermission('CREATE_ASSETS'), async (req, res) => {
       payload.assignedEmployeeId = null;
     }
     
+    // Auto-set status if assigned
+    if (payload.assignedEmployeeId || (aType !== 'STORE' && (payload.departmentId || payload.locationId))) {
+        if (!payload.status || payload.status === 'AVAILABLE') {
+            payload.status = 'ASSIGNED';
+        }
+    }
+    
     const record = await prisma.asset.create({ data: payload });
+
+    // Create assignment history if assigned to employee during creation
+    if (payload.assignedEmployeeId) {
+        await prisma.assetAssignment.create({
+            data: {
+                assetId: record.id,
+                employeeId: payload.assignedEmployeeId,
+                status: 'ACTIVE',
+                remarks: 'Assigned during asset creation'
+            }
+        });
+    }
 
     // Log Audit
     await logAudit({
