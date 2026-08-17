@@ -65,11 +65,6 @@ router.get('/code/:code', async (req, res) => {
 router.post('/', requirePermission('CREATE_ASSETS'), async (req, res) => {
   try {
     const payload = req.body;
-    if (payload.assetCode) {
-      payload.assetCode = payload.assetCode.trim();
-    } else {
-      payload.assetCode = await generateAssetCode(prisma);
-    }
     if (payload.serialNumber) payload.serialNumber = payload.serialNumber.trim();
 
     if (!payload.deviceType) return res.status(400).json({ error: 'Device Type is mandatory.' });
@@ -101,19 +96,32 @@ router.post('/', requirePermission('CREATE_ASSETS'), async (req, res) => {
         }
     }
     
-    const record = await prisma.asset.create({ data: payload });
+    const record = await prisma.$transaction(async (tx) => {
+      if (payload.assetCode) {
+        payload.assetCode = payload.assetCode.trim();
+      } else {
+        payload.assetCode = await generateAssetCode(tx);
+      }
+      
+      const newRecord = await tx.asset.create({ data: payload });
 
-    // Create assignment history if assigned to employee during creation
-    if (payload.assignedEmployeeId) {
-        await prisma.assetAssignment.create({
-            data: {
-                assetId: record.id,
-                employeeId: payload.assignedEmployeeId,
-                status: 'ACTIVE',
-                remarks: 'Assigned during asset creation'
-            }
-        });
-    }
+      // Create assignment history if assigned to employee during creation
+      if (payload.assignedEmployeeId) {
+          await tx.assetAssignment.create({
+              data: {
+                  assetId: newRecord.id,
+                  employeeId: payload.assignedEmployeeId,
+                  status: 'ACTIVE',
+                  remarks: 'Assigned during asset creation'
+              }
+          });
+      }
+      return newRecord;
+    }, {
+      maxWait: 5000,
+      timeout: 10000,
+      isolationLevel: 'ReadCommitted'
+    });
 
     // Log Audit
     await logAudit({
@@ -210,6 +218,15 @@ router.get('/export/excel', async (req, res) => {
       } else {
         grouped.STORE.push(a);
       }
+    });
+
+    // Sort within each group by assetCode naturally (handles padded numbers correctly)
+    sections.forEach(secKey => {
+      grouped[secKey].sort((a, b) => {
+        const codeA = a.assetCode || '';
+        const codeB = b.assetCode || '';
+        return codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+      });
     });
 
     let isFirstSection = true;
@@ -313,7 +330,7 @@ router.post('/bulk', requirePermission('BULK_IMPORT_ASSETS'), async (req, res) =
     const settings = await prisma.systemSettings.findUnique({ where: { id: 'global' } });
     const assetPrefix = settings?.assetCodePrefix || 'AST';
 
-    let highestAssetSequence = 0;
+    let highestAssetSequence = 550; // default max if no valid sequences
     const assetRegex = new RegExp(`^${assetPrefix}-(\\d{9})$`, 'i');
     existingAssetRecords.forEach(a => {
         const match = a.assetCode.match(assetRegex);
@@ -326,7 +343,7 @@ router.post('/bulk', requirePermission('BULK_IMPORT_ASSETS'), async (req, res) =
     const existingEmployeeCodesArray = employees.map(e => e.employeeCode);
     const existingEmployeeCodes = new Set(existingEmployeeCodesArray.filter(Boolean));
     
-    let highestEmployeeSequence = 0;
+    let highestEmployeeSequence = 166; // default max if no valid sequences
     const empRegex = new RegExp(`^EMP-(\\d{9})$`, 'i');
     existingEmployeeCodesArray.forEach(code => {
         if (!code) return;

@@ -27,10 +27,16 @@ router.get('/', async (req, res) => {
 router.post('/', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
   try {
     const payload = { ...req.body };
-    if (!payload.employeeCode) {
-      payload.employeeCode = await generateEmployeeCode(prisma);
-    }
-    const record = await prisma.employee.create({ data: payload });
+    const record = await prisma.$transaction(async (tx) => {
+      if (!payload.employeeCode) {
+        payload.employeeCode = await generateEmployeeCode(tx);
+      }
+      return await tx.employee.create({ data: payload });
+    }, {
+      maxWait: 5000,
+      timeout: 10000,
+      isolationLevel: 'ReadCommitted'
+    });
     res.status(201).json(record);
   } catch (err) {
     res.status(500).json({ error: err.message });

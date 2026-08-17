@@ -1,45 +1,48 @@
-const generateNextCode = async (prisma, modelName, fieldName, prefix) => {
-  const lastRecord = await prisma[modelName].findFirst({
-    where: {
-      [fieldName]: {
-        startsWith: `${prefix}-`
-      }
-    },
-    orderBy: {
-      [fieldName]: 'desc'
-    }
-  });
+const generateNextCode = async (tx, modelName, fieldName, prefix, defaultStart = 0) => {
+  // Lock the global settings row to serialize concurrent code generation requests
+  // Caller must pass a transaction client (tx) to hold this lock through the INSERT
+  await tx.$executeRaw`SELECT 1 FROM "SystemSettings" WHERE id = 'global' FOR UPDATE`;
 
-  let nextNumber = 1;
-  if (lastRecord) {
-    const code = lastRecord[fieldName];
-    // Attempt to extract the number part
-    const regex = new RegExp(`^${prefix}-(\\d{9})$`);
-    const match = code.match(regex);
-    if (match) {
-      nextNumber = parseInt(match[1], 10) + 1;
-    } else {
-      // Fallback
-      const count = await prisma[modelName].count();
-      nextNumber = count + 1;
+  let query;
+  if (modelName === 'employee') {
+    query = tx.$queryRaw`SELECT "employeeCode" as code FROM "Employee" WHERE "employeeCode" LIKE ${prefix + '-%'}`;
+  } else {
+    query = tx.$queryRaw`SELECT "assetCode" as code FROM "Asset" WHERE "assetCode" LIKE ${prefix + '-%'}`;
+  }
+  
+  const records = await query;
+  let max = defaultStart;
+  const regex = new RegExp(`^${prefix}-(\\d{9})$`);
+  
+  for (const record of records) {
+    if (record.code) {
+      const match = record.code.match(regex);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > max) max = num;
+      }
     }
   }
-
+  
+  const nextNumber = max + 1;
   const paddedNumber = nextNumber.toString().padStart(9, '0');
   return `${prefix}-${paddedNumber}`;
 };
 
-const generateEmployeeCode = async (prisma) => {
-  return await generateNextCode(prisma, 'employee', 'employeeCode', 'EMP');
+const generateEmployeeCode = async (tx) => {
+  // Use 166 as default max so the next starts at 167 if no higher valid sequence exists
+  return await generateNextCode(tx, 'employee', 'employeeCode', 'EMP', 166);
 };
 
-const generateAssetCode = async (prisma) => {
-  const settings = await prisma.systemSettings.findUnique({ where: { id: 'global' } });
+const generateAssetCode = async (tx) => {
+  const settings = await tx.systemSettings.findUnique({ where: { id: 'global' } });
   const prefix = settings?.assetCodePrefix || 'AST';
-  return await generateNextCode(prisma, 'asset', 'assetCode', prefix);
+  // Use 550 as default max so the next starts at 551 if no higher valid sequence exists
+  return await generateNextCode(tx, 'asset', 'assetCode', prefix, 550);
 };
 
 module.exports = {
   generateEmployeeCode,
-  generateAssetCode
+  generateAssetCode,
+  generateNextCode
 };
