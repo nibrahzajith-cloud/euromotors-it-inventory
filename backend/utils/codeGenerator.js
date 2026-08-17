@@ -19,7 +19,8 @@ const generateNextCode = async (tx, modelName, fieldName, prefix, defaultStart =
       const match = record.code.match(regex);
       if (match) {
         const num = parseInt(match[1], 10);
-        if (num > max) max = num;
+        // Ignore previously generated random anomalies that are too high
+        if (num > max && num < 100000) max = num;
       }
     }
   }

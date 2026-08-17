@@ -103,7 +103,7 @@ export default function Reports() {
     const q = searchTerm.toLowerCase();
 
     if (activeTab === 'assets') {
-      return assetsData.filter(a =>
+      const data = assetsData.filter(a =>
         (a.assetCode?.toLowerCase().includes(q) || a.model?.toLowerCase().includes(q) || a.status?.toLowerCase().includes(q))
       ).map(ast => ({
         'Asset Code': ast.assetCode,
@@ -119,6 +119,8 @@ export default function Reports() {
         'Location': ast.location?.name || 'Unassigned',
         'Assigned Employee': ast.assignedEmployee?.fullName || 'None'
       }));
+      // Sort ascending numerically/naturally
+      return data.sort((a, b) => (a['Asset Code'] || '').localeCompare(b['Asset Code'] || '', undefined, { numeric: true }));
     }
 
     if (activeTab === 'assignments') {
@@ -150,7 +152,7 @@ export default function Reports() {
     }
 
     if (activeTab === 'warranty') {
-      return assetsData
+      const data = assetsData
         .filter(ast => ast.warrantyExpiryDate) // Purely filtering constraints
         .filter(ast => ast.assetCode?.toLowerCase().includes(q) || ast.deviceType?.toLowerCase().includes(q))
         .map(ast => {
@@ -164,9 +166,9 @@ export default function Reports() {
             'Days Remaining': days < 0 ? 'Expired' : `${days} Days`,
             '_days': days // Internal sorter
           };
-        })
-        .sort((a, b) => a._days - b._days)
-        .map(({ _days, ...rest }) => rest);
+        });
+        
+        return data.sort((a, b) => a._days - b._days).map(({ _days, ...rest }) => rest);
     }
 
     return [];
