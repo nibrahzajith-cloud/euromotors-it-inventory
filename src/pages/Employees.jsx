@@ -147,7 +147,7 @@ export default function Employees() {
     } else {
       setEditingEmp(null);
       setFormData({
-        employeeCode: `EMP-${Math.floor(Math.random()*1000000000).toString().padStart(9, '0')}`,
+        employeeCode: '',
         fullName: '',
         email: '',
         designation: '',
@@ -502,9 +502,10 @@ export default function Employees() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Employee Code *</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Employee Code</label>
                   <input 
-                    required type="text" value={formData.employeeCode} readOnly
+                    type="text" value={formData.employeeCode} readOnly
+                    placeholder="Auto-generated upon save"
                     className="w-full bg-slate-100 border border-slate-200 text-slate-500 rounded-xl px-4 py-2.5 outline-none font-mono cursor-not-allowed"
                   />
                 </div>
