@@ -49,7 +49,28 @@ router.get('/', requirePermission('VIEW_AUDIT_LOG'), async (req, res) => {
       prisma.auditLog.count({ where })
     ]);
 
-    res.json({ logs, total, pages: Math.ceil(total / limit) });
+    // Fetch user emails
+    const userIds = [...new Set(logs.map(log => log.userId).filter(Boolean))];
+    const users = await prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, fullName: true, email: true }
+    });
+    
+    const userMap = users.reduce((acc, user) => {
+      acc[user.id] = user;
+      return acc;
+    }, {});
+
+    const enrichedLogs = logs.map(log => {
+      const user = userMap[log.userId];
+      return {
+        ...log,
+        userName: user ? user.fullName : log.userName,
+        userEmail: user ? user.email : null
+      };
+    });
+
+    res.json({ logs: enrichedLogs, total, pages: Math.ceil(total / limit) });
   } catch (err) {
     res.status(500).json({ error: 'Server error fetching audit logs', details: err.message });
   }
@@ -64,13 +85,29 @@ router.get('/export', requirePermission('EXPORT_AUDIT_LOG'), async (req, res) =>
       orderBy: { createdAt: 'desc' }
     });
 
+    const userIds = [...new Set(logs.map(log => log.userId).filter(Boolean))];
+    const users = await prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, fullName: true, email: true }
+    });
+    
+    const userMap = users.reduce((acc, user) => {
+      acc[user.id] = user;
+      return acc;
+    }, {});
+
     const csvLines = [];
-    csvLines.push(['Timestamp', 'User', 'Role', 'Action', 'Module', 'Record', 'IP Address', 'Description'].join(','));
+    csvLines.push(['Timestamp', 'User Name', 'User Email', 'Role', 'Action', 'Module', 'Record', 'IP Address', 'Description'].join(','));
     
     for (const log of logs) {
+      const user = userMap[log.userId];
+      const userName = user ? user.fullName : (log.userName || log.userId || '');
+      const userEmail = user ? user.email : '';
+
       csvLines.push([
         `"${new Date(log.createdAt).toISOString()}"`,
-        `"${log.userName || log.userId || ''}"`,
+        `"${userName}"`,
+        `"${userEmail}"`,
         `"${log.userRole || ''}"`,
         `"${log.action || ''}"`,
         `"${log.module || ''}"`,

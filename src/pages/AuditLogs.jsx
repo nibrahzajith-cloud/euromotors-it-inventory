@@ -220,6 +220,7 @@ export default function AuditLogs() {
                       </div>
                       <div className="flex flex-col">
                         <span className="text-sm font-bold text-slate-700">{log.userName || 'System'}</span>
+                        {log.userEmail && <span className="text-xs text-slate-500">{log.userEmail}</span>}
                         <span className="text-[10px] font-medium text-slate-400 uppercase">{log.userRole || 'AUTO'}</span>
                       </div>
                     </div>
