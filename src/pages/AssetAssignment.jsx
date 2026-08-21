@@ -23,7 +23,7 @@ function DraggableAsset({ asset }) {
     <div ref={setNodeRef} style={style} {...listeners} {...attributes} className={`p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl cursor-grab active:cursor-grabbing shadow-sm hover:border-blue-400 dark:hover:border-blue-500 transition-colors flex items-center gap-3 ${isDragging ? 'opacity-50' : ''}`}>
       <GripVertical className="w-4 h-4 text-slate-400" />
       <div>
-        <p className="font-bold text-sm text-slate-800 dark:text-white">{asset.assetCode}</p>
+        <p className="font-extrabold text-sm text-slate-900 dark:text-white">{asset.assetCode}</p>
         <p className="text-xs text-slate-500 dark:text-slate-400">{asset.model}</p>
       </div>
     </div>

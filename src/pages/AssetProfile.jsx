@@ -158,8 +158,7 @@ export default function AssetProfile() {
     }
   };
 
-  // Reusable edit field renderer
-  const EditableField = ({ label, field, type = 'text', options }) => {
+  const renderEditableField = (label, field, type = 'text', options) => {
     if (!isEditing) {
       let displayVal = asset[field] || '-';
       if (field === 'warrantyExpiryDate' && asset[field]) {
@@ -362,29 +361,29 @@ export default function AssetProfile() {
                   Hardware Specifications
                 </h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
-                  <EditableField label="Device Type" field="deviceType" />
-                  <EditableField label="Brand" field="brand" />
-                  <EditableField label="Model" field="model" />
-                  <EditableField label="Serial Number" field="serialNumber" />
-                  <EditableField label="Processor" field="processor" />
-                  <EditableField label="Memory (RAM)" field="ram" />
-                  <EditableField label="Storage" field="storage" />
-                  <EditableField label="Operating System" field="operatingSystem" />
-                  <EditableField label="Vendor" field="vendor" />
-                  <EditableField label="MAC Address" field="macAddress" />
-                  <EditableField label="IP Address" field="ipAddress" />
+                  {renderEditableField("Device Type", "deviceType")}
+                  {renderEditableField("Brand", "brand")}
+                  {renderEditableField("Model", "model")}
+                  {renderEditableField("Serial Number", "serialNumber")}
+                  {renderEditableField("Processor", "processor")}
+                  {renderEditableField("Memory (RAM)", "ram")}
+                  {renderEditableField("Storage", "storage")}
+                  {renderEditableField("Operating System", "operatingSystem")}
+                  {renderEditableField("Vendor", "vendor")}
+                  {renderEditableField("MAC Address", "macAddress")}
+                  {renderEditableField("IP Address", "ipAddress")}
                 </div>
               </div>
 
               <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6">
                 <h3 className="font-semibold text-slate-800 dark:text-white border-b border-slate-100 dark:border-slate-700 pb-3 mb-4">Lifecycle & Tracking</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
-                  <EditableField label="Location" field="locationId" type="select" options={locations.map(l => ({ value: l.id, label: l.name }))} />
-                  <EditableField label="Department" field="departmentId" type="select" options={departments.map(d => ({ value: d.id, label: d.name }))} />
-                  <EditableField label="Warranty Status" field="warrantyStatus" type="select" options={[{ value: 'Active', label: 'Active' }, { value: 'Expired', label: 'Expired' }, { value: 'N/A', label: 'N/A' }]} />
-                  <EditableField label="Warranty Expiry" field="warrantyExpiryDate" type="date" />
+                  {renderEditableField("Location", "locationId", "select", locations.map(l => ({ value: l.id, label: l.name })))}
+                  {renderEditableField("Department", "departmentId", "select", departments.map(d => ({ value: d.id, label: d.name })))}
+                  {renderEditableField("Warranty Status", "warrantyStatus", "select", [{ value: 'Active', label: 'Active' }, { value: 'Expired', label: 'Expired' }, { value: 'N/A', label: 'N/A' }])}
+                  {renderEditableField("Warranty Expiry", "warrantyExpiryDate", "date")}
                   <div className="col-span-2 sm:col-span-3">
-                    <EditableField label="Remarks" field="remarks" type={isEditing ? 'textarea' : 'text'} />
+                    {renderEditableField("Remarks", "remarks", isEditing ? 'textarea' : 'text')}
                     {!isEditing && !asset.remarks && (
                       <p className="text-sm text-slate-700 dark:text-slate-400 bg-slate-50 dark:bg-slate-700 p-3 rounded-xl border border-slate-100 dark:border-slate-600 mt-1">No remarks provided.</p>
                     )}

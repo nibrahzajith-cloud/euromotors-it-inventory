@@ -638,7 +638,7 @@ export default function Employees() {
                     <MonitorSmartphone className="w-4 h-4 text-slate-500 group-hover:text-blue-600" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-bold text-slate-800 dark:text-white text-xs uppercase tracking-wide">{asset.assetCode}</p>
+                    <p className="font-extrabold text-slate-900 dark:text-white text-xs uppercase tracking-wide">{asset.assetCode}</p>
                     <p className="text-xs text-slate-500 truncate">{asset.deviceType} · {asset.model}</p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
