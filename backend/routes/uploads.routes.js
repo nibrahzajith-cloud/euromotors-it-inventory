@@ -3,7 +3,7 @@ const { randomUUID } = require('crypto');
 const router = express.Router();
 const prisma = require('../prismaClient');
 const { authenticate, requirePermission } = require('../middleware/auth.middleware');
-const { uploadImageMiddleware, uploadDocumentMiddleware } = require('../middleware/upload.middleware');
+const { uploadImageMiddleware, uploadGalleryMiddleware, uploadDocumentMiddleware } = require('../middleware/upload.middleware');
 const { uploadFile, deleteFile, getPresignedUrl, getR2StorageStats } = require('../utils/s3Client');
 
 function storageErrorResponse(res, error, fallbackMessage) {
@@ -380,6 +380,70 @@ router.get('/image/:assetId/:type', authenticate, async (req, res) => {
     } catch (error) {
         console.error('Presigned URL Error:', error);
         return storageErrorResponse(res, error, 'Failed to generate secure URL');
+    }
+});
+
+// Upload Multiple Gallery Images
+router.post('/gallery/:assetId', authenticate, requirePermission('UPLOAD_ASSET_IMAGES'), uploadGalleryMiddleware.array('images', 10), async (req, res) => {
+    try {
+        const { assetId } = req.params;
+        const asset = await prisma.asset.findUnique({ where: { id: assetId } });
+        if (!asset) return res.status(404).json({ error: 'Asset not found' });
+
+        const files = req.files;
+        if (!files || files.length === 0) return res.status(400).json({ error: 'No image files provided' });
+
+        const timestamp = Date.now();
+        const safeCode = asset.assetCode.replace(/[^a-zA-Z0-9_-]/g, '_');
+        
+        const extensionByMime = {
+            'image/jpeg': 'jpg',
+            'image/png': 'png',
+            'image/webp': 'webp'
+        };
+
+        const uploadPromises = files.map(async (file, index) => {
+            const ext = extensionByMime[file.mimetype] || 'webp';
+            const uniqueId = randomUUID().substring(0, 8);
+            const imageKey = `assets/${safeCode}/images/${timestamp}_${index}_${uniqueId}.${ext}`;
+            const documentId = randomUUID();
+
+            await uploadFile(file.buffer, imageKey, file.mimetype);
+
+            return prisma.assetDocument.create({
+                data: {
+                    id: documentId,
+                    assetId: asset.id,
+                    documentName: file.originalname,
+                    documentType: 'IMAGE',
+                    fileUrl: `/api/uploads/document/${documentId}/view`,
+                    storageKey: imageKey,
+                    fileSize: file.size,
+                    mimeType: file.mimetype,
+                    uploadedBy: req.user.id,
+                    uploadedByName: req.user.fullName
+                }
+            });
+        });
+
+        const results = await Promise.all(uploadPromises);
+
+        await writeAuditLog({
+            userId: req.user.id,
+            userName: req.user.fullName,
+            userRole: req.user.role,
+            action: 'UPLOAD_GALLERY_IMAGES',
+            module: 'ASSET_MEDIA',
+            entityType: 'ASSET',
+            entityId: assetId,
+            entityCode: asset.assetCode,
+            description: `Uploaded ${results.length} images to gallery for ${asset.assetCode}`
+        });
+
+        res.json({ success: true, uploaded: results });
+    } catch (error) {
+        console.error('Gallery Upload Error:', error);
+        return storageErrorResponse(res, error, 'Failed to upload gallery images');
     }
 });
 

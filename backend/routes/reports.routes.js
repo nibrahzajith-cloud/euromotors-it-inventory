@@ -65,9 +65,38 @@ router.get('/download-all', authenticate, requireAdmin, async (req, res) => {
             include: {
                 location: true,
                 department: true,
-                assignedEmployee: true
-            },
-            orderBy: { assetCode: 'asc' }
+                assignedEmployee: {
+                    include: {
+                        department: true,
+                        location: true
+                    }
+                }
+            }
+        });
+
+        // Sort order for assignmentType
+        const sortOrder = {
+            'EMPLOYEE': 1,
+            'LOCATION': 2,
+            'DEPARTMENT': 3,
+            'SHARED': 4,
+            'STORE': 5,
+            'INSTORE': 5
+        };
+
+        // Sort assets by custom assignmentType order, then assetCode asc
+        assets.sort((a, b) => {
+            const typeA = a.assignmentType || '';
+            const typeB = b.assignmentType || '';
+            
+            const orderA = sortOrder[typeA] || 99;
+            const orderB = sortOrder[typeB] || 99;
+            
+            if (orderA !== orderB) {
+                return orderA - orderB;
+            }
+            
+            return (a.assetCode || '').localeCompare(b.assetCode || '');
         });
 
         const workbook = new ExcelJS.Workbook();
@@ -103,10 +132,24 @@ router.get('/download-all', authenticate, requireAdmin, async (req, res) => {
         worksheet.getRow(1).font = { bold: true };
 
         assets.forEach(asset => {
+            let locName = asset.location?.name || '';
+            let deptName = asset.department?.name || '';
+
+            if (asset.assignmentType === 'EMPLOYEE' && asset.assignedEmployee) {
+                locName = asset.assignedEmployee.location?.name || '';
+                deptName = asset.assignedEmployee.department?.name || '';
+            } else if (asset.assignmentType === 'LOCATION') {
+                locName = asset.location?.name || '';
+                deptName = '';
+            } else if (asset.assignmentType === 'DEPARTMENT') {
+                locName = '';
+                deptName = asset.department?.name || '';
+            }
+
             const rowData = {
                 assignmentType: asset.assignmentType || '',
-                locationName: asset.location?.name || '',
-                departmentName: asset.department?.name || '',
+                locationName: locName,
+                departmentName: deptName,
                 employeeCode: asset.assignedEmployee?.employeeCode || '',
                 employeeName: asset.assignedEmployee?.fullName || '',
                 email: asset.assignedEmployee?.email || '',
@@ -134,6 +177,7 @@ router.get('/download-all', authenticate, requireAdmin, async (req, res) => {
 
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', `attachment; filename="Euro_Motors_IT_Asset_Inventory_${new Date().toISOString().split('T')[0]}.xlsx"`);
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
 
         await workbook.xlsx.write(res);
         res.end();

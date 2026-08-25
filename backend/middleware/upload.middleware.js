@@ -31,6 +31,12 @@ const uploadImageMiddleware = multer({
   fileFilter: imageFilter,
 });
 
+const uploadGalleryMiddleware = multer({
+  storage: memoryStorage,
+  limits: { files: 10, fileSize: 5 * 1024 * 1024 }, // 5 MB per file max, up to 10 files
+  fileFilter: imageFilter,
+});
+
 const uploadDocumentMiddleware = multer({
   storage: memoryStorage,
   limits: { files: 10, fileSize: 2 * 1024 * 1024 }, // 2 MB combined limit
@@ -39,5 +45,7 @@ const uploadDocumentMiddleware = multer({
 
 module.exports = {
   uploadImageMiddleware,
+  uploadGalleryMiddleware,
   uploadDocumentMiddleware,
 };
+
