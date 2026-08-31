@@ -51,8 +51,15 @@ export default function AssetDocuments({ asset, onUpdate }) {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (res.ok) {
-                    const data = await res.json();
-                    if (!cancelled) setDocuments(data);
+                    if (res.headers.get('content-type')?.includes('application/json')) {
+                        const data = await res.json();
+                        if (!cancelled) setDocuments(data);
+                    }
+                } else {
+                    if (res.headers.get('content-type')?.includes('application/json')) {
+                        const err = await res.json();
+                        console.error('Failed to fetch documents:', err);
+                    }
                 }
             } catch (e) {
                 console.error("Failed to fetch documents", e);
@@ -100,12 +107,20 @@ export default function AssetDocuments({ asset, onUpdate }) {
             });
 
             if (!res.ok) {
-                const err = await res.json();
-                throw new Error(err.error || 'Failed to upload document');
+                let errorMessage = 'Failed to upload document';
+                if (res.headers.get('content-type')?.includes('application/json')) {
+                    const err = await res.json();
+                    errorMessage = err.error || errorMessage;
+                }
+                throw new Error(errorMessage);
             }
 
-            const newDoc = await res.json();
-            setDocuments([newDoc]);
+            const newDoc = res.headers.get('content-type')?.includes('application/json') 
+                ? await res.json() 
+                : null;
+            if (newDoc) {
+                setDocuments([newDoc]);
+            }
             setUploadMode(null);
             showToast('Combined Asset Document uploaded successfully', 'success');
             if (onUpdate) onUpdate();
@@ -238,12 +253,20 @@ export default function AssetDocuments({ asset, onUpdate }) {
             });
 
             if (!res.ok) {
-                const err = await res.json();
-                throw new Error(err.error || 'Failed to upload document bundle');
+                let errorMessage = 'Failed to upload document bundle';
+                if (res.headers.get('content-type')?.includes('application/json')) {
+                    const err = await res.json();
+                    errorMessage = err.error || errorMessage;
+                }
+                throw new Error(errorMessage);
             }
 
-            const newDoc = await res.json();
-            setDocuments([newDoc]);
+            const newDoc = res.headers.get('content-type')?.includes('application/json')
+                ? await res.json()
+                : null;
+            if (newDoc) {
+                setDocuments([newDoc]);
+            }
             setUploadMode(null);
             setSelectedFiles([]);
             showToast('Procurement documents merged & uploaded successfully', 'success');
@@ -291,7 +314,17 @@ export default function AssetDocuments({ asset, onUpdate }) {
             const res = await fetch(`${API_URL}/uploads/document/${doc.id}/${action}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            if (!res.ok) throw new Error('Failed to generate secure link');
+            if (!res.ok) {
+                let errorMessage = 'Failed to generate secure link';
+                if (res.headers.get('content-type')?.includes('application/json')) {
+                    const err = await res.json();
+                    errorMessage = err.error || errorMessage;
+                }
+                throw new Error(errorMessage);
+            }
+            if (!res.headers.get('content-type')?.includes('application/json')) {
+                throw new Error('Server returned invalid response format');
+            }
             
             if (action === 'download') {
                 const data = await res.json();
@@ -318,7 +351,17 @@ export default function AssetDocuments({ asset, onUpdate }) {
             const res = await fetch(`${API_URL}/uploads/document/${docId}/download`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            if (!res.ok) throw new Error('Failed to retrieve view link');
+            if (!res.ok) {
+                let errorMessage = 'Failed to retrieve view link';
+                if (res.headers.get('content-type')?.includes('application/json')) {
+                    const err = await res.json();
+                    errorMessage = err.error || errorMessage;
+                }
+                throw new Error(errorMessage);
+            }
+            if (!res.headers.get('content-type')?.includes('application/json')) {
+                throw new Error('Server returned invalid response format');
+            }
             const data = await res.json();
             window.open(data.url, '_blank');
         } catch (e) {

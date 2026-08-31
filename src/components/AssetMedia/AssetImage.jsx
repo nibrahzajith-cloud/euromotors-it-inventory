@@ -25,6 +25,7 @@ export default function AssetImage({ asset, onUpdate }) {
     const [deletingId, setDeletingId] = useState(null);
 
     const fileInputRef = useRef(null);
+    const cameraInputRef = useRef(null);
 
     const fetchImages = async () => {
         try {
@@ -34,9 +35,22 @@ export default function AssetImage({ asset, onUpdate }) {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (res.ok) {
-                const docs = await res.json();
-                const imageDocs = docs.filter(d => d.documentType === 'IMAGE');
-                setImages(imageDocs);
+                const contentType = res.headers.get("content-type");
+                if (contentType && contentType.indexOf("application/json") !== -1) {
+                    const docs = await res.json();
+                    const imageDocs = docs.filter(d => d.documentType === 'IMAGE');
+                    setImages(imageDocs);
+                } else {
+                    console.error("Expected JSON but got HTML/text");
+                }
+            } else {
+                const contentType = res.headers.get("content-type");
+                if (contentType && contentType.indexOf("application/json") !== -1) {
+                    const err = await res.json();
+                    showToast(err.error || 'Failed to fetch images', 'error');
+                } else {
+                    showToast(`Failed to fetch images: ${res.statusText}`, 'error');
+                }
             }
         } catch (error) {
             console.error("Failed to load images:", error);
@@ -92,8 +106,19 @@ export default function AssetImage({ asset, onUpdate }) {
             });
 
             if (!response.ok) {
-                const err = await response.json();
-                throw new Error(err.error || 'Failed to upload images');
+                let errorMessage = 'Failed to upload images';
+                if (response.headers.get('content-type')?.includes('application/json')) {
+                    const err = await response.json();
+                    errorMessage = err.error || errorMessage;
+                } else {
+                    errorMessage = `Upload failed: Server returned ${response.status} ${response.statusText}`;
+                }
+                throw new Error(errorMessage);
+            }
+
+            let newDocs = [];
+            if (response.headers.get('content-type')?.includes('application/json')) {
+                newDocs = await response.json();
             }
 
             showToast(`${filesArray.length} image(s) uploaded successfully`, 'success');
@@ -169,7 +194,17 @@ export default function AssetImage({ asset, onUpdate }) {
             const response = await fetch(`${API_URL}/uploads/document/${doc.id}/view`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            if (!response.ok) throw new Error('Failed to get view link');
+            if (!response.ok) {
+                let errorMessage = 'Failed to get view link';
+                if (response.headers.get('content-type')?.includes('application/json')) {
+                    const err = await response.json();
+                    errorMessage = err.error || errorMessage;
+                }
+                throw new Error(errorMessage);
+            }
+            if (!response.headers.get('content-type')?.includes('application/json')) {
+                throw new Error('Server returned invalid response format');
+            }
             const data = await response.json();
             setViewUrl(data.url);
             setViewImageName(doc.documentName);
@@ -185,7 +220,17 @@ export default function AssetImage({ asset, onUpdate }) {
             const res = await fetch(`${API_URL}/uploads/document/${doc.id}/download`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            if (!res.ok) throw new Error('Failed to get secure download link');
+            if (!res.ok) {
+                let errorMessage = 'Failed to get secure download link';
+                if (res.headers.get('content-type')?.includes('application/json')) {
+                    const err = await res.json();
+                    errorMessage = err.error || errorMessage;
+                }
+                throw new Error(errorMessage);
+            }
+            if (!res.headers.get('content-type')?.includes('application/json')) {
+                throw new Error('Server returned invalid response format');
+            }
             const data = await res.json();
 
             const a = document.createElement('a');
@@ -281,17 +326,25 @@ export default function AssetImage({ asset, onUpdate }) {
                                 </p>
                             </div>
                         ) : (
-                            <>
-                                <button
-                                    onClick={() => fileInputRef.current?.click()}
-                                    className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition flex items-center justify-center gap-2 shadow-sm shadow-blue-600/20"
-                                >
-                                    <UploadCloud className="w-4 h-4" /> Select Images
-                                </button>
-                                <p className="text-[10px] text-slate-400 mt-2">
+                            <div className="w-full flex flex-col gap-2">
+                                <div className="flex gap-2 w-full">
+                                    <button
+                                        onClick={() => fileInputRef.current?.click()}
+                                        className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition flex items-center justify-center gap-2 shadow-sm shadow-blue-600/20"
+                                    >
+                                        <UploadCloud className="w-4 h-4" /> Select Images
+                                    </button>
+                                    <button
+                                        onClick={() => cameraInputRef.current?.click()}
+                                        className="flex-1 py-2.5 bg-slate-700 hover:bg-slate-800 text-white rounded-xl text-sm font-semibold transition flex items-center justify-center gap-2 shadow-sm"
+                                    >
+                                        <Camera className="w-4 h-4" /> Camera
+                                    </button>
+                                </div>
+                                <p className="text-[10px] text-slate-400 mt-1">
                                     Drag & drop up to 10 images. JPG, PNG, WEBP.
                                 </p>
-                            </>
+                            </div>
                         )}
                     </div>
                 </div>
@@ -303,6 +356,14 @@ export default function AssetImage({ asset, onUpdate }) {
                 ref={fileInputRef}
                 className="hidden"
                 accept="image/jpeg,image/png,image/webp"
+                onChange={handleFileChange}
+            />
+            <input
+                type="file"
+                ref={cameraInputRef}
+                className="hidden"
+                accept="image/*"
+                capture="environment"
                 onChange={handleFileChange}
             />
 
@@ -341,8 +402,12 @@ function ImageThumbnail({ doc, onClick }) {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (!res.ok) throw new Error('Failed to load');
-                const data = await res.json();
-                if (!cancelled) setThumbUrl(data.url);
+                if (res.headers.get('content-type')?.includes('application/json')) {
+                    const data = await res.json();
+                    if (!cancelled) setThumbUrl(data.url);
+                } else {
+                    throw new Error('Invalid format');
+                }
             } catch (err) {
                 if (!cancelled) setError(true);
             }

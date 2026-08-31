@@ -58,19 +58,32 @@ function validateObjectKey(key) {
   }
 }
 
+const fs = require('fs');
+const path = require('path');
+const LOCAL_DIR = path.join(__dirname, '..', 'local_uploads');
+
+function getLocalFilePath(key) {
+  return path.join(LOCAL_DIR, key.replace(/\//g, '_'));
+}
+
 async function uploadFile(buffer, key, mimeType) {
   if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
     throw new Error('A non-empty file buffer is required');
   }
   validateObjectKey(key);
 
-  await getR2Client().send(new PutObjectCommand({
-    Bucket: process.env.R2_BUCKET_NAME,
-    Key: key,
-    Body: buffer,
-    ContentLength: buffer.length,
-    ContentType: mimeType || 'application/octet-stream',
-  }));
+  if (isR2Configured()) {
+    await getR2Client().send(new PutObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME,
+      Key: key,
+      Body: buffer,
+      ContentLength: buffer.length,
+      ContentType: mimeType || 'application/octet-stream',
+    }));
+  } else {
+    if (!fs.existsSync(LOCAL_DIR)) fs.mkdirSync(LOCAL_DIR, { recursive: true });
+    fs.writeFileSync(getLocalFilePath(key), buffer);
+  }
 
   // Invalidate cache on new upload
   storageCache.timestamp = 0;
@@ -80,10 +93,17 @@ async function uploadFile(buffer, key, mimeType) {
 
 async function deleteFile(key) {
   validateObjectKey(key);
-  await getR2Client().send(new DeleteObjectCommand({
-    Bucket: process.env.R2_BUCKET_NAME,
-    Key: key,
-  }));
+  if (isR2Configured()) {
+    await getR2Client().send(new DeleteObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME,
+      Key: key,
+    }));
+  } else {
+    const filePath = getLocalFilePath(key);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  }
 
   // Invalidate cache on delete
   storageCache.timestamp = 0;
@@ -91,20 +111,25 @@ async function deleteFile(key) {
 
 async function getPresignedUrl(key, expiresIn = 300, downloadName) {
   validateObjectKey(key);
-  const safeExpiry = Math.min(Math.max(Number(expiresIn) || 300, 60), 3600);
-  const input = {
-    Bucket: process.env.R2_BUCKET_NAME,
-    Key: key,
-  };
+  if (isR2Configured()) {
+    const safeExpiry = Math.min(Math.max(Number(expiresIn) || 300, 60), 3600);
+    const input = {
+      Bucket: process.env.R2_BUCKET_NAME,
+      Key: key,
+    };
 
-  if (downloadName) {
-    const safeName = downloadName.replace(/[\r\n"\\]/g, '_');
-    input.ResponseContentDisposition = `attachment; filename="${safeName}"`;
+    if (downloadName) {
+      const safeName = downloadName.replace(/[\r\n"\\]/g, '_');
+      input.ResponseContentDisposition = `attachment; filename="${safeName}"`;
+    }
+
+    return getSignedUrl(getR2Client(), new GetObjectCommand(input), {
+      expiresIn: safeExpiry,
+    });
+  } else {
+    const fileName = downloadName ? `?download=${encodeURIComponent(downloadName)}` : '';
+    return `/api/uploads/local/${encodeURIComponent(key.replace(/\//g, '_'))}${fileName}`;
   }
-
-  return getSignedUrl(getR2Client(), new GetObjectCommand(input), {
-    expiresIn: safeExpiry,
-  });
 }
 
 async function getR2StorageStats(forceRefresh = false) {

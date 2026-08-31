@@ -22,6 +22,26 @@ async function writeAuditLog(data) {
 }
 
 // -----------------------------------------------------------------------------
+// LOCAL FALLBACK STORAGE ROUTE
+// -----------------------------------------------------------------------------
+const fs = require('fs');
+const path = require('path');
+const LOCAL_DIR = path.join(__dirname, '..', 'local_uploads');
+
+router.get('/local/:key', (req, res) => {
+    const key = req.params.key;
+    const filePath = path.join(LOCAL_DIR, key);
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: 'File not found' });
+    }
+    if (req.query.download) {
+        res.download(filePath, req.query.download);
+    } else {
+        res.sendFile(filePath);
+    }
+});
+
+// -----------------------------------------------------------------------------
 // ADMIN-ONLY STORAGE MONITORING
 // -----------------------------------------------------------------------------
 

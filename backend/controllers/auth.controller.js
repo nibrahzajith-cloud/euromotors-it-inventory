@@ -44,7 +44,7 @@ exports.register = async (req, res) => {
       description: `New user registered: ${user.email} (${user.role})`
     });
 
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '1d' });
+    const token = jwt.sign({ id: user.id, email: user.email, role: user.role, fullName: user.fullName }, JWT_SECRET, { expiresIn: '1d' });
     res.status(201).json({ message: 'User registered successfully', token, user: { id: user.id, fullName: user.fullName, role: user.role, mustChangePassword: user.mustChangePassword } });
   } catch (error) {
     res.status(500).json({ error: 'Server error during registration', details: error.message });
@@ -90,7 +90,7 @@ exports.login = async (req, res) => {
     }
 
     const t2 = IS_DEV ? Date.now() : 0;
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '1d' });
+    const token = jwt.sign({ id: user.id, email: user.email, role: user.role, fullName: user.fullName }, JWT_SECRET, { expiresIn: '1d' });
     if (IS_DEV) console.log(`[LOGIN] JWT sign: ${Date.now() - t2}ms`);
 
     // CRITICAL: Fire-and-forget audit log — do NOT await this.
