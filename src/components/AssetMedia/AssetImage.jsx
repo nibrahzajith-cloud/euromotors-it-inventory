@@ -363,7 +363,7 @@ export default function AssetImage({ asset, onUpdate }) {
                 ref={cameraInputRef}
                 className="hidden"
                 accept="image/*"
-                capture="environment"
+                capture="camera"
                 onChange={handleFileChange}
             />
 
