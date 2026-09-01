@@ -88,30 +88,32 @@ export default function AssetImage({ asset, onUpdate }) {
                 const options = {
                     maxSizeMB: 1.0,
                     maxWidthOrHeight: 2560,
-                    useWebWorker: true,
+                    useWebWorker: false,
                     fileType: 'image/webp',
                     initialQuality: 0.88
                 };
                 
                 setUploadProgress({ current: i + 1, total: filesArray.length });
                 const compressed = await imageCompression(file, options);
-                formData.append('images', new File([compressed], file.name, { type: 'image/webp' }));
+                const fileName = file.name || `camera_capture_${i}.webp`;
+                formData.append('images', new File([compressed], fileName, { type: 'image/webp' }));
             }
 
             const token = localStorage.getItem('token');
-            const response = await fetch(`${API_URL}/uploads/gallery/${asset.id}`, {
+            const uploadUrl = `${API_URL}/uploads/gallery/${asset.id}`;
+            const response = await fetch(uploadUrl, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}` },
                 body: formData
             });
 
             if (!response.ok) {
-                let errorMessage = 'Failed to upload images';
+                let errorMessage = `Failed to upload to ${uploadUrl}`;
                 if (response.headers.get('content-type')?.includes('application/json')) {
                     const err = await response.json();
                     errorMessage = err.error || errorMessage;
                 } else {
-                    errorMessage = `Upload failed: Server returned ${response.status} ${response.statusText}`;
+                    errorMessage = `Upload failed: Server returned ${response.status} ${response.statusText} for POST ${uploadUrl}`;
                 }
                 throw new Error(errorMessage);
             }
