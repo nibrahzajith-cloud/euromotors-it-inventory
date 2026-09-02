@@ -81,10 +81,10 @@ export default function AssetImage({ asset, onUpdate }) {
         setUploadProgress({ current: 0, total: filesArray.length });
         
         try {
-            const formData = new FormData();
+            const token = localStorage.getItem('token');
+            let completed = 0;
             
-            for (let i = 0; i < filesArray.length; i++) {
-                const file = filesArray[i];
+            const uploadPromises = filesArray.map(async (file, i) => {
                 const options = {
                     maxSizeMB: 1.0,
                     maxWidthOrHeight: 2560,
@@ -93,35 +93,36 @@ export default function AssetImage({ asset, onUpdate }) {
                     initialQuality: 0.88
                 };
                 
-                setUploadProgress({ current: i + 1, total: filesArray.length });
                 const compressed = await imageCompression(file, options);
                 const fileName = file.name || `camera_capture_${i}.webp`;
-                formData.append('images', new File([compressed], fileName, { type: 'image/webp' }));
-            }
-
-            const token = localStorage.getItem('token');
-            const uploadUrl = `${API_URL}/uploads/gallery/${asset.id}`;
-            const response = await fetch(uploadUrl, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` },
-                body: formData
+                
+                const formData = new FormData();
+                formData.append('document', new File([compressed], fileName, { type: 'image/webp' }));
+                formData.append('documentType', 'IMAGE');
+                
+                const uploadUrl = `${API_URL}/uploads/document/${asset.id}`;
+                const response = await fetch(uploadUrl, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` },
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    let errorMessage = `Failed to upload to ${uploadUrl}`;
+                    if (response.headers.get('content-type')?.includes('application/json')) {
+                        const err = await response.json();
+                        errorMessage = err.error || errorMessage;
+                    } else {
+                        errorMessage = `Upload failed: Server returned ${response.status} ${response.statusText} for POST ${uploadUrl}`;
+                    }
+                    throw new Error(errorMessage);
+                }
+                
+                completed++;
+                setUploadProgress({ current: completed, total: filesArray.length });
             });
 
-            if (!response.ok) {
-                let errorMessage = `Failed to upload to ${uploadUrl}`;
-                if (response.headers.get('content-type')?.includes('application/json')) {
-                    const err = await response.json();
-                    errorMessage = err.error || errorMessage;
-                } else {
-                    errorMessage = `Upload failed: Server returned ${response.status} ${response.statusText} for POST ${uploadUrl}`;
-                }
-                throw new Error(errorMessage);
-            }
-
-            let newDocs = [];
-            if (response.headers.get('content-type')?.includes('application/json')) {
-                newDocs = await response.json();
-            }
+            await Promise.all(uploadPromises);
 
             showToast(`${filesArray.length} image(s) uploaded successfully`, 'success');
             await fetchImages();
