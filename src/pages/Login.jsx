@@ -4,15 +4,6 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { Lock, Mail, AlertCircle, Eye, EyeOff, Shield, ArrowRight, Loader2, CheckCircle2 } from 'lucide-react';
 
-// Multi-step progress messages shown while login is processing.
-// If the backend is fast, the user barely sees these. If slow, they
-// have meaningful feedback instead of an opaque spinner.
-const LOGIN_STEPS = [
-  'Verifying credentials...',
-  'Establishing secure session...',
-  'Loading dashboard...',
-];
-
 export default function Login() {
   const [email, setEmail] = useState(localStorage.getItem('rememberedEmail') || '');
   const [password, setPassword] = useState('');
@@ -20,24 +11,10 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [stepIndex, setStepIndex] = useState(0);
-  const stepTimerRef = useRef(null);
+  
   const { login } = useAuth();
   const navigate = useNavigate();
   const { showToast } = useToast();
-
-  // Advance through the progress step labels every 600ms while loading
-  useEffect(() => {
-    if (loading) {
-      setStepIndex(0);
-      stepTimerRef.current = setInterval(() => {
-        setStepIndex(prev => Math.min(prev + 1, LOGIN_STEPS.length - 1));
-      }, 600);
-    } else {
-      clearInterval(stepTimerRef.current);
-    }
-    return () => clearInterval(stepTimerRef.current);
-  }, [loading]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -219,12 +196,7 @@ export default function Login() {
               {loading ? (
                 <span className="flex items-center gap-2 min-w-0">
                   <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                  <span
-                    key={stepIndex}
-                    style={{ animation: 'loginStepFade 0.3s ease-in-out' }}
-                  >
-                    {LOGIN_STEPS[stepIndex]}
-                  </span>
+                  <span>Signing in...</span>
                 </span>
               ) : (
                 <>

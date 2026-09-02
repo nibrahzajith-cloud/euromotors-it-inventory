@@ -82,8 +82,14 @@ exports.login = async (req, res) => {
     }
 
     const t1 = IS_DEV ? Date.now() : 0;
-    const validPassword = await bcrypt.compare(password, user.passwordHash);
-    if (IS_DEV) console.log(`[LOGIN] bcrypt compare: ${Date.now() - t1}ms`);
+    
+    // Run bcrypt and role permission query concurrently to save latency
+    const [validPassword, rolePerm] = await Promise.all([
+      bcrypt.compare(password, user.passwordHash),
+      prisma.rolePermission.findUnique({ where: { role: user.role } })
+    ]);
+    
+    if (IS_DEV) console.log(`[LOGIN] bcrypt compare & role query: ${Date.now() - t1}ms`);
 
     if (!validPassword) {
       return res.status(401).json({ error: 'Invalid email or password' });
@@ -94,7 +100,6 @@ exports.login = async (req, res) => {
     if (IS_DEV) console.log(`[LOGIN] JWT sign: ${Date.now() - t2}ms`);
 
     // CRITICAL: Fire-and-forget audit log — do NOT await this.
-    // Awaiting it adds 50-150ms to every login response for zero user-facing benefit.
     logAudit({
       req,
       userOverride: user,
@@ -106,10 +111,6 @@ exports.login = async (req, res) => {
     });
 
     if (IS_DEV) console.log(`[LOGIN] Total response time: ${Date.now() - t0}ms (audit log: background)`);
-
-    const rolePerm = await prisma.rolePermission.findUnique({
-      where: { role: user.role }
-    });
 
     // Default fallback logic
     const fullPermissions = {
