@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Filter, Download, Eye, Edit, Trash2, Loader2, AlertCircle, FileText, CheckSquare, XSquare } from 'lucide-react';
+import { Search, Filter, Download, Eye, Edit, Trash2, Loader2, AlertCircle, FileText, CheckSquare, XSquare, Image as ImageIcon } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -410,14 +410,21 @@ export default function Assets() {
                       />
                     </td>
                     <td className="px-5 py-4">
-                      <div className="flex flex-col">
-                        <Link to={`/assets/${encodeURIComponent(asset.assetCode)}`} className="font-bold text-blue-600 hover:underline">{asset.assetCode}</Link>
-                        <span className="text-sm font-medium text-slate-800 dark:text-slate-200 mt-1">{asset.model || asset.deviceType}</span>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-[10px] font-mono text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">S/N: {asset.serialNumber}</span>
-                          {asset.ipAddress && (
-                            <span className="text-[10px] font-mono text-purple-600 bg-purple-50 dark:bg-purple-900/30 px-1.5 py-0.5 rounded">IP: {asset.ipAddress}</span>
-                          )}
+                      <div className="flex items-center gap-3">
+                        {Boolean(asset.imageUrl || asset.imageStorageKey) ? (
+                          <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800/80 flex items-center justify-center shrink-0 text-blue-600 dark:text-blue-400" title="Asset Photo Attached">
+                            <ImageIcon className="w-4 h-4" />
+                          </div>
+                        ) : null}
+                        <div className="flex flex-col">
+                          <Link to={`/assets/${encodeURIComponent(asset.assetCode)}`} className="font-bold text-blue-600 hover:underline">{asset.assetCode}</Link>
+                          <span className="text-sm font-medium text-slate-800 dark:text-slate-200 mt-0.5">{asset.model || asset.deviceType}</span>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-[10px] font-mono text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">S/N: {asset.serialNumber}</span>
+                            {asset.ipAddress && (
+                              <span className="text-[10px] font-mono text-purple-600 bg-purple-50 dark:bg-purple-900/30 px-1.5 py-0.5 rounded">IP: {asset.ipAddress}</span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </td>

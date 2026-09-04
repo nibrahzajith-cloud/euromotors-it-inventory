@@ -4,7 +4,7 @@ import { useToast } from '../context/ToastContext';
 import { 
   ArrowLeft, Printer, Download, MonitorSmartphone, Wrench, UserCheck, 
   CheckCircle2, Loader2, AlertCircle, History, Calendar, User, ArrowRight,
-  Pencil, Save, X
+  Pencil, Save, X, QrCode, Image as ImageIcon, Maximize2, Sparkles
 } from 'lucide-react';
 import QRCard from '../components/QRCard';
 import { downloadQRCard } from '../utils/qrUtils';
@@ -30,6 +30,11 @@ export default function AssetProfile() {
   const [locations, setLocations] = useState([]);
   const [departments, setDepartments] = useState([]);
 
+  // Left card visual mode: 'photo' or 'qr'
+  const [mediaView, setMediaView] = useState('photo');
+  const [previewModalUrl, setPreviewModalUrl] = useState(null);
+  const [previewModalName, setPreviewModalName] = useState(null);
+
   const fetchAssetProfile = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -44,6 +49,11 @@ export default function AssetProfile() {
       
       const data = await res.json();
       setAsset(data);
+      if (data.imageUrl || data.imageStorageKey) {
+        setMediaView('photo');
+      } else {
+        setMediaView('qr');
+      }
 
       // Fetch Timeline
       const timelineRes = await fetch(`${API_URL}/assets/${data.id}/timeline`, { headers: { 'Authorization': `Bearer ${token}` } });
@@ -288,22 +298,56 @@ export default function AssetProfile() {
 
         {activeTab === 'details' ? (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-            {/* Left Column: QR and Quick Status */}
+            {/* Left Column: Photo / QR and Quick Status */}
             <div className="space-y-6">
               <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 flex flex-col items-center text-center">
-                <div className="mb-6 w-full">
-                  <QRCard assetCode={assetCode} id="asset-profile-qr" size={130} />
+                
+                {/* Switcher Pill */}
+                <div className="flex p-1 bg-slate-100 dark:bg-slate-700/60 rounded-xl mb-4 w-full">
+                  <button 
+                    onClick={() => setMediaView('photo')}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${mediaView === 'photo' ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                  >
+                    <ImageIcon className="w-3.5 h-3.5" />
+                    Asset Photo
+                  </button>
+                  <button 
+                    onClick={() => setMediaView('qr')}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${mediaView === 'qr' ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                  >
+                    <QrCode className="w-3.5 h-3.5" />
+                    QR Code
+                  </button>
                 </div>
+
+                {mediaView === 'photo' ? (
+                  <div className="mb-4 w-full">
+                    <PrimaryAssetPhoto 
+                      asset={asset} 
+                      onOpenModal={(url, name) => { 
+                        setPreviewModalUrl(url); 
+                        setPreviewModalName(name); 
+                      }} 
+                    />
+                  </div>
+                ) : (
+                  <div className="mb-4 w-full">
+                    <QRCard assetCode={assetCode} id="asset-profile-qr" size={130} />
+                  </div>
+                )}
+
                 <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">{asset.brand} {asset.model}</p>
                 
-                <div className="flex gap-2 mt-6 w-full">
-                  <button onClick={handlePrint} className="flex-1 px-4 py-2 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-xl font-medium flex items-center justify-center gap-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors">
-                    <Printer className="w-4 h-4" /> Print
-                  </button>
-                  <button onClick={handleDownload} className="flex-1 px-4 py-2 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600 rounded-xl font-medium flex items-center justify-center gap-2 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors">
-                    <Download className="w-4 h-4" /> Download
-                  </button>
-                </div>
+                {mediaView === 'qr' && (
+                  <div className="flex gap-2 mt-4 w-full">
+                    <button onClick={handlePrint} className="flex-1 px-4 py-2 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-xl font-medium flex items-center justify-center gap-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors text-xs cursor-pointer">
+                      <Printer className="w-4 h-4" /> Print
+                    </button>
+                    <button onClick={handleDownload} className="flex-1 px-4 py-2 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600 rounded-xl font-medium flex items-center justify-center gap-2 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors text-xs cursor-pointer">
+                      <Download className="w-4 h-4" /> Download
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6">
@@ -405,6 +449,29 @@ export default function AssetProfile() {
         )}
       </div>
 
+      {/* High-Resolution Inspection Modal */}
+      {previewModalUrl && (
+        <div className="fixed inset-0 bg-black/95 z-[100] flex flex-col">
+          <div className="flex justify-between items-center p-4">
+            <div className="flex flex-col">
+              <span className="text-white text-sm font-semibold flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-blue-400" /> High-Resolution Inspection
+              </span>
+              <span className="text-slate-400 text-xs ml-6">{previewModalName}</span>
+            </div>
+            <button 
+              onClick={() => setPreviewModalUrl(null)} 
+              className="p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition cursor-pointer"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+          <div className="flex-1 flex items-center justify-center p-4 overflow-auto">
+            <img src={previewModalUrl} alt="Inspection" className="max-w-full max-h-full object-contain rounded-lg" />
+          </div>
+        </div>
+      )}
+
       {/* Print only container */}
       <div className="hidden print:flex fixed inset-0 bg-white items-center justify-center z-[9999]">
          <div className="w-full flex justify-center">
@@ -412,6 +479,71 @@ export default function AssetProfile() {
          </div>
       </div>
     </>
+  );
+}
+
+function PrimaryAssetPhoto({ asset, onOpenModal }) {
+  const [photoUrl, setPhotoUrl] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    if (!asset?.id || (!asset.imageUrl && !asset.imageStorageKey)) {
+      setLoading(false);
+      return;
+    }
+    const loadUrl = async () => {
+      try {
+        setLoading(true);
+        const token = localStorage.getItem('token');
+        const res = await fetch(`${API_URL}/uploads/image/${asset.id}/view`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) throw new Error('Failed to load image');
+        const data = await res.json();
+        if (active) setPhotoUrl(data.url);
+      } catch (err) {
+        if (active) setHasError(true);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    loadUrl();
+    return () => { active = false; };
+  }, [asset?.id, asset?.imageUrl, asset?.imageStorageKey]);
+
+  if (loading) {
+    return (
+      <div className="w-full h-48 rounded-xl bg-slate-50 dark:bg-slate-900/50 flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
+  if (hasError || !photoUrl) {
+    return (
+      <div className="w-full h-48 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700/80 flex flex-col items-center justify-center p-4 text-slate-400">
+        <ImageIcon className="w-10 h-10 stroke-1 mb-2 opacity-40 text-slate-400" />
+        <p className="text-xs font-medium text-slate-600 dark:text-slate-400">No primary photo set</p>
+        <span className="text-[10px] text-slate-400 mt-0.5">Upload photos via Asset Images section</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative w-full h-48 rounded-xl overflow-hidden group bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-inner">
+      <img src={photoUrl} alt={asset.model || asset.assetCode} className="w-full h-full object-cover" />
+      <div className="absolute inset-0 bg-slate-950/50 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+        <button 
+          onClick={() => onOpenModal && onOpenModal(photoUrl, asset.imageFileName || `${asset.assetCode}.webp`)}
+          className="p-2.5 bg-white/20 hover:bg-white/30 text-white rounded-xl backdrop-blur-sm transition cursor-pointer flex items-center gap-1.5 text-xs font-medium"
+          title="Inspect Full Screen"
+        >
+          <Maximize2 className="w-4 h-4" /> Expand
+        </button>
+      </div>
+    </div>
   );
 }
 

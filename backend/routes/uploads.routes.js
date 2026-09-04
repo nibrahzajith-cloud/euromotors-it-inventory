@@ -485,7 +485,17 @@ router.post('/document/:assetId', authenticate, requirePermission('UPLOAD_ASSET_
 
         const timestamp = Date.now();
         const safeCode = asset.assetCode.replace(/[^a-zA-Z0-9_-]/g, '_');
-        const docKey = `assets/documents/${safeCode}_${timestamp}.pdf`;
+        const isImage = file.mimetype.startsWith('image/') || documentType === 'IMAGE';
+        const extensionByMime = {
+            'image/jpeg': 'jpg',
+            'image/png': 'png',
+            'image/webp': 'webp',
+            'application/pdf': 'pdf'
+        };
+        const ext = extensionByMime[file.mimetype] || (isImage ? 'webp' : 'pdf');
+        const docKey = isImage 
+            ? `assets/${safeCode}/images/${timestamp}_${randomUUID().substring(0, 8)}.${ext}`
+            : `assets/documents/${safeCode}_${timestamp}.pdf`;
 
         const documentId = randomUUID();
         let updatedDoc;

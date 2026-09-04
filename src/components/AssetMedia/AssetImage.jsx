@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import {
     Image as ImageIcon, UploadCloud, Camera, X,
-    Trash2, RefreshCw, Download, Maximize2, Loader2, Sparkles, AlertCircle
+    Trash2, Download, Maximize2, Loader2, Sparkles, AlertCircle, Star
 } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
 import { useToast } from '../../context/ToastContext';
@@ -28,9 +28,29 @@ export default function AssetImage({ asset, onUpdate }) {
     const cameraInputRef = useRef(null);
 
     const fetchImages = async () => {
+        if (!asset?.id) return;
         try {
             setLoadingImages(true);
             const token = localStorage.getItem('token');
+            const list = [];
+
+            // 1. Primary Asset Image (stored directly on the Asset record)
+            if (asset.imageUrl || asset.imageStorageKey) {
+                list.push({
+                    id: 'primary',
+                    isPrimary: true,
+                    documentName: asset.imageFileName || `${asset.assetCode} - Primary Photo`,
+                    documentType: 'IMAGE',
+                    fileSize: asset.imageFileSize || 0,
+                    createdAt: asset.imageUploadedAt || asset.createdAt,
+                    storageKey: asset.imageStorageKey,
+                    viewEndpoint: `${API_URL}/uploads/image/${asset.id}/view`,
+                    thumbEndpoint: `${API_URL}/uploads/image/${asset.id}/thumb`,
+                    downloadEndpoint: `${API_URL}/uploads/image/${asset.id}/download`,
+                });
+            }
+
+            // 2. Additional Asset Gallery / Document Images
             const res = await fetch(`${API_URL}/uploads/documents/${asset.id}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -38,20 +58,20 @@ export default function AssetImage({ asset, onUpdate }) {
                 const contentType = res.headers.get("content-type");
                 if (contentType && contentType.indexOf("application/json") !== -1) {
                     const docs = await res.json();
-                    const imageDocs = docs.filter(d => d.documentType === 'IMAGE');
-                    setImages(imageDocs);
-                } else {
-                    console.error("Expected JSON but got HTML/text");
-                }
-            } else {
-                const contentType = res.headers.get("content-type");
-                if (contentType && contentType.indexOf("application/json") !== -1) {
-                    const err = await res.json();
-                    showToast(err.error || 'Failed to fetch images', 'error');
-                } else {
-                    showToast(`Failed to fetch images: ${res.statusText}`, 'error');
+                    const imageDocs = docs
+                        .filter(d => d.documentType === 'IMAGE')
+                        .map(d => ({
+                            ...d,
+                            isPrimary: false,
+                            viewEndpoint: `${API_URL}/uploads/document/${d.id}/view`,
+                            thumbEndpoint: `${API_URL}/uploads/document/${d.id}/view`,
+                            downloadEndpoint: `${API_URL}/uploads/document/${d.id}/download`,
+                        }));
+                    list.push(...imageDocs);
                 }
             }
+
+            setImages(list);
         } catch (error) {
             console.error("Failed to load images:", error);
         } finally {
@@ -61,16 +81,7 @@ export default function AssetImage({ asset, onUpdate }) {
 
     useEffect(() => {
         fetchImages();
-    }, [asset?.id]);
-
-    const formatBytes = (bytes, decimals = 2) => {
-        if (!+bytes) return '0 Bytes';
-        const k = 1024;
-        const dm = decimals < 0 ? 0 : decimals;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
-    };
+    }, [asset?.id, asset?.imageUrl, asset?.imageStorageKey]);
 
     const processAndUploadBatch = async (filesArray) => {
         if (filesArray.length > 10) {
@@ -83,8 +94,12 @@ export default function AssetImage({ asset, onUpdate }) {
         try {
             const token = localStorage.getItem('token');
             let completed = 0;
+            const hasPrimary = Boolean(asset.imageUrl || asset.imageStorageKey);
             
-            const uploadPromises = filesArray.map(async (file, i) => {
+            // If asset has no primary image, upload first file as primary
+            let startIndex = 0;
+            if (!hasPrimary && filesArray.length > 0) {
+                const firstFile = filesArray[0];
                 const options = {
                     maxSizeMB: 1.0,
                     maxWidthOrHeight: 2560,
@@ -92,41 +107,96 @@ export default function AssetImage({ asset, onUpdate }) {
                     fileType: 'image/webp',
                     initialQuality: 0.88
                 };
-                
-                const compressed = await imageCompression(file, options);
-                const fileName = file.name || `camera_capture_${i}.webp`;
-                
+                const compressed = await imageCompression(firstFile, options);
+                const fileName = firstFile.name || `asset_${asset.assetCode}.webp`;
+
                 const formData = new FormData();
-                formData.append('document', new File([compressed], fileName, { type: 'image/webp' }));
-                formData.append('documentType', 'IMAGE');
-                
-                const uploadUrl = `${API_URL}/uploads/document/${asset.id}`;
-                const response = await fetch(uploadUrl, {
+                formData.append('image', new File([compressed], fileName, { type: 'image/webp' }));
+
+                try {
+                    const thumbCompressed = await imageCompression(compressed, {
+                        maxSizeMB: 0.1,
+                        maxWidthOrHeight: 300,
+                        useWebWorker: false,
+                        fileType: 'image/webp'
+                    });
+                    formData.append('thumbnail', new File([thumbCompressed], `thumb_${fileName}`, { type: 'image/webp' }));
+                } catch (_) {}
+
+                const uploadRes = await fetch(`${API_URL}/uploads/image/${asset.id}`, {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${token}` },
                     body: formData
                 });
-                
-                if (!response.ok) {
-                    let errorMessage = `Failed to upload to ${uploadUrl}`;
-                    if (response.headers.get('content-type')?.includes('application/json')) {
-                        const err = await response.json();
-                        errorMessage = err.error || errorMessage;
-                    } else {
-                        errorMessage = `Upload failed: Server returned ${response.status} ${response.statusText} for POST ${uploadUrl}`;
-                    }
-                    throw new Error(errorMessage);
+
+                if (!uploadRes.ok) {
+                    const err = await uploadRes.json().catch(() => ({}));
+                    throw new Error(err.error || 'Failed to upload primary asset image');
                 }
-                
+
                 completed++;
                 setUploadProgress({ current: completed, total: filesArray.length });
-            });
+                startIndex = 1;
+            }
 
-            await Promise.all(uploadPromises);
+            // Upload remaining files to gallery
+            const remainingFiles = filesArray.slice(startIndex);
+            if (remainingFiles.length > 0) {
+                // Try batch gallery endpoint first
+                const galleryFormData = new FormData();
+                for (let i = 0; i < remainingFiles.length; i++) {
+                    const file = remainingFiles[i];
+                    const options = {
+                        maxSizeMB: 1.0,
+                        maxWidthOrHeight: 2560,
+                        useWebWorker: false,
+                        fileType: 'image/webp',
+                        initialQuality: 0.88
+                    };
+                    const compressed = await imageCompression(file, options);
+                    const fileName = file.name || `gallery_${Date.now()}_${i}.webp`;
+                    galleryFormData.append('images', new File([compressed], fileName, { type: 'image/webp' }));
+                }
+
+                const galleryRes = await fetch(`${API_URL}/uploads/gallery/${asset.id}`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` },
+                    body: galleryFormData
+                });
+
+                if (!galleryRes.ok) {
+                    // Fallback to uploading individually via document endpoint
+                    for (const file of remainingFiles) {
+                        const options = {
+                            maxSizeMB: 1.0,
+                            maxWidthOrHeight: 2560,
+                            useWebWorker: false,
+                            fileType: 'image/webp',
+                            initialQuality: 0.88
+                        };
+                        const compressed = await imageCompression(file, options);
+                        const fileName = file.name || `photo_${Date.now()}.webp`;
+                        const docFormData = new FormData();
+                        docFormData.append('document', new File([compressed], fileName, { type: 'image/webp' }));
+                        docFormData.append('documentType', 'IMAGE');
+
+                        await fetch(`${API_URL}/uploads/document/${asset.id}`, {
+                            method: 'POST',
+                            headers: { 'Authorization': `Bearer ${token}` },
+                            body: docFormData
+                        });
+                        completed++;
+                        setUploadProgress({ current: completed, total: filesArray.length });
+                    }
+                } else {
+                    completed += remainingFiles.length;
+                    setUploadProgress({ current: completed, total: filesArray.length });
+                }
+            }
 
             showToast(`${filesArray.length} image(s) uploaded successfully`, 'success');
+            if (onUpdate) await onUpdate();
             await fetchImages();
-            if (onUpdate) onUpdate();
         } catch (error) {
             console.error(error);
             showToast(error.message, 'error');
@@ -134,6 +204,7 @@ export default function AssetImage({ asset, onUpdate }) {
             setUploading(false);
             setUploadProgress(null);
             if (fileInputRef.current) fileInputRef.current.value = '';
+            if (cameraInputRef.current) cameraInputRef.current.value = '';
         }
     };
 
@@ -171,18 +242,22 @@ export default function AssetImage({ asset, onUpdate }) {
         }
     }, []);
 
-    const handleDelete = async (docId) => {
-        if (!window.confirm("Delete this image?")) return;
-        setDeletingId(docId);
+    const handleDelete = async (doc) => {
+        if (!window.confirm(`Delete ${doc.isPrimary ? 'primary asset photo' : 'this photo'}?`)) return;
+        setDeletingId(doc.id);
         try {
             const token = localStorage.getItem('token');
-            const res = await fetch(`${API_URL}/uploads/document/${docId}`, {
+            const deleteUrl = doc.isPrimary
+                ? `${API_URL}/uploads/image/${asset.id}`
+                : `${API_URL}/uploads/document/${doc.id}`;
+            const res = await fetch(deleteUrl, {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
 
             if (!res.ok) throw new Error('Failed to delete image');
             showToast('Image deleted successfully', 'success');
+            if (onUpdate) await onUpdate();
             await fetchImages();
         } catch (error) {
             showToast(error.message, 'error');
@@ -194,7 +269,10 @@ export default function AssetImage({ asset, onUpdate }) {
     const openPreview = async (doc) => {
         try {
             const token = localStorage.getItem('token');
-            const response = await fetch(`${API_URL}/uploads/document/${doc.id}/view`, {
+            const endpoint = doc.viewEndpoint || (doc.isPrimary
+                ? `${API_URL}/uploads/image/${asset.id}/view`
+                : `${API_URL}/uploads/document/${doc.id}/view`);
+            const response = await fetch(endpoint, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (!response.ok) {
@@ -204,9 +282,6 @@ export default function AssetImage({ asset, onUpdate }) {
                     errorMessage = err.error || errorMessage;
                 }
                 throw new Error(errorMessage);
-            }
-            if (!response.headers.get('content-type')?.includes('application/json')) {
-                throw new Error('Server returned invalid response format');
             }
             const data = await response.json();
             setViewUrl(data.url);
@@ -220,7 +295,10 @@ export default function AssetImage({ asset, onUpdate }) {
     const handleDownload = async (doc) => {
         try {
             const token = localStorage.getItem('token');
-            const res = await fetch(`${API_URL}/uploads/document/${doc.id}/download`, {
+            const endpoint = doc.downloadEndpoint || (doc.isPrimary
+                ? `${API_URL}/uploads/image/${asset.id}/download`
+                : `${API_URL}/uploads/document/${doc.id}/download`);
+            const res = await fetch(endpoint, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (!res.ok) {
@@ -230,9 +308,6 @@ export default function AssetImage({ asset, onUpdate }) {
                     errorMessage = err.error || errorMessage;
                 }
                 throw new Error(errorMessage);
-            }
-            if (!res.headers.get('content-type')?.includes('application/json')) {
-                throw new Error('Server returned invalid response format');
             }
             const data = await res.json();
 
@@ -271,13 +346,19 @@ export default function AssetImage({ asset, onUpdate }) {
                                 <div key={img.id} className="relative group rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-900 aspect-square border border-slate-200 dark:border-slate-700">
                                     <ImageThumbnail doc={img} onClick={() => openPreview(img)} />
                                     
-                                    <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-2">
+                                    {img.isPrimary && (
+                                        <span className="absolute top-2 left-2 z-10 px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-600 text-white shadow-sm flex items-center gap-1 pointer-events-none">
+                                            <Star className="w-2.5 h-2.5 fill-current" /> Primary
+                                        </span>
+                                    )}
+
+                                    <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-2 z-20">
                                         <div className="flex justify-end">
                                             <button 
-                                                onClick={(e) => { e.stopPropagation(); handleDelete(img.id); }}
+                                                onClick={(e) => { e.stopPropagation(); handleDelete(img); }}
                                                 disabled={deletingId === img.id}
                                                 className="p-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded-lg shadow-sm transition"
-                                                title="Delete"
+                                                title={img.isPrimary ? "Delete Primary Photo" : "Delete Photo"}
                                             >
                                                 {deletingId === img.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
                                             </button>
@@ -333,13 +414,13 @@ export default function AssetImage({ asset, onUpdate }) {
                                 <div className="flex gap-2 w-full">
                                     <button
                                         onClick={() => fileInputRef.current?.click()}
-                                        className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition flex items-center justify-center gap-2 shadow-sm shadow-blue-600/20"
+                                        className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition flex items-center justify-center gap-2 shadow-sm shadow-blue-600/20 cursor-pointer"
                                     >
                                         <UploadCloud className="w-4 h-4" /> Select Images
                                     </button>
                                     <button
                                         onClick={() => cameraInputRef.current?.click()}
-                                        className="flex-1 py-2.5 bg-slate-700 hover:bg-slate-800 text-white rounded-xl text-sm font-semibold transition flex items-center justify-center gap-2 shadow-sm"
+                                        className="flex-1 py-2.5 bg-slate-700 hover:bg-slate-800 text-white rounded-xl text-sm font-semibold transition flex items-center justify-center gap-2 shadow-sm cursor-pointer"
                                     >
                                         <Camera className="w-4 h-4" /> Camera
                                     </button>
@@ -379,12 +460,12 @@ export default function AssetImage({ asset, onUpdate }) {
                             </span>
                             <span className="text-slate-400 text-xs ml-6">{viewImageName}</span>
                         </div>
-                        <button onClick={() => setFullScreen(false)} className="p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition">
+                        <button onClick={() => setFullScreen(false)} className="p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition cursor-pointer">
                             <X className="w-6 h-6" />
                         </button>
                     </div>
                     <div className="flex-1 flex items-center justify-center p-4 overflow-auto">
-                        {viewUrl && <img src={viewUrl} alt="Full Screen Inspection" className="max-w-full max-h-full object-contain" />}
+                        {viewUrl && <img src={viewUrl} alt="Full Screen Inspection" className="max-w-full max-h-full object-contain rounded-lg" />}
                     </div>
                 </div>
             )}
@@ -401,7 +482,8 @@ function ImageThumbnail({ doc, onClick }) {
         const fetchUrl = async () => {
             try {
                 const token = localStorage.getItem('token');
-                const res = await fetch(`${API_URL}/uploads/document/${doc.id}/view`, {
+                const endpoint = doc.thumbEndpoint || doc.viewEndpoint;
+                const res = await fetch(endpoint, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (!res.ok) throw new Error('Failed to load');
@@ -417,12 +499,13 @@ function ImageThumbnail({ doc, onClick }) {
         };
         fetchUrl();
         return () => { cancelled = true; };
-    }, [doc.id]);
+    }, [doc.id, doc.thumbEndpoint, doc.viewEndpoint]);
 
     if (error) {
         return (
-            <div className="w-full h-full flex items-center justify-center bg-slate-100 dark:bg-slate-800 text-slate-400" onClick={onClick}>
-                <AlertCircle className="w-6 h-6 opacity-50" />
+            <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-pointer p-2 text-center" onClick={onClick}>
+                <AlertCircle className="w-6 h-6 opacity-50 mb-1" />
+                <span className="text-[9px] text-slate-400">Failed to load</span>
             </div>
         );
     }
@@ -439,7 +522,7 @@ function ImageThumbnail({ doc, onClick }) {
         <img 
             src={thumbUrl} 
             alt={doc.documentName} 
-            className="w-full h-full object-cover cursor-pointer" 
+            className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-200" 
             onClick={onClick}
         />
     );

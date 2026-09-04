@@ -179,13 +179,13 @@ async function getR2StorageStats(forceRefresh = false) {
       totalCount++;
       totalBytes += size;
 
-      if (key.startsWith('assets/images/')) {
+      if (key.startsWith('assets/images/') || key.includes('/images/')) {
         breakdown.images.count++;
         breakdown.images.bytes += size;
-      } else if (key.startsWith('assets/thumbnails/')) {
+      } else if (key.startsWith('assets/thumbnails/') || key.includes('/thumbnails/')) {
         breakdown.thumbnails.count++;
         breakdown.thumbnails.bytes += size;
-      } else if (key.startsWith('assets/documents/')) {
+      } else if (key.startsWith('assets/documents/') || key.includes('/documents/')) {
         breakdown.documents.count++;
         breakdown.documents.bytes += size;
       } else {
