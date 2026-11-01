@@ -1,70 +1,25 @@
 import { useState, useRef, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { 
-  Search, Bell, UserCircle, Sun, Moon,
-  LayoutDashboard, 
-  MonitorSmartphone, 
-  PlusCircle, 
-  Users,
-  UserPlus, 
-  Building2, 
-  MapPin, 
-  ArrowRightLeft, 
-  QrCode, 
-  Wrench, 
-  FileText, 
-  Settings, 
-  ShieldCheck, 
-  History, 
-  Camera, 
-  Ticket, 
-  Database,
-  KeyRound
+  Search, Bell, Sun, Moon, 
+  LayoutDashboard, MonitorSmartphone, PlusCircle, Users, 
+  UserPlus, Building2, MapPin, ArrowRightLeft, QrCode, 
+  Wrench, FileText, Settings, ShieldCheck, History, 
+  Camera, Ticket, Database, KeyRound
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 
-const routeModuleMap = [
-  { path: '/assets/add', name: 'Add Asset', icon: PlusCircle, category: 'Operations' },
-  { path: '/assets/edit', name: 'Edit Asset', icon: MonitorSmartphone, category: 'Operations' },
-  { path: '/assets/', name: 'Asset Profile', icon: MonitorSmartphone, category: 'Operations' },
-  { path: '/assets', name: 'Assets', icon: MonitorSmartphone, category: 'Operations' },
-  { path: '/employees/add', name: 'Add Employee', icon: UserPlus, category: 'Operations' },
-  { path: '/employees', name: 'Employees', icon: Users, category: 'Operations' },
-  { path: '/departments', name: 'Departments', icon: Building2, category: 'Operations' },
-  { path: '/locations', name: 'Locations', icon: MapPin, category: 'Operations' },
-  { path: '/assignments', name: 'Asset Assignment', icon: ArrowRightLeft, category: 'Operations' },
-  { path: '/qr-code', name: 'QR Code', icon: QrCode, category: 'Operations' },
-  { path: '/scanner', name: 'Camera Scanner', icon: Camera, category: 'Operations' },
-  { path: '/maintenance', name: 'Maintenance', icon: Wrench, category: 'Operations' },
-  { path: '/tickets', name: 'Support Desk', icon: Ticket, category: 'Operations' },
-  { path: '/reports', name: 'Reports', icon: FileText, category: 'System' },
-  { path: '/audit-logs', name: 'Audit Logs', icon: History, category: 'System' },
-  { path: '/database', name: 'Database', icon: Database, category: 'System' },
-  { path: '/users', name: 'User Management', icon: ShieldCheck, category: 'System' },
-  { path: '/settings', name: 'Settings', icon: Settings, category: 'System' },
-  { path: '/change-password', name: 'Change Password', icon: KeyRound, category: 'Account' },
-  { path: '/', name: 'Control Center', icon: LayoutDashboard, category: 'Dashboard' },
-];
-
-const getModuleInfo = (pathname) => {
-  if (pathname === '/') return routeModuleMap.find(m => m.path === '/');
-  const sorted = [...routeModuleMap].sort((a, b) => b.path.length - a.path.length);
-  return sorted.find(m => pathname.startsWith(m.path)) || { name: 'Control Center', icon: LayoutDashboard, category: 'Dashboard' };
-};
-
 export default function Header() {
   const { user } = useAuth();
   const { toggleTheme, isDark } = useTheme();
+  const navigate = useNavigate();
   const location = useLocation();
   
   const [showNotifications, setShowNotifications] = useState(false);
   const notifRef = useRef(null);
   const [notifications, setNotifications] = useState([]);
   const unreadCount = notifications.filter(n => !n.read).length;
-
-  const currentModule = getModuleInfo(location.pathname);
-  const ModuleIcon = currentModule.icon;
 
   useEffect(() => {
     const fetchOpenTickets = async () => {
@@ -84,9 +39,7 @@ export default function Header() {
             read: false
           })));
         }
-      } catch (e) {
-        // Silently fail if API is unavailable
-      }
+      } catch (e) {}
     };
     
     fetchOpenTickets();
@@ -100,164 +53,163 @@ export default function Header() {
         setShowNotifications(false);
       }
     };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [notifRef]);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Keyboard shortcut Ctrl+K to trigger search palette
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        const cmdPaletteBtn = document.querySelector('[data-command-palette-trigger]');
+        if (cmdPaletteBtn) cmdPaletteBtn.click();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const openSearch = () => {
+    const cmdPaletteBtn = document.querySelector('[data-command-palette-trigger]');
+    if (cmdPaletteBtn) cmdPaletteBtn.click();
+  };
+
+  const displayName = user?.fullName || 'Nibrahz Ajith';
+  const displayRole = (user?.role || 'ADMIN').toUpperCase();
+  const initials = displayName.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() || 'NA';
 
   return (
-    <header className="bg-white dark:bg-[#111827] border-b border-slate-200 dark:border-white/[0.06] h-16 flex items-center justify-between px-4 md:px-6 shrink-0 transition-colors duration-300">
-      <div className="flex items-center gap-3 md:gap-6 flex-1 min-w-0">
-        {/* Module Name Display */}
-        <div className="flex items-center gap-2.5 shrink-0">
-          <div className="p-2 rounded-xl bg-blue-500/10 dark:bg-blue-400/10 text-blue-600 dark:text-blue-400 ring-1 ring-blue-500/20">
-            <ModuleIcon className="w-5 h-5" />
+    <header className="h-16 bg-[#070b13] border-b border-slate-800/80 px-4 md:px-6 flex items-center justify-between shrink-0 z-30 select-none">
+      
+      {/* Left: Euro Motors Branding & Module Title */}
+      <div className="flex items-center gap-4">
+        {/* Euro Motors Wing Emblem */}
+        <div 
+          onClick={() => navigate('/')} 
+          className="flex items-center gap-2.5 cursor-pointer group"
+        >
+          <div className="relative flex items-center justify-center">
+            {/* Stylized Wing Logo */}
+            <svg className="w-8 h-8 text-blue-400 group-hover:text-blue-300 transition-colors drop-shadow-[0_0_8px_rgba(59,130,246,0.5)]" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M4 24C12 20 20 16 28 12C36 8 42 6 44 6C42 10 38 16 32 22C26 28 18 34 8 38C6 38 4 34 4 24Z" fill="currentColor" fillOpacity="0.8" />
+              <path d="M10 26C16 23 22 20 28 17C34 14 38 13 40 13C38 16 35 20 30 24C25 28 18 32 12 34C11 34 10 32 10 26Z" fill="#60A5FA" />
+              <path d="M14 28C18 26 24 23 28 21C32 19 36 18 37 18C35 20 32 23 28 26C24 29 18 32 15 33C14 33 14 31 14 28Z" fill="#93C5FD" />
+            </svg>
           </div>
-          <div className="hidden sm:block">
-            <h1 className="text-base md:text-lg font-extrabold text-slate-800 dark:text-white leading-tight tracking-tight whitespace-nowrap">
-              {currentModule.name}
-            </h1>
-            {currentModule.category && (
-              <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 tracking-widest uppercase block -mt-0.5">
-                {currentModule.category}
-              </span>
-            )}
+          <div>
+            <span className="font-bold text-white text-xs md:text-sm tracking-wider block font-sans leading-none">
+              EURO MOTORS
+            </span>
+            <span className="text-[10px] text-slate-400 block tracking-tight leading-none mt-1">
+              Private Limited
+            </span>
           </div>
         </div>
 
-        {/* Search Bar */}
-        <div 
-          onClick={() => window.dispatchEvent(new Event('open-command-palette'))}
-          className="hidden lg:flex items-center bg-slate-100 dark:bg-white/[0.04] px-3 py-2 rounded-lg w-72 xl:w-96 hover:bg-slate-200 dark:hover:bg-white/[0.08] border border-transparent dark:border-white/[0.06] transition-all cursor-text group ml-auto lg:ml-0"
-        >
-          <Search className="w-5 h-5 text-slate-400 group-hover:text-slate-500 dark:group-hover:text-slate-300 transition-colors" />
-          <input 
-            type="text"
-            readOnly
-            placeholder="Search assets, employees... (Press Ctrl+K)" 
-            className="bg-transparent border-none outline-none ml-2 w-full text-sm placeholder:text-slate-400 text-slate-700 dark:text-slate-200 cursor-text"
-          />
+        {/* Vertical divider */}
+        <div className="hidden sm:block h-6 w-[1px] bg-slate-800" />
+
+        {/* Subtitle / System title */}
+        <div className="hidden sm:block">
+          <h2 className="text-xs md:text-sm font-bold text-slate-100 leading-tight">
+            IT Control Center
+          </h2>
+          <p className="text-[10px] text-slate-400 leading-tight mt-0.5">
+            Asset Management & Operational Analytics
+          </p>
         </div>
       </div>
 
-      <div className="flex items-center gap-3 md:gap-4 shrink-0">
-        {/* Premium Animated Theme Toggle */}
-        <button 
-          onClick={toggleTheme}
-          className="relative w-16 h-8 rounded-full p-[3px] transition-all duration-500 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/50 group"
-          style={{
-            background: isDark 
-              ? 'linear-gradient(135deg, #1e1b4b, #312e81)' 
-              : 'linear-gradient(135deg, #bfdbfe, #93c5fd)',
-            boxShadow: isDark 
-              ? '0 0 15px rgba(99, 102, 241, 0.3), inset 0 1px 0 rgba(255,255,255,0.08)' 
-              : '0 0 15px rgba(59, 130, 246, 0.2), inset 0 1px 0 rgba(255,255,255,0.5)',
-          }}
-          aria-label={`Switch to ${isDark ? 'light' : 'dark'} mode`}
-          id="theme-toggle"
+      {/* Right Controls: Search, Notifications, Theme, User */}
+      <div className="flex items-center gap-3">
+        
+        {/* Global Search Bar (with Ctrl + K) */}
+        <div 
+          onClick={openSearch}
+          className="relative hidden md:flex items-center bg-[#0d1424] hover:bg-[#111a2e] border border-slate-700/60 hover:border-slate-600 rounded-xl px-3.5 py-1.5 cursor-pointer transition-all w-64 lg:w-72 shadow-inner"
         >
-          {/* Sliding indicator */}
-          <div 
-            className="absolute top-[3px] w-[26px] h-[26px] rounded-full transition-all duration-500 ease-[cubic-bezier(0.68,-0.55,0.265,1.55)] flex items-center justify-center"
-            style={{
-              left: isDark ? 'calc(100% - 29px)' : '3px',
-              background: isDark 
-                ? 'linear-gradient(135deg, #6366f1, #818cf8)' 
-                : 'linear-gradient(135deg, #fbbf24, #f59e0b)',
-              boxShadow: isDark 
-                ? '0 2px 10px rgba(99, 102, 241, 0.5), 0 0 20px rgba(129, 140, 248, 0.3)' 
-                : '0 2px 10px rgba(245, 158, 11, 0.5), 0 0 20px rgba(251, 191, 36, 0.3)',
-            }}
-          >
-            {/* Icon with morph animation */}
-            <div className="relative w-4 h-4">
-              <Sun 
-                className="absolute inset-0 w-4 h-4 text-white transition-all duration-500"
-                style={{
-                  opacity: isDark ? 0 : 1,
-                  transform: isDark ? 'rotate(-90deg) scale(0.5)' : 'rotate(0deg) scale(1)',
-                }}
-              />
-              <Moon 
-                className="absolute inset-0 w-4 h-4 text-white transition-all duration-500"
-                style={{
-                  opacity: isDark ? 1 : 0,
-                  transform: isDark ? 'rotate(0deg) scale(1)' : 'rotate(90deg) scale(0.5)',
-                }}
-              />
-            </div>
-          </div>
+          <Search className="w-3.5 h-3.5 text-slate-400 shrink-0 mr-2.5" />
+          <span className="text-xs text-slate-400 flex-1 truncate">Search assets, employees, locations...</span>
+          <kbd className="hidden lg:inline-flex items-center text-[10px] font-mono font-semibold text-slate-400 bg-slate-800/90 border border-slate-700/80 px-1.5 py-0.5 rounded shadow-sm">
+            Ctrl + K
+          </kbd>
+        </div>
 
-          {/* Background stars/dots (dark mode decoration) */}
-          <div 
-            className="absolute inset-0 overflow-hidden rounded-full pointer-events-none transition-opacity duration-500"
-            style={{ opacity: isDark ? 0.6 : 0 }}
-          >
-            <div className="absolute w-1 h-1 rounded-full bg-white/40" style={{ top: '6px', left: '8px' }} />
-            <div className="absolute w-0.5 h-0.5 rounded-full bg-white/30" style={{ top: '14px', left: '14px' }} />
-            <div className="absolute w-0.5 h-0.5 rounded-full bg-white/20" style={{ top: '8px', left: '20px' }} />
-          </div>
-
-          {/* Background clouds (light mode decoration) */}
-          <div 
-            className="absolute inset-0 overflow-hidden rounded-full pointer-events-none transition-opacity duration-500"
-            style={{ opacity: isDark ? 0 : 0.5 }}
-          >
-            <div className="absolute w-3 h-1.5 rounded-full bg-white/60" style={{ top: '10px', right: '8px' }} />
-            <div className="absolute w-2 h-1 rounded-full bg-white/40" style={{ top: '6px', right: '16px' }} />
-          </div>
+        {/* Mobile Search Button */}
+        <button 
+          onClick={openSearch}
+          className="md:hidden p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/80 transition-colors"
+          title="Search (Ctrl + K)"
+        >
+          <Search className="w-4 h-4" />
         </button>
 
+        {/* Notification Bell */}
         <div className="relative" ref={notifRef}>
           <button 
             onClick={() => setShowNotifications(!showNotifications)}
-            className="p-2 hover:bg-slate-100 dark:hover:bg-white/[0.06] rounded-full relative text-slate-500 dark:text-slate-400 transition-colors"
+            className="relative p-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors"
+            title="Notifications"
           >
-            <Bell className="w-5 h-5" />
-            {unreadCount > 0 && (
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-[#111827]"></span>
-            )}
+            <Bell className="w-4 h-4" />
+            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_6px_#3b82f6]" />
           </button>
 
-          {/* Dropdown Panel */}
+          {/* Notifications Dropdown */}
           {showNotifications && (
-            <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700 z-50 overflow-hidden origin-top-right transition-all animate-in fade-in zoom-in-95 duration-200">
-               <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
-                 <h3 className="font-bold text-slate-800 dark:text-white">Notifications</h3>
-                 {unreadCount > 0 && (
-                    <span className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-2 py-0.5 rounded-full font-bold">{unreadCount} New</span>
-                 )}
-               </div>
-               <div className="max-h-[320px] overflow-y-auto custom-scrollbar">
-                 {notifications.map(n => (
-                   <div key={n.id} className={`p-4 border-b border-slate-50 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors cursor-pointer ${!n.read ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}>
-                      <h4 className={`text-sm ${!n.read ? 'font-bold text-slate-800 dark:text-white' : 'font-medium text-slate-700 dark:text-slate-300'}`}>{n.title}</h4>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{n.message}</p>
-                      <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 font-medium">{n.time}</p>
-                   </div>
-                 ))}
-               </div>
-               <div className="p-3 text-center border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
-                 <button 
-                   onClick={() => {
-                     setNotifications(notifications.map(n => ({...n, read: true})));
-                     setTimeout(() => setShowNotifications(false), 300);
-                   }}
-                   className="text-sm font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
-                 >
-                   Mark all as read
-                 </button>
-               </div>
+            <div className="absolute right-0 mt-2 w-80 bg-[#0e1626] border border-slate-800 rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+              <div className="p-3.5 border-b border-slate-800 flex justify-between items-center bg-[#0a0f1a]">
+                <span className="text-xs font-bold text-white uppercase tracking-wider">Alerts & Tickets</span>
+                <span className="text-[10px] bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full font-bold">
+                  {notifications.length} Active
+                </span>
+              </div>
+              <div className="max-h-72 overflow-y-auto divide-y divide-slate-800/60">
+                {notifications.length === 0 ? (
+                  <p className="text-xs text-slate-500 p-4 text-center">No new notifications</p>
+                ) : (
+                  notifications.map(n => (
+                    <div key={n.id} className="p-3 hover:bg-slate-800/40 transition-colors text-xs space-y-0.5">
+                      <p className="font-semibold text-slate-200">{n.title}</p>
+                      <p className="text-[11px] text-slate-400">{n.message}</p>
+                      <span className="text-[9px] text-slate-500 font-mono block pt-0.5">{n.time}</span>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           )}
         </div>
-        
-        <div className="flex items-center gap-2 pl-2 md:pl-4 border-l border-slate-200 dark:border-white/[0.06] cursor-pointer hover:opacity-80 transition-opacity">
-          <div className="hidden md:block text-right">
-            <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{user?.name || 'Guest'}</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">{user?.role || 'Viewer'}</p>
+
+        {/* Theme Toggle (Moon button matching reference) */}
+        <button 
+          onClick={toggleTheme}
+          className="p-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors"
+          title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
+        >
+          {isDark ? <Moon className="w-4 h-4 text-blue-400" /> : <Sun className="w-4 h-4 text-amber-400" />}
+        </button>
+
+        {/* User Avatar & Name */}
+        <div 
+          onClick={() => navigate('/settings')}
+          className="flex items-center gap-2.5 pl-2 cursor-pointer group"
+          title="Profile & Settings"
+        >
+          <div className="w-8 h-8 rounded-full bg-blue-600 hover:bg-blue-500 flex items-center justify-center text-white font-bold text-xs shadow-md shadow-blue-600/30 ring-2 ring-blue-500/30 transition-all shrink-0">
+            {initials}
           </div>
-          <UserCircle className="w-8 h-8 text-blue-600" />
+          <div className="hidden sm:flex flex-col text-left">
+            <span className="text-xs font-bold text-slate-100 group-hover:text-blue-400 transition-colors leading-tight">
+              {displayName}
+            </span>
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider leading-tight">
+              {displayRole}
+            </span>
+          </div>
         </div>
+
       </div>
     </header>
   );

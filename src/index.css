@@ -23,9 +23,9 @@ body {
   min-height: 100%;
 }
 
-/* Dark mode body background — deep navy, not pure black */
+/* Dark mode body background — deep navy-black matching reference */
 .dark body {
-  background-color: #0f172a;
+  background-color: #060913;
 }
 
 /* Smooth theme transition — applied during toggle */
