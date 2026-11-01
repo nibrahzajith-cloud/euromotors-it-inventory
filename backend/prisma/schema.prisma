@@ -199,20 +199,46 @@ model SystemSettings {
 }
 
 model AuditLog {
-  id          String   @id @default(uuid())
-  userId      String?
-  userName    String?
-  userRole    String?
-  action      String
-  module      String
-  entityType  String?
-  entityId    String?
-  entityCode  String?
-  oldValue    String?
-  newValue    String?
-  description String?
-  ipAddress   String?
-  createdAt   DateTime @default(now())
+  id             String   @id @default(uuid())
+  userId         String?
+  userName       String?
+  userEmail      String?
+  userRole       String?
+  employeeId     String?
+  employeeName   String?
+  departmentName String?
+
+  initiatedById  String?
+  executedBy     String?
+  activityType   String   @default("HUMAN")
+
+  action         String
+  module         String
+  entityType     String?
+  entityId       String?
+  entityCode     String?
+  description    String?
+
+  oldValue       String?
+  newValue       String?
+  changedFields  String?
+
+  status         String   @default("SUCCESS")
+  severity       String   @default("INFO")
+  errorMessage   String?
+  ipAddress      String?
+  userAgent      String?
+  correlationId  String?
+
+  createdAt      DateTime @default(now())
+
+  @@index([entityId])
+  @@index([entityCode])
+  @@index([userId])
+  @@index([employeeId])
+  @@index([module])
+  @@index([action])
+  @@index([createdAt])
 }
 
 model AssetTimeline {

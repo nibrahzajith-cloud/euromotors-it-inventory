@@ -1,12 +1,74 @@
+const { randomUUID } = require('crypto');
 const prisma = require('../prismaClient');
 
 /**
- * Reusable helper to log system-wide audit actions.
- * Ensures sensitive data is masked.
+ * Strips sensitive fields (passwords, tokens) before serializing for audit storage.
+ */
+const stripSensitive = (val) => {
+  if (!val) return val;
+  let obj;
+  let isString = false;
+
+  try {
+    if (typeof val === 'string') {
+      obj = JSON.parse(val);
+      isString = true;
+    } else {
+      obj = Array.isArray(val) ? [...val] : { ...val };
+    }
+  } catch (e) {
+    return val;
+  }
+
+  const sensitiveFields = [
+    'password', 'passwordHash', 'token', 'jwt', 'secret',
+    'currentPassword', 'newPassword', 'confirmPassword'
+  ];
+
+  const mask = (target) => {
+    if (!target || typeof target !== 'object') return;
+    sensitiveFields.forEach(field => {
+      if (Object.prototype.hasOwnProperty.call(target, field)) {
+        target[field] = '********';
+      }
+    });
+  };
+
+  mask(obj);
+  return isString ? JSON.stringify(obj) : obj;
+};
+
+/**
+ * Computes list of modified field names between two entity snapshots.
+ */
+const getChangedFields = (oldVal, newVal) => {
+  if (!oldVal || !newVal || typeof oldVal !== 'object' || typeof newVal !== 'object') {
+    return null;
+  }
+  const changed = [];
+  const keys = new Set([...Object.keys(oldVal), ...Object.keys(newVal)]);
+  const ignoredKeys = new Set(['updatedAt', 'passwordHash']);
+
+  for (const key of keys) {
+    if (ignoredKeys.has(key)) continue;
+    const v1 = oldVal[key];
+    const v2 = newVal[key];
+    if (JSON.stringify(v1) !== JSON.stringify(v2)) {
+      changed.push(key);
+    }
+  }
+  return changed.length > 0 ? changed.join(', ') : null;
+};
+
+/**
+ * Enterprise Audit Logger:
+ * Guarantees authenticated user attribution, IP, User-Agent, correlation ID,
+ * Sri Lanka time compatibility, and differential state tracking.
  */
 const logAudit = async ({
   req,
   userOverride,
+  employeeOverride,
   action,
   module,
   entityType,
@@ -14,74 +76,97 @@ const logAudit = async ({
   entityCode,
   oldValue,
   newValue,
-  description
+  changedFields: customChangedFields,
+  description,
+  status = 'SUCCESS',
+  severity = 'INFO',
+  errorMessage = null,
+  activityType = null,
+  executedBy = null
 }) => {
   try {
-    // Extract user info from req or use override (useful for login/registration/admin actions)
+    // 1. Identify Actor
     const userId = userOverride?.id || req?.user?.id || null;
-    const userName = userOverride?.fullName || req?.user?.fullName || null;
-    const userRole = userOverride?.role || req?.user?.role || null;
-    const ipAddress = req?.ip || req?.headers['x-forwarded-for'] || null;
+    let userName = userOverride?.fullName || userOverride?.name || req?.user?.fullName || req?.user?.name || null;
+    let userEmail = userOverride?.email || req?.user?.email || null;
+    let userRole = userOverride?.role || req?.user?.role || null;
 
-    // Helper to strip sensitive fields from stringified JSON or objects
-    const stripSensitive = (val) => {
-      if (!val) return val;
-      let obj;
-      let isString = false;
-      
+    // Fallback: If userId exists but userName/email are missing, lookup user from DB cache
+    if (userId && (!userName || !userEmail)) {
       try {
-        if (typeof val === 'string') {
-          obj = JSON.parse(val);
-          isString = true;
-        } else {
-          obj = { ...val };
-        }
-      } catch (e) {
-        return val;
-      }
-      
-      const sensitiveFields = ['password', 'passwordHash', 'token', 'currentPassword', 'newPassword', 'confirmPassword'];
-      
-      const mask = (target) => {
-        if (!target || typeof target !== 'object') return;
-        sensitiveFields.forEach(field => {
-          if (Object.prototype.hasOwnProperty.call(target, field)) {
-            target[field] = '********';
-          }
+        const u = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { fullName: true, email: true, role: true }
         });
-        // Recursively check for nested objects if necessary, 
-        // but for these models shallow check is usually enough.
-      };
+        if (u) {
+          userName = userName || u.fullName;
+          userEmail = userEmail || u.email;
+          userRole = userRole || u.role;
+        }
+      } catch (err) {
+        // Non-fatal
+      }
+    }
 
-      mask(obj);
-      
-      return isString ? JSON.stringify(obj) : obj;
-    };
+    // 2. Identify Linked Employee (if action targets or performed on behalf of an employee)
+    const employeeId = employeeOverride?.id || null;
+    const employeeName = employeeOverride?.fullName || null;
+    const departmentName = employeeOverride?.departmentName || null;
 
+    // 3. Execution Context Classification
+    const finalActivityType = activityType || (userId ? 'HUMAN' : 'SYSTEM');
+    const finalExecutedBy = executedBy || (userId ? 'USER' : 'SYSTEM');
+    const initiatedById = userId || null;
+
+    // 4. Client & Network Telemetry
+    const ipAddress = req?.headers?.['x-forwarded-for']?.split(',')?.[0]?.trim() || 
+                      req?.socket?.remoteAddress || 
+                      req?.ip || 
+                      null;
+    const userAgent = req?.headers?.['user-agent'] || null;
+    const correlationId = req?.headers?.['x-correlation-id'] || randomUUID();
+
+    // 5. Differential State Analysis
+    const changedFields = customChangedFields || getChangedFields(oldValue, newValue);
+
+    // 6. Write Centralized Immutable Audit Record
     await prisma.auditLog.create({
       data: {
         userId,
         userName,
+        userEmail,
         userRole,
-        action,
-        module,
-        entityType,
-        entityId,
-        entityCode,
-        oldValue: typeof oldValue === 'object' ? JSON.stringify(stripSensitive(oldValue)) : stripSensitive(oldValue),
-        newValue: typeof newValue === 'object' ? JSON.stringify(stripSensitive(newValue)) : stripSensitive(newValue),
-        description,
-        ipAddress
+        employeeId,
+        employeeName,
+        departmentName,
+        initiatedById,
+        executedBy: finalExecutedBy,
+        activityType: finalActivityType,
+        action: (action || 'UNKNOWN').toUpperCase(),
+        module: (module || 'GENERAL').toUpperCase(),
+        entityType: entityType ? entityType.toUpperCase() : null,
+        entityId: entityId ? String(entityId) : null,
+        entityCode: entityCode ? String(entityCode) : null,
+        description: description || null,
+        oldValue: oldValue ? (typeof oldValue === 'object' ? JSON.stringify(stripSensitive(oldValue)) : String(oldValue)) : null,
+        newValue: newValue ? (typeof newValue === 'object' ? JSON.stringify(stripSensitive(newValue)) : String(newValue)) : null,
+        changedFields,
+        status: status ? status.toUpperCase() : 'SUCCESS',
+        severity: severity ? severity.toUpperCase() : 'INFO',
+        errorMessage: errorMessage ? String(errorMessage) : null,
+        ipAddress,
+        userAgent,
+        correlationId
       }
     });
   } catch (error) {
-    console.error('Audit Log Error:', error);
-    // Silent fail to ensure main operation continues
+    console.error('Central Audit Engine Error:', error);
   }
 };
 
 /**
  * Reusable helper to log asset lifecycle timeline events.
+ * Kept for backwards compatibility and synchronized with central audit logs.
  */
 const logAssetTimeline = async (data) => {
   try {
@@ -106,7 +191,6 @@ const logAssetTimeline = async (data) => {
     });
   } catch (error) {
     console.error('Asset Timeline Error:', error);
-    // Silent fail
   }
 };
 

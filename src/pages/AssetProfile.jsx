@@ -4,12 +4,14 @@ import { useToast } from '../context/ToastContext';
 import { 
   ArrowLeft, Printer, Download, MonitorSmartphone, Wrench, UserCheck, 
   CheckCircle2, Loader2, AlertCircle, History, Calendar, User, ArrowRight,
-  Pencil, Save, X, QrCode, Image as ImageIcon, Maximize2, Sparkles
+  Pencil, Save, X, QrCode, Image as ImageIcon, Maximize2, Sparkles,
+  ShieldCheck, Tag, Globe, Activity
 } from 'lucide-react';
 import QRCard from '../components/QRCard';
 import { downloadQRCard } from '../utils/qrUtils';
 import AssetImage from '../components/AssetMedia/AssetImage';
 import AssetDocuments from '../components/AssetMedia/AssetDocuments';
+import AssetAuditTrail from '../components/AssetAuditTrail';
 
 const _rawApi = import.meta.env.VITE_API_URL || '/api';
 const API_URL = _rawApi.endsWith('/api') ? _rawApi : `${_rawApi.replace(/\/$/, '')}/api`;
@@ -22,6 +24,27 @@ export default function AssetProfile() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('details');
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+
+  const fetchAssetAuditLogs = async (assetId) => {
+    if (!assetId) return;
+    setAuditLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/audit-logs/assets/${assetId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAuditLogs(data.timeline || []);
+      }
+    } catch (err) {
+      console.error('Failed fetching asset audit trail:', err);
+    } finally {
+      setAuditLoading(false);
+    }
+  };
 
   // Edit mode state
   const [isEditing, setIsEditing] = useState(false);
@@ -49,6 +72,7 @@ export default function AssetProfile() {
       
       const data = await res.json();
       setAsset(data);
+      fetchAssetAuditLogs(data.id);
       if (data.imageUrl || data.imageStorageKey) {
         setMediaView('photo');
       } else {
@@ -294,6 +318,13 @@ export default function AssetProfile() {
             <History className="w-4 h-4" />
             Asset Timeline
           </button>
+          <button 
+            onClick={() => setActiveTab('audit')}
+            className={`px-6 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 ${activeTab === 'audit' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+          >
+            <ShieldCheck className="w-4 h-4" />
+            Lifecycle Audit ({auditLogs.length})
+          </button>
         </div>
 
         {activeTab === 'details' ? (
@@ -444,7 +475,11 @@ export default function AssetProfile() {
           </div>
         ) : (
           <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 max-w-3xl mx-auto w-full">
-            <AssetTimeline timeline={timeline} />
+            {activeTab === 'timeline' ? (
+              <AssetTimeline timeline={timeline} />
+            ) : (
+              <AssetAuditTrail auditLogs={auditLogs} loading={auditLoading} />
+            )}
           </div>
         )}
       </div>

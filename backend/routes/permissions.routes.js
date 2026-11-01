@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../prismaClient');
 const { authenticate, authorize } = require('../middleware/auth.middleware');
+const { logAudit } = require('../utils/logger');
 
 // GET /api/permissions
 // Get the entire permission matrix for all roles
@@ -62,19 +63,15 @@ router.put('/:role', authenticate, authorize(['ADMIN']), async (req, res) => {
       create: { role, permissions }
     });
 
-    // Audit log
-    await prisma.auditLog.create({
-      data: {
-        userId: req.user.id,
-        userName: req.user.fullName || req.user.email,
-        userRole: req.user.role,
-        action: 'UPDATE_PERMISSIONS',
-        module: 'Settings',
-        entityType: 'Role',
-        entityId: role,
-        description: `Updated permissions for role ${role}`,
-        ipAddress: req.ip || req.connection.remoteAddress
-      }
+    await logAudit({
+      req,
+      action: 'MODIFY_PERMISSIONS',
+      module: 'PERMISSIONS',
+      entityType: 'ROLE',
+      entityId: role,
+      severity: 'CRITICAL',
+      newValue: permissions,
+      description: `Security role permissions modified for: ${role}`
     });
 
     res.json(updated);

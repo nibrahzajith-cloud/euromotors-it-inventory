@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Plus, Mail, Loader2, AlertCircle, Edit, Trash2, X, Phone, Briefcase, MapPin, MonitorSmartphone, ExternalLink, XSquare, ArrowLeft, Upload, User, Camera, Image as ImageIcon } from 'lucide-react';
+import { Search, Plus, Mail, Loader2, AlertCircle, Edit, Trash2, X, Phone, Briefcase, MapPin, MonitorSmartphone, ExternalLink, XSquare, ArrowLeft, Upload, User, Camera, Image as ImageIcon, History, Tag, ArrowRight, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
@@ -58,6 +58,25 @@ export default function Employees({ defaultOpenAdd = false }) {
 
   // Asset picker modal state
   const [assetPickerModal, setAssetPickerModal] = useState({ open: false, empName: '', assets: [] });
+  const [auditModal, setAuditModal] = useState({ open: false, employee: null, logs: [], loading: false, stats: null });
+
+  const openEmployeeAudit = async (emp) => {
+    setAuditModal({ open: true, employee: emp, logs: [], loading: true, stats: null });
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/audit-logs/employees/${emp.id}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAuditModal({ open: true, employee: emp, logs: data.timeline || [], loading: false, stats: data.stats });
+      } else {
+        setAuditModal(prev => ({ ...prev, loading: false }));
+      }
+    } catch (err) {
+      setAuditModal(prev => ({ ...prev, loading: false }));
+    }
+  };
 
   // Bulk Selection
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -607,6 +626,14 @@ export default function Employees({ defaultOpenAdd = false }) {
                     </td>
                     <td className="px-5 py-4 text-right sticky right-0 bg-white dark:bg-slate-900 z-10 shadow-[-4px_0_6px_rgba(0,0,0,0.04)] group-hover:bg-slate-50/70 dark:group-hover:bg-slate-800/50 transition-colors">
                       <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                        <button 
+                          onClick={() => openEmployeeAudit(emp)} 
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors shadow-sm cursor-pointer" 
+                          title="View Employee Activity History & Audit Trail"
+                        >
+                          <History className="w-3.5 h-3.5 text-blue-500" />
+                          <span className="hidden sm:inline">Audit</span>
+                        </button>
                         {canCreateEdit && (
                           <button 
                             onClick={() => openModal(emp)} 
@@ -948,6 +975,157 @@ export default function Employees({ defaultOpenAdd = false }) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Dedicated Employee Activity History Modal */}
+      {auditModal.open && auditModal.employee && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-[#0e1524] border border-slate-800 rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
+            {/* Header */}
+            <div className="p-5 border-b border-slate-800 bg-[#0a0f1a] flex justify-between items-start">
+              <div className="flex items-center gap-3.5">
+                <div className="w-11 h-11 rounded-full overflow-hidden bg-gradient-to-tr from-blue-600 to-indigo-600 border border-blue-400/30 flex items-center justify-center text-white font-bold text-sm shadow-md shrink-0">
+                  {auditModal.employee.avatarUrl ? (
+                    <img 
+                      src={auditModal.employee.avatarUrl} 
+                      alt={auditModal.employee.fullName} 
+                      className="w-full h-full object-cover" 
+                    />
+                  ) : (
+                    <span>{auditModal.employee.fullName?.split(' ').map(n=>n[0]).slice(0,2).join('').toUpperCase()}</span>
+                  )}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-white">{auditModal.employee.fullName}</h3>
+                    <span className="font-mono text-xs text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded">
+                      {auditModal.employee.employeeCode}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {auditModal.employee.designation || 'Staff'} • {departments.find(d => d.id === auditModal.employee.departmentId)?.name || 'General'}
+                  </p>
+                </div>
+              </div>
+
+              <button 
+                onClick={() => setAuditModal({ open: false, employee: null, logs: [], loading: false, stats: null })}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Sub-header / Metrics */}
+            <div className="grid grid-cols-3 divide-x divide-slate-800 border-b border-slate-800 bg-[#070b12] text-center py-2.5 px-4 text-xs">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">Total Audit Events</span>
+                <span className="text-sm font-bold font-mono text-slate-200">
+                  {auditModal.stats?.totalActions ?? auditModal.logs.length}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">Assets Handled</span>
+                <span className="text-sm font-bold font-mono text-blue-400">
+                  {auditModal.stats?.assetsAssigned ?? 0}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">Profile Modifications</span>
+                <span className="text-sm font-bold font-mono text-emerald-400">
+                  {auditModal.stats?.profileUpdates ?? 0}
+                </span>
+              </div>
+            </div>
+
+            {/* Activity Timeline List */}
+            <div className="p-5 overflow-y-auto space-y-3 flex-1 text-xs">
+              {auditModal.loading ? (
+                <div className="py-16 text-center">
+                  <Loader2 className="w-7 h-7 animate-spin text-blue-500 mx-auto mb-2" />
+                  <p className="text-slate-400 text-xs font-medium">Fetching employee activity timeline...</p>
+                </div>
+              ) : auditModal.logs.length === 0 ? (
+                <div className="py-12 text-center text-slate-500">
+                  <History className="w-10 h-10 text-slate-700 mx-auto mb-2" />
+                  <p className="font-semibold text-slate-300">No activity logs recorded for this employee yet.</p>
+                  <p className="text-[11px] text-slate-500 mt-1">Actions performed by or targeting this employee will appear here.</p>
+                </div>
+              ) : (
+                auditModal.logs.map((log) => {
+                  const d = new Date(log.createdAt);
+                  const slt = d.toLocaleString('en-GB', {
+                    timeZone: 'Asia/Colombo',
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: true
+                  });
+
+                  return (
+                    <div 
+                      key={log.id} 
+                      className="p-3.5 rounded-xl bg-[#070b12] border border-slate-800/80 hover:border-slate-700 transition-colors space-y-2"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                            log.action === 'CREATE' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                            log.action === 'UPDATE' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                            log.action === 'ASSIGN' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
+                            log.action === 'RETURN' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
+                            'bg-slate-800 text-slate-300 border-slate-700'
+                          }`}>
+                            {log.action}
+                          </span>
+                          <span className="text-[10px] font-bold text-slate-500 uppercase">{log.module}</span>
+                        </div>
+                        <span className="font-mono text-[11px] text-slate-400">{slt}</span>
+                      </div>
+
+                      <p className="text-slate-200 text-xs leading-relaxed">{log.description}</p>
+
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800/50 text-[10px] text-slate-400">
+                        <div className="flex items-center gap-2">
+                          <span>Operator: <strong className="text-slate-300">{log.userName || 'System'}</strong></span>
+                          <span>•</span>
+                          <span>IP: <strong className="font-mono text-slate-400">{log.ipAddress || 'Internal'}</strong></span>
+                        </div>
+
+                        {/* Bidirectional Asset Link */}
+                        {(log.entityCode?.startsWith('AST') || log.entityType === 'ASSET') && (
+                          <button
+                            onClick={() => {
+                              setAuditModal({ open: false, employee: null, logs: [], loading: false, stats: null });
+                              navigate(`/assets/${log.entityId || log.entityCode}`);
+                            }}
+                            className="inline-flex items-center gap-1 font-mono text-blue-400 hover:text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 px-2 py-0.5 rounded transition-colors"
+                          >
+                            <Tag className="w-3 h-3 text-blue-400" />
+                            <span>Inspect Asset {log.entityCode || log.entityId}</span>
+                            <ArrowRight className="w-3 h-3 ml-0.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-3.5 border-t border-slate-800 bg-[#0a0f1a] flex justify-end">
+              <button 
+                onClick={() => setAuditModal({ open: false, employee: null, logs: [], loading: false, stats: null })}
+                className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold transition-colors"
+              >
+                Close History
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -4,7 +4,7 @@ const prisma = require('../prismaClient');
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_jwt_key_for_euro_motors';
 
 // Verify Token Middleware
-exports.authenticate = (req, res, next) => {
+exports.authenticate = async (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Authentication token missing or malformed' });
@@ -13,7 +13,22 @@ exports.authenticate = (req, res, next) => {
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded; // Contains id, role, email
+    
+    // Ensure fullName and email are ALWAYS present in req.user
+    if (!decoded.fullName || !decoded.email) {
+      try {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: decoded.id },
+          select: { id: true, fullName: true, email: true, role: true }
+        });
+        req.user = dbUser ? { ...decoded, ...dbUser } : decoded;
+      } catch (dbErr) {
+        req.user = decoded;
+      }
+    } else {
+      req.user = decoded;
+    }
+    
     next();
   } catch (error) {
     return res.status(403).json({ error: 'Invalid or expired token' });

@@ -3,6 +3,7 @@ const router = express.Router();
 const prisma = require('../prismaClient');
 const { authenticate, requirePermission } = require('../middleware/auth.middleware');
 const { generateEmployeeCode } = require('../utils/codeGenerator');
+const { logAudit } = require('../utils/logger');
 
 router.use(authenticate);
 
@@ -70,6 +71,18 @@ router.post('/', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
       timeout: 10000,
       isolationLevel: 'ReadCommitted'
     });
+    await logAudit({
+      req,
+      action: 'CREATE',
+      module: 'EMPLOYEES',
+      entityType: 'EMPLOYEE',
+      entityId: record.id,
+      entityCode: record.employeeCode,
+      employeeOverride: { id: record.id, fullName: record.fullName, departmentName: record.department?.name },
+      newValue: record,
+      description: `Registered employee: ${record.fullName} (${record.employeeCode})`
+    });
+
     res.status(201).json(record);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -78,6 +91,12 @@ router.post('/', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
 
 router.put('/:id', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
   try {
+    const oldRecord = await prisma.employee.findUnique({
+      where: { id: req.params.id },
+      include: { department: true, location: true }
+    });
+    if (!oldRecord) return res.status(404).json({ error: 'Employee not found' });
+
     const record = await prisma.employee.update({ 
       where: { id: req.params.id }, 
       data: req.body,
@@ -88,6 +107,20 @@ router.put('/:id', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
         assignments: { where: { status: 'ACTIVE' } }
       }
     });
+
+    await logAudit({
+      req,
+      action: 'UPDATE',
+      module: 'EMPLOYEES',
+      entityType: 'EMPLOYEE',
+      entityId: record.id,
+      entityCode: record.employeeCode,
+      employeeOverride: { id: record.id, fullName: record.fullName, departmentName: record.department?.name },
+      oldValue: oldRecord,
+      newValue: record,
+      description: `Updated employee profile: ${record.fullName} (${record.employeeCode})`
+    });
+
     res.json(record);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -97,7 +130,9 @@ router.put('/:id', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
 // Only Admin can delete
 router.delete('/:id', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
   try {
-    // Manual cascade delete
+    const targetEmp = await prisma.employee.findUnique({ where: { id: req.params.id } });
+    if (!targetEmp) return res.status(404).json({ error: 'Employee not found' });
+
     await prisma.$transaction([
       prisma.asset.updateMany({
         where: { assignedEmployeeId: req.params.id },
@@ -107,6 +142,20 @@ router.delete('/:id', requirePermission('MANAGE_EMPLOYEES'), async (req, res) =>
       prisma.supportTicket.deleteMany({ where: { employeeId: req.params.id } }),
       prisma.employee.delete({ where: { id: req.params.id } })
     ]);
+
+    await logAudit({
+      req,
+      action: 'DELETE',
+      module: 'EMPLOYEES',
+      entityType: 'EMPLOYEE',
+      entityId: req.params.id,
+      entityCode: targetEmp.employeeCode,
+      employeeOverride: { id: targetEmp.id, fullName: targetEmp.fullName },
+      oldValue: targetEmp,
+      severity: 'WARNING',
+      description: `Deleted employee profile: ${targetEmp.fullName} (${targetEmp.employeeCode})`
+    });
+
     res.json({ message: 'Deleted' });
   } catch (err) {
     res.status(500).json({ error: err.message });

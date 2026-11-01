@@ -92,3 +92,4 @@ backupDatabase().catch(err => {
   console.error('Database backup failed:', err);
   process.exit(1);
 });
+

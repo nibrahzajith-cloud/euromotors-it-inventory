@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../prismaClient');
 const { authenticate, requirePermission } = require('../middleware/auth.middleware');
+const { logAudit } = require('../utils/logger');
 
 router.use(authenticate);
 
@@ -45,6 +46,15 @@ router.get('/', async (req, res) => {
 router.post('/', requirePermission('MANAGE_LOCATIONS'), async (req, res) => {
   try {
     const record = await prisma.location.create({ data: req.body });
+    await logAudit({
+      req,
+      action: 'CREATE',
+      module: 'LOCATIONS',
+      entityType: 'LOCATION',
+      entityId: record.id,
+      newValue: record,
+      description: `Created facility location: ${record.name}`
+    });
     res.status(201).json(record);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -53,7 +63,18 @@ router.post('/', requirePermission('MANAGE_LOCATIONS'), async (req, res) => {
 
 router.put('/:id', requirePermission('MANAGE_LOCATIONS'), async (req, res) => {
   try {
+    const oldRecord = await prisma.location.findUnique({ where: { id: req.params.id } });
     const record = await prisma.location.update({ where: { id: req.params.id }, data: req.body });
+    await logAudit({
+      req,
+      action: 'UPDATE',
+      module: 'LOCATIONS',
+      entityType: 'LOCATION',
+      entityId: record.id,
+      oldValue: oldRecord,
+      newValue: record,
+      description: `Updated facility location: ${record.name}`
+    });
     res.json(record);
   } catch (err) {
     res.status(500).json({ error: err.message });
