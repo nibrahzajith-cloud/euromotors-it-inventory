@@ -20,7 +20,7 @@ export default function AssetProfile() {
   const { id: assetCode } = useParams();
   const { showToast } = useToast();
   const [asset, setAsset] = useState(null);
-  const [timeline, setTimeline] = useState([]);  /* The system have been design for the comuter */
+  const [timeline, setTimeline] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('details');
