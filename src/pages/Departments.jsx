@@ -71,6 +71,7 @@ export default function Departments() {
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDept, setEditingDept] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({ name: '', description: '', status: 'ACTIVE' });
 
   const fetchDepartments = async () => {
@@ -113,7 +114,10 @@ export default function Departments() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (submitting) return;
+
     try {
+      setSubmitting(true);
       const token = localStorage.getItem('token');
       const url = editingDept 
         ? `${API_URL}/departments/${editingDept.id}` 
@@ -134,11 +138,20 @@ export default function Departments() {
         throw new Error(errorData.error || 'Failed to save department');
       }
 
-      await fetchDepartments();
-      showToast('Department successfully bound to organizational matrix.', 'success');
+      const saved = await res.json();
+      if (editingDept) {
+        setDepartments(prev => prev.map(d => d.id === saved.id ? { ...d, ...saved } : d));
+      } else {
+        setDepartments(prev => [saved, ...prev]);
+      }
+
+      showToast(editingDept ? 'Department updated successfully.' : 'Department created successfully.', 'success');
       closeModal();
+      fetchDepartments();
     } catch (err) {
       showToast(err.message, 'error');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -275,50 +288,57 @@ export default function Departments() {
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-          <div className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden">
-            <div className="flex justify-between items-center p-5 border-b border-slate-100">
-              <h3 className="font-bold text-lg text-slate-800 dark:text-white">{editingDept ? 'Edit' : 'Add'} Department</h3>
-              <button onClick={closeModal} className="text-slate-400 hover:text-slate-600 rounded-lg p-1 hover:bg-slate-100">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-hidden">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-md rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-150">
+            <div className="shrink-0 flex justify-between items-center p-5 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
+              <h3 className="font-bold text-lg text-slate-900 dark:text-white">{editingDept ? 'Edit' : 'Add'} Department</h3>
+              <button onClick={closeModal} disabled={submitting} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg p-1 hover:bg-slate-100 dark:hover:bg-slate-800">
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <form onSubmit={handleSubmit} className="p-5 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Department Name *</label>
-                <input 
-                  required
-                  type="text" 
-                  value={formData.name} 
-                  onChange={e => setFormData({...formData, name: e.target.value})}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 p-2.5 outline-none transition-all placeholder:text-slate-400"
-                  placeholder="e.g. Sales"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
-                <textarea 
-                  value={formData.description} 
-                  onChange={e => setFormData({...formData, description: e.target.value})}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 p-2.5 outline-none transition-all placeholder:text-slate-400 min-h-[100px] resize-none"
-                  placeholder="Brief overview of department functions"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Status</label>
-                <select 
-                  value={formData.status} 
-                  onChange={e => setFormData({...formData, status: e.target.value})}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 p-2.5 outline-none transition-all"
-                >
-                  <option value="ACTIVE">Active</option>
-                  <option value="INACTIVE">Inactive</option>
-                </select>
+            <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+              <div className="p-5 space-y-4 overflow-y-auto flex-1">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Department Name *</label>
+                  <input 
+                    required
+                    type="text" 
+                    value={formData.name} 
+                    onChange={e => setFormData({...formData, name: e.target.value})}
+                    disabled={submitting}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-xl focus:ring-2 focus:ring-blue-500 p-2.5 outline-none transition-all placeholder:text-slate-400"
+                    placeholder="e.g. Sales"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Description</label>
+                  <textarea 
+                    value={formData.description} 
+                    onChange={e => setFormData({...formData, description: e.target.value})}
+                    disabled={submitting}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-xl focus:ring-2 focus:ring-blue-500 p-2.5 outline-none transition-all placeholder:text-slate-400 min-h-[100px] resize-none"
+                    placeholder="Brief overview of department functions"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Status</label>
+                  <select 
+                    value={formData.status} 
+                    onChange={e => setFormData({...formData, status: e.target.value})}
+                    disabled={submitting}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-xl focus:ring-2 focus:ring-blue-500 p-2.5 outline-none transition-all"
+                  >
+                    <option value="ACTIVE">Active</option>
+                    <option value="INACTIVE">Inactive</option>
+                  </select>
+                </div>
               </div>
               
-              <div className="pt-4 flex justify-end gap-3 flex-wrap">
-                <button type="button" onClick={closeModal} className="px-4 py-2 font-medium text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50">Cancel</button>
-                <button type="submit" className="px-4 py-2 font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 shadow-sm">{editingDept ? 'Save Changes' : 'Create Department'}</button>
+              <div className="shrink-0 p-5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/90 flex justify-end gap-3 flex-wrap">
+                <button type="button" onClick={closeModal} disabled={submitting} className="px-4 py-2 font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-750 disabled:opacity-50">Cancel</button>
+                <button type="submit" disabled={submitting} className="inline-flex items-center gap-2 px-5 py-2 font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
+                  {submitting ? 'Saving...' : (editingDept ? 'Save Changes' : 'Create Department')}
+                </button>
               </div>
             </form>
           </div>

@@ -132,7 +132,7 @@ router.put('/:id', requirePermission('ASSIGN_ASSETS'), async (req, res) => {
     if(req.body.status === 'RETURNED' && oldAssignment.status !== 'RETURNED') {
        await prisma.asset.update({
           where: { id: record.assetId },
-          data: { status: 'AVAILABLE', assignedEmployeeId: null }
+          data: { status: 'AVAILABLE', assignedEmployeeId: null, assignmentType: 'STORE' }
        });
 
        // Log Audit
@@ -179,7 +179,7 @@ router.delete('/:id', requirePermission('ASSIGN_ASSETS'), async (req, res) => {
     if (record.status === 'ACTIVE') {
        await prisma.asset.update({
           where: { id: record.assetId },
-          data: { status: 'AVAILABLE', assignedEmployeeId: null }
+          data: { status: 'AVAILABLE', assignedEmployeeId: null, assignmentType: 'STORE' }
        });
     }
     

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Filter, Download, Eye, Edit, Trash2, Loader2, AlertCircle, FileText, CheckSquare, XSquare, Image as ImageIcon } from 'lucide-react';
+import { Search, Filter, Download, Eye, Edit, Trash2, Loader2, AlertCircle, FileText, CheckSquare, XSquare, Image as ImageIcon, ArrowLeft } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -297,9 +297,24 @@ export default function Assets() {
   return (
     <div className="space-y-6 relative pb-24">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Assets Management</h1>
-          <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">View, track, and manage all cross-departmental IT assets.</p>
+        <div className="flex items-center gap-3.5">
+          <button
+            onClick={() => {
+              if (window.history.length > 1) {
+                navigate(-1);
+              } else {
+                navigate('/');
+              }
+            }}
+            className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-blue-600 dark:hover:text-blue-400 transition-all shadow-sm flex items-center justify-center shrink-0 group mr-1"
+            title="Back to Dashboard"
+          >
+            <ArrowLeft className="w-5 h-5 group-hover:-translate-x-0.5 transition-transform" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Assets Management</h1>
+            <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">View, track, and manage all cross-departmental IT assets.</p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <div className="relative">

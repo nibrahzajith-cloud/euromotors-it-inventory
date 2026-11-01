@@ -74,7 +74,11 @@ router.post('/', requirePermission('CREATE_ASSETS'), async (req, res) => {
     }
     
     // AssignmentType Validation
-    const aType = payload.assignmentType || 'EMPLOYEE';
+    let aType = payload.assignmentType;
+    if (!aType) {
+      aType = (!payload.assignedEmployeeId && (payload.status === 'AVAILABLE' || !payload.status)) ? 'STORE' : 'EMPLOYEE';
+      payload.assignmentType = aType;
+    }
     if (aType === 'DEPARTMENT') {
       if (!payload.departmentId) return res.status(400).json({ error: 'Department is mandatory for DEPARTMENT assignment type.' });
       payload.assignedEmployeeId = null;
@@ -670,6 +674,9 @@ router.put('/:id', requirePermission('EDIT_ASSETS'), async (req, res) => {
       }
     }
 
+    if (payload.status === 'AVAILABLE' && !payload.assignedEmployeeId && (!payload.assignmentType || payload.assignmentType === 'EMPLOYEE')) {
+      payload.assignmentType = 'STORE';
+    }
     const aType = payload.assignmentType || oldRecord.assignmentType;
     
     if (aType === 'DEPARTMENT') {

@@ -75,6 +75,7 @@ const AppRoutes = () => {
         <Route path="assets/:id" element={<AssetProfile />} />
         
         <Route path="employees" element={<Employees />} />
+        <Route path="employees/add" element={<Employees defaultOpenAdd={true} />} />
         <Route path="departments" element={<Departments />} />
         <Route path="locations" element={<Locations />} />
         

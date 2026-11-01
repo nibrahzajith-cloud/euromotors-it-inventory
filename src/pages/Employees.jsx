@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
-import { Search, Plus, Mail, Loader2, AlertCircle, Edit, Trash2, X, Phone, Briefcase, MapPin, MonitorSmartphone, ExternalLink, XSquare } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Search, Plus, Mail, Loader2, AlertCircle, Edit, Trash2, X, Phone, Briefcase, MapPin, MonitorSmartphone, ExternalLink, XSquare, ArrowLeft, Upload, User, Camera, Image as ImageIcon } from 'lucide-react';
+import imageCompression from 'browser-image-compression';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
@@ -9,11 +10,12 @@ import { useConfirm } from '../context/ConfirmContext';
 const _rawApi = import.meta.env.VITE_API_URL || '/api';
 const API_URL = _rawApi.endsWith('/api') ? _rawApi : `${_rawApi.replace(/\/$/, '')}/api`;
 
-export default function Employees() {
+export default function Employees({ defaultOpenAdd = false }) {
   const { user } = useAuth();
   const { showToast } = useToast();
   const { confirm } = useConfirm();
   const navigate = useNavigate();
+  const location = useLocation();
   
   const [employees, setEmployees] = useState(() => {
     try {
@@ -60,12 +62,16 @@ export default function Employees() {
   // Bulk Selection
   const [selectedIds, setSelectedIds] = useState(new Set());
 
-  const canCreateEdit = user?.role === 'ADMIN' || user?.role === 'IT_OFFICER';
-  const canDelete = user?.role === 'ADMIN';
+  const userRole = (user?.role || '').toUpperCase();
+  const canCreateEdit = !userRole || userRole === 'ADMIN' || userRole === 'IT_OFFICER' || user?.permissions?.MANAGE_EMPLOYEES !== false;
+  const canDelete = !userRole || userRole === 'ADMIN' || user?.permissions?.MANAGE_EMPLOYEES !== false;
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEmp, setEditingEmp] = useState(null);
+  const avatarInputRef = useRef(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     employeeCode: '',
     fullName: '',
@@ -74,7 +80,8 @@ export default function Employees() {
     phone: '',
     departmentId: '',
     locationId: '',
-    status: 'ACTIVE'
+    status: 'ACTIVE',
+    avatarUrl: ''
   });
 
   const fetchData = async () => {
@@ -122,14 +129,19 @@ export default function Employees() {
     fetchData();
   }, []);
 
-  // Initialize filters from URL
+  // Initialize filters and action from URL
   useEffect(() => {
     const locId = searchParams.get('locationId');
     const deptId = searchParams.get('departmentId');
+    const action = searchParams.get('action');
 
     if (locId) setLocationFilter(locId);
     if (deptId) setDepartmentFilter(deptId);
-  }, [searchParams]);
+
+    if (defaultOpenAdd || action === 'add' || location.pathname.endsWith('/add')) {
+      openModal();
+    }
+  }, [searchParams, defaultOpenAdd, location.pathname]);
 
   const openModal = (emp = null) => {
     if (emp) {
@@ -142,7 +154,8 @@ export default function Employees() {
         phone: emp.phone || '',
         departmentId: emp.departmentId || '',
         locationId: emp.locationId || '',
-        status: emp.status || 'ACTIVE'
+        status: emp.status || 'ACTIVE',
+        avatarUrl: emp.avatarUrl || ''
       });
     } else {
       setEditingEmp(null);
@@ -154,20 +167,88 @@ export default function Employees() {
         phone: '',
         departmentId: departments.length > 0 ? departments[0].id : '',
         locationId: locations.length > 0 ? locations[0].id : '',
-        status: 'ACTIVE'
+        status: 'ACTIVE',
+    avatarUrl: ''
       });
     }
     setIsModalOpen(true);
   };
 
   const closeModal = () => {
+    if (submitting) return;
     setIsModalOpen(false);
     setEditingEmp(null);
+    if (searchParams.get('action') === 'add' || location.pathname.endsWith('/add')) {
+      navigate('/employees', { replace: true });
+    }
   };
+
+  const handleAvatarSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setUploadingAvatar(true);
+      let compressedFile = file;
+      try {
+        compressedFile = await imageCompression(file, {
+          maxSizeMB: 0.3,
+          maxWidthOrHeight: 400,
+          useWebWorker: false,
+          fileType: 'image/webp',
+          initialQuality: 0.85
+        });
+      } catch (cErr) {
+        console.warn('Image compression skipped:', cErr);
+      }
+
+      const token = localStorage.getItem('token');
+      const avatarFormData = new FormData();
+      avatarFormData.append('avatar', new File([compressedFile], `avatar_${Date.now()}.webp`, { type: 'image/webp' }));
+
+      let uploadedUrl = null;
+      try {
+        const uploadRes = await fetch(`${API_URL}/uploads/avatar`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: avatarFormData
+        });
+        if (uploadRes.ok) {
+          const resData = await uploadRes.json();
+          uploadedUrl = resData.url;
+        }
+      } catch (uErr) {
+        console.warn('Backend avatar upload endpoint unreachable:', uErr);
+      }
+
+      if (!uploadedUrl) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setFormData(prev => ({ ...prev, avatarUrl: reader.result }));
+          setUploadingAvatar(false);
+          showToast('Profile photo attached!', 'success');
+        };
+        reader.readAsDataURL(compressedFile);
+        return;
+      }
+
+      setFormData(prev => ({ ...prev, avatarUrl: uploadedUrl }));
+      showToast('Profile photo uploaded successfully!', 'success');
+    } catch (err) {
+      showToast(err.message || 'Failed to process avatar', 'error');
+    } finally {
+      setUploadingAvatar(false);
+      if (avatarInputRef.current) avatarInputRef.current.value = '';
+    }
+  };
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (submitting || uploadingAvatar) return;
+
     try {
+      setSubmitting(true);
       const token = localStorage.getItem('token');
       const url = editingEmp 
         ? `${API_URL}/employees/${editingEmp.id}` 
@@ -182,8 +263,9 @@ export default function Employees() {
         },
         body: JSON.stringify({
           ...formData,
-          email: formData.email.trim() === '' ? null : formData.email,
-          phone: formData.phone.trim() === '' ? null : formData.phone
+          email: formData.email?.trim() === '' ? null : formData.email?.trim(),
+          phone: formData.phone?.trim() === '' ? null : formData.phone?.trim(),
+          avatarUrl: formData.avatarUrl ? formData.avatarUrl.trim() : null
         })
       });
 
@@ -192,11 +274,32 @@ export default function Employees() {
         throw new Error(errorData.error || 'Failed to save employee');
       }
 
-      await fetchData();
-      showToast('Employee successfully saved to registry.', 'success');
+      const savedEmp = await res.json();
+
+      // Immediately update local cache and state with zero lag
+      if (editingEmp) {
+        setEmployees(prev => {
+          const updated = prev.map(emp => emp.id === savedEmp.id ? { ...emp, ...savedEmp } : emp);
+          try { localStorage.setItem('employeesCache', JSON.stringify(updated)); } catch (e) {}
+          return updated;
+        });
+      } else {
+        setEmployees(prev => {
+          const updated = [savedEmp, ...prev];
+          try { localStorage.setItem('employeesCache', JSON.stringify(updated)); } catch (e) {}
+          return updated;
+        });
+      }
+
+      showToast(editingEmp ? 'Employee profile updated!' : 'Employee registered successfully!', 'success');
       closeModal();
+
+      // Background sync to ensure fresh relation metrics
+      fetchData();
     } catch (err) {
       showToast(err.message, 'error');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -347,9 +450,24 @@ export default function Employees() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Employees</h1>
-          <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">Manage employee records and view their assigned assets.</p>
+        <div className="flex items-center gap-3.5">
+          <button
+            onClick={() => {
+              if (window.history.length > 1) {
+                navigate(-1);
+              } else {
+                navigate('/');
+              }
+            }}
+            className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-blue-600 dark:hover:text-blue-400 transition-all shadow-sm flex items-center justify-center shrink-0 group mr-1"
+            title="Back to Dashboard"
+          >
+            <ArrowLeft className="w-5 h-5 group-hover:-translate-x-0.5 transition-transform" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Employees</h1>
+            <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">Manage employee records and view their assigned assets.</p>
+          </div>
         </div>
         {canCreateEdit && (
           <button 
@@ -403,7 +521,7 @@ export default function Employees() {
                 <th className="px-5 py-4">Base Location</th>
                 <th className="px-5 py-4 text-center">Status</th>
                 <th className="px-5 py-4 text-center">Assigned Assets</th>
-                <th className="px-5 py-4 text-right">Actions</th>
+                <th className="px-5 py-4 text-right sticky right-0 bg-slate-50 dark:bg-slate-800 z-10 shadow-[-4px_0_6px_rgba(0,0,0,0.04)]">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
@@ -418,8 +536,12 @@ export default function Employees() {
                 const loc = locations.find(l => l.id === emp.locationId);
                 
                 return (
-                  <tr key={emp.id} className={`hover:bg-slate-50/70 dark:hover:bg-slate-800/50 transition-colors ${selectedIds.has(emp.id) ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}>
-                    <td className="px-5 py-4 w-12">
+                  <tr 
+                    key={emp.id} 
+                    onClick={() => openModal(emp)}
+                    className={`hover:bg-slate-50/70 dark:hover:bg-slate-800/50 transition-colors cursor-pointer group ${selectedIds.has(emp.id) ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}
+                  >
+                    <td className="px-5 py-4 w-12" onClick={(e) => e.stopPropagation()}>
                       <input 
                         type="checkbox" 
                         checked={selectedIds.has(emp.id)}
@@ -428,10 +550,26 @@ export default function Employees() {
                       />
                     </td>
                     <td className="px-5 py-4">
-                      <div className="flex flex-col">
-                        <span className="font-bold text-slate-800 dark:text-white">{emp.fullName}</span>
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-tr from-blue-100 to-indigo-100 dark:from-slate-700 dark:to-slate-800 border border-slate-200 dark:border-slate-600 shrink-0 flex items-center justify-center font-bold text-xs text-blue-600 dark:text-blue-400 shadow-sm">
+                          {emp.avatarUrl ? (
+                            <img 
+                              src={emp.avatarUrl} 
+                              alt={emp.fullName} 
+                              className="w-full h-full object-cover"
+                              onError={(e) => { 
+                                e.target.style.display = 'none'; 
+                              }}
+                            />
+                          ) : (
+                            <span>{emp.fullName?.split(' ').map(n=>n[0]).slice(0,2).join('').toUpperCase() || 'EM'}</span>
+                          )}
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="font-bold text-slate-800 dark:text-white">{emp.fullName}</span>
                         <span className="text-xs font-mono text-slate-500 mt-1">{emp.employeeCode}</span>
-                        {emp.email && <span className="text-xs text-slate-500 flex items-center gap-1 mt-0.5"><Mail className="w-3 h-3"/> {emp.email}</span>}
+                          {emp.email && <span className="text-xs text-slate-500 flex items-center gap-1 mt-0.5"><Mail className="w-3 h-3"/> {emp.email}</span>}
+                        </div>
                       </div>
                     </td>
                     <td className="px-5 py-4">
@@ -454,7 +592,7 @@ export default function Employees() {
                         const count = assigned.length;
                         return (
                           <button
-                            onClick={() => handleAssetBadgeClick(emp)}
+                            onClick={(e) => { e.stopPropagation(); handleAssetBadgeClick(emp); }}
                             title={count === 0 ? 'No assets assigned' : `View ${count} assigned asset${count > 1 ? 's' : ''}`}
                             className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold text-xs shadow-sm border transition-all duration-200
                               ${count === 0
@@ -467,16 +605,27 @@ export default function Employees() {
                         );
                       })()}
                     </td>
-                    <td className="px-5 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
+                    <td className="px-5 py-4 text-right sticky right-0 bg-white dark:bg-slate-900 z-10 shadow-[-4px_0_6px_rgba(0,0,0,0.04)] group-hover:bg-slate-50/70 dark:group-hover:bg-slate-800/50 transition-colors">
+                      <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                         {canCreateEdit && (
-                          <button onClick={() => openModal(emp)} className="p-1.5 text-slate-400 hover:text-blue-600 rounded-md hover:bg-slate-100 transition-colors" title="Edit Employee">
-                            <Edit className="w-4 h-4" />
+                          <button 
+                            onClick={() => openModal(emp)} 
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400 transition-colors shadow-sm cursor-pointer" 
+                            title="Edit Employee"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                            <span>Edit</span>
                           </button>
                         )}
-                        <button onClick={() => handleDelete(emp.id)} className="p-1.5 text-slate-400 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors" title="Delete Employee">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {canDelete && (
+                          <button 
+                            onClick={() => handleDelete(emp.id)} 
+                            className="p-1.5 text-slate-400 hover:text-red-600 rounded-md hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors cursor-pointer" 
+                            title="Delete Employee"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                         {!canCreateEdit && <span className="text-xs text-slate-400 dark:text-slate-500">View Only</span>}
                       </div>
                     </td>
@@ -489,111 +638,214 @@ export default function Employees() {
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-xl my-8 relative">
-            <div className="sticky top-0 bg-white z-10 flex justify-between items-center p-5 border-b border-slate-100 rounded-t-2xl">
-              <h3 className="font-bold text-lg text-slate-800 dark:text-white">{editingEmp ? 'Edit' : 'Add'} Employee</h3>
-              <button type="button" onClick={closeModal} className="text-slate-400 hover:text-slate-600 rounded-lg p-1 hover:bg-slate-100">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 sm:p-4 md:p-6 overflow-hidden">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="shrink-0 flex justify-between items-center px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
+              <div>
+                <h3 className="font-bold text-lg text-slate-900 dark:text-white">
+                  {editingEmp ? 'Edit Employee Profile' : 'Add New Employee'}
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  {editingEmp ? 'Update employee information and profile photo' : 'Fill in details to register a new employee into the system'}
+                </p>
+              </div>
+              <button 
+                type="button" 
+                onClick={closeModal} 
+                disabled={submitting}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
             
-            <form onSubmit={handleSubmit} className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Employee Code</label>
-                  <input 
-                    type="text" value={formData.employeeCode} readOnly
-                    placeholder="Auto-generated upon save"
-                    className="w-full bg-slate-100 border border-slate-200 text-slate-500 rounded-xl px-4 py-2.5 outline-none font-mono cursor-not-allowed"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Full Name *</label>
-                  <input 
-                    required type="text" value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})}
-                    placeholder="John Doe"
-                    className="w-full bg-slate-50 border border-slate-200 text-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 p-2.5 outline-none transition-all placeholder:text-slate-400"
-                  />
-                </div>
+            {/* Scrollable Form Body */}
+            <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+              <div className="p-6 overflow-y-auto flex-1">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  {/* Profile Picture Upload */}
+                  <div className="md:col-span-2 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 flex flex-col sm:flex-row items-center gap-4">
+                    <div className="relative group shrink-0">
+                      <div className="w-20 h-20 rounded-full overflow-hidden bg-white dark:bg-slate-700 border-2 border-slate-200 dark:border-slate-600 shadow-sm flex items-center justify-center">
+                        {formData.avatarUrl ? (
+                          <img 
+                            src={formData.avatarUrl} 
+                            alt="Avatar preview" 
+                            className="w-full h-full object-cover"
+                            onError={(e) => { e.target.style.display = 'none'; }}
+                          />
+                        ) : (
+                          <User className="w-9 h-9 text-slate-400 dark:text-slate-500" />
+                        )}
+                      </div>
+                      {uploadingAvatar && (
+                        <div className="absolute inset-0 bg-white/70 dark:bg-slate-900/70 rounded-full flex items-center justify-center">
+                          <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
+                        </div>
+                      )}
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Email Address</label>
-                  <div className="relative">
-                    <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <div className="flex-1 text-center sm:text-left">
+                      <label className="block text-sm font-semibold text-slate-900 dark:text-white">Profile Photo</label>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Upload a picture for employee profile (JPEG, PNG, or WEBP, max 5MB)</p>
+                      
+                      <input 
+                        type="file" 
+                        ref={avatarInputRef} 
+                        onChange={handleAvatarSelect} 
+                        accept="image/png,image/jpeg,image/webp" 
+                        className="hidden" 
+                      />
+
+                      <div className="flex items-center justify-center sm:justify-start gap-2.5 mt-2.5">
+                        <button 
+                          type="button" 
+                          onClick={() => avatarInputRef.current?.click()}
+                          disabled={uploadingAvatar || submitting}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/40 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                        >
+                          <Camera className="w-3.5 h-3.5" />
+                          {formData.avatarUrl ? 'Change Photo' : 'Upload Photo'}
+                        </button>
+
+                        {formData.avatarUrl && (
+                          <button 
+                            type="button" 
+                            onClick={() => setFormData(prev => ({ ...prev, avatarUrl: '' }))}
+                            disabled={uploadingAvatar || submitting}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 dark:bg-red-900/30 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Employee Code</label>
                     <input 
-                      type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})}
-                      placeholder="john.doe@euromotors.com"
-                      className="w-full bg-slate-50 border border-slate-200 text-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 pl-9 p-2.5 outline-none transition-all placeholder:text-slate-400"
+                      type="text" value={formData.employeeCode} readOnly
+                      placeholder="Auto-generated upon save"
+                      className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 rounded-xl px-4 py-2.5 outline-none font-mono cursor-not-allowed"
                     />
                   </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Phone Number</label>
-                  <div className="relative">
-                    <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Full Name *</label>
                     <input 
-                      type="tel" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})}
-                      placeholder="+1 (555) 000-0000"
-                      className="w-full bg-slate-50 border border-slate-200 text-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 pl-9 p-2.5 outline-none transition-all placeholder:text-slate-400"
+                      required type="text" value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})}
+                      placeholder="John Doe"
+                      disabled={submitting}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-xl focus:ring-2 focus:ring-blue-500 p-2.5 outline-none transition-all placeholder:text-slate-400"
                     />
                   </div>
-                </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Designation *</label>
-                  <input 
-                    required type="text" value={formData.designation} onChange={e => setFormData({...formData, designation: e.target.value})}
-                    placeholder="e.g. Senior Developer"
-                    className="w-full bg-slate-50 border border-slate-200 text-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 p-2.5 outline-none transition-all placeholder:text-slate-400"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Status</label>
-                  <select 
-                    value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})}
-                    className="w-full bg-slate-50 border border-slate-200 text-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 p-2.5 outline-none transition-all"
-                  >
-                    <option value="ACTIVE">Active</option>
-                    <option value="INACTIVE">Inactive / Former</option>
-                  </select>
-                </div>
-
-                <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-5 pt-4 border-t border-slate-100">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Department assignment *</label>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Email Address</label>
+                    <div className="relative">
+                      <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input 
+                        type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})}
+                        placeholder="john.doe@euromotors.com"
+                        disabled={submitting}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-xl focus:ring-2 focus:ring-blue-500 pl-9 p-2.5 outline-none transition-all placeholder:text-slate-400"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Phone Number</label>
+                    <div className="relative">
+                      <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input 
+                        type="tel" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})}
+                        placeholder="+1 (555) 000-0000"
+                        disabled={submitting}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-xl focus:ring-2 focus:ring-blue-500 pl-9 p-2.5 outline-none transition-all placeholder:text-slate-400"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Designation *</label>
+                    <input 
+                      required type="text" value={formData.designation} onChange={e => setFormData({...formData, designation: e.target.value})}
+                      placeholder="e.g. Senior Developer"
+                      disabled={submitting}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-xl focus:ring-2 focus:ring-blue-500 p-2.5 outline-none transition-all placeholder:text-slate-400"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Status</label>
                     <select 
-                      required value={formData.departmentId} onChange={e => setFormData({...formData, departmentId: e.target.value})}
-                      className="w-full bg-slate-50 border border-slate-200 text-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 p-2.5 outline-none transition-all"
+                      value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})}
+                      disabled={submitting}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-xl focus:ring-2 focus:ring-blue-500 p-2.5 outline-none transition-all"
                     >
-                      <option value="" disabled>Select Department...</option>
-                      {departments.map(dept => (
-                        <option key={dept.id} value={dept.id}>{dept.name}</option>
-                      ))}
+                      <option value="ACTIVE">Active</option>
+                      <option value="INACTIVE">Inactive / Former</option>
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Base Location *</label>
-                    <select 
-                      required value={formData.locationId} onChange={e => setFormData({...formData, locationId: e.target.value})}
-                      className="w-full bg-slate-50 border border-slate-200 text-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 p-2.5 outline-none transition-all"
-                    >
-                      <option value="" disabled>Select Location...</option>
-                      {locations.map(loc => (
-                        <option key={loc.id} value={loc.id}>{loc.name}</option>
-                      ))}
-                    </select>
+
+                  <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-5 pt-4 border-t border-slate-100 dark:border-slate-800">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Department assignment *</label>
+                      <select 
+                        required value={formData.departmentId} onChange={e => setFormData({...formData, departmentId: e.target.value})}
+                        disabled={submitting}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-xl focus:ring-2 focus:ring-blue-500 p-2.5 outline-none transition-all"
+                      >
+                        <option value="" disabled>Select Department...</option>
+                        {departments.map(dept => (
+                          <option key={dept.id} value={dept.id}>{dept.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Base Location *</label>
+                      <select 
+                        required value={formData.locationId} onChange={e => setFormData({...formData, locationId: e.target.value})}
+                        disabled={submitting}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-xl focus:ring-2 focus:ring-blue-500 p-2.5 outline-none transition-all"
+                      >
+                        <option value="" disabled>Select Location...</option>
+                        {locations.map(loc => (
+                          <option key={loc.id} value={loc.id}>{loc.name}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <div className="pt-8 flex justify-end gap-3 flex-wrap">
-                <button type="button" onClick={closeModal} className="px-5 py-2.5 font-medium text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50">Cancel</button>
-                <button type="submit" className="px-5 py-2.5 font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 shadow-sm shadow-blue-600/20">{editingEmp ? 'Save Employee Profile' : 'Register Employee'}</button>
+              {/* Fixed Footer */}
+              <div className="shrink-0 px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/90 flex justify-end gap-3 flex-wrap">
+                <button 
+                  type="button" 
+                  onClick={closeModal} 
+                  disabled={submitting}
+                  className="px-5 py-2.5 font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={submitting || uploadingAvatar}
+                  className="inline-flex items-center gap-2 px-6 py-2.5 font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 shadow-sm shadow-blue-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer active:scale-95"
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <span>{editingEmp ? 'Save Employee Profile' : 'Register Employee'}</span>
+                  )}
+                </button>
               </div>
             </form>
           </div>
@@ -611,7 +863,7 @@ export default function Employees() {
           >
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50">
-              <div>
+              <div className="flex items-center gap-3.5">
                 <h3 className="font-bold text-slate-800 dark:text-white text-sm">Assigned Assets</h3>
                 <p className="text-xs text-slate-500 mt-0.5">{assetPickerModal.empName} · {assetPickerModal.assets.length} assets</p>
               </div>

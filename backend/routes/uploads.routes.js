@@ -4,7 +4,7 @@ const router = express.Router();
 const prisma = require('../prismaClient');
 const { authenticate, requirePermission } = require('../middleware/auth.middleware');
 const { uploadImageMiddleware, uploadGalleryMiddleware, uploadDocumentMiddleware } = require('../middleware/upload.middleware');
-const { uploadFile, deleteFile, getPresignedUrl, getR2StorageStats } = require('../utils/s3Client');
+const { uploadFile, deleteFile, getPresignedUrl, getR2StorageStats, isR2Configured, getLocalFilePath } = require('../utils/s3Client');
 
 function storageErrorResponse(res, error, fallbackMessage) {
     if (error?.code === 'R2_NOT_CONFIGURED') {
@@ -38,6 +38,57 @@ router.get('/local/:key', (req, res) => {
         res.download(filePath, req.query.download);
     } else {
         res.sendFile(filePath);
+    }
+});
+
+// -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// EMPLOYEE AVATAR ROUTES
+// -----------------------------------------------------------------------------
+
+router.post('/avatar', authenticate, uploadImageMiddleware.single('avatar'), async (req, res) => {
+    try {
+        const file = req.file;
+        if (!file) return res.status(400).json({ error: 'Avatar image file is required' });
+
+        const timestamp = Date.now();
+        const extensionByMime = {
+            'image/jpeg': 'jpg',
+            'image/png': 'png',
+            'image/webp': 'webp'
+        };
+        const ext = extensionByMime[file.mimetype] || 'webp';
+        const filename = `emp_${timestamp}_${randomUUID().slice(0, 8)}.${ext}`;
+        const key = `avatars/${filename}`;
+
+        await uploadFile(file.buffer, key, file.mimetype);
+
+        const url = `/api/uploads/avatar/view/${filename}`;
+        res.json({ url, key });
+    } catch (error) {
+        console.error('Avatar Upload Error:', error);
+        return storageErrorResponse(res, error, 'Failed to upload avatar');
+    }
+});
+
+router.get('/avatar/view/:filename', async (req, res) => {
+    try {
+        const filename = req.params.filename;
+        const key = filename.startsWith('avatars/') ? filename : `avatars/${filename}`;
+        if (isR2Configured()) {
+            const url = await getPresignedUrl(key, 3600);
+            return res.redirect(url);
+        } else {
+            const filePath = getLocalFilePath(key);
+            if (!fs.existsSync(filePath)) {
+                return res.status(404).json({ error: 'Avatar not found' });
+            }
+            res.setHeader('Cache-Control', 'public, max-age=86400');
+            return res.sendFile(filePath);
+        }
+    } catch (error) {
+        console.error('Avatar View Error:', error);
+        return res.status(500).json({ error: 'Failed to retrieve avatar' });
     }
 });
 

@@ -71,6 +71,7 @@ export default function Locations() {
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLoc, setEditingLoc] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({ name: '', description: '', status: 'ACTIVE' });
 
   const fetchLocations = async () => {

@@ -53,14 +53,14 @@ router.get('/summary', authenticate, async (req, res) => {
       assignedCount, availableCount, repairCount, warrantyCount,
       departmentAssets, locationAssets, sharedAssets, inStoreAssets
     ] = await Promise.all([
-      prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'EMPLOYEE' } }),
+      prisma.asset.count({ where: { status: 'ASSIGNED', assignmentType: 'EMPLOYEE' } }),
       prisma.asset.count({ where: { status: 'AVAILABLE' } }),
       prisma.asset.count({ where: { status: 'UNDER_REPAIR' } }),
       prisma.asset.count({ where: { warrantyExpiryDate: { lte: thirtyDaysFromNow, gt: now } } }),
       prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'DEPARTMENT' } }),
       prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'LOCATION' } }),
       prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'SHARED' } }),
-      prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'STORE' } })
+      prisma.asset.count({ where: { OR: [{ assignmentType: 'STORE' }, { status: 'AVAILABLE' }], status: { not: 'UNDER_REPAIR' } } })
     ]);
 
     res.json({
@@ -137,7 +137,7 @@ router.get('/advanced', authenticate, async (req, res) => {
       inStoreAssets
     ] = await Promise.all([
       prisma.asset.count(),
-      prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'EMPLOYEE' } }),
+      prisma.asset.count({ where: { status: 'ASSIGNED', assignmentType: 'EMPLOYEE' } }),
       prisma.asset.count({ where: { status: 'AVAILABLE' } }),
       prisma.asset.count({ where: { status: 'UNDER_REPAIR' } }),
       prisma.asset.count({ where: { warrantyExpiryDate: { lte: thirtyDaysFromNow, gt: new Date() } } }),
@@ -161,7 +161,7 @@ router.get('/advanced', authenticate, async (req, res) => {
       prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'DEPARTMENT' } }),
       prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'LOCATION' } }),
       prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'SHARED' } }),
-      prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'STORE' } })
+      prisma.asset.count({ where: { OR: [{ assignmentType: 'STORE' }, { status: 'AVAILABLE' }], status: { not: 'UNDER_REPAIR' } } })
     ]);
 
     // Build all 7-day buckets upfront, then fire ALL queries in a single Promise.all.

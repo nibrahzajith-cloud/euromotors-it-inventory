@@ -222,4 +222,5 @@ module.exports = {
   deleteFile,
   getPresignedUrl,
   getR2StorageStats,
+  getLocalFilePath,
 };
