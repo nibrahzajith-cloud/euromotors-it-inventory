@@ -1,8 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
-import { 
-  ArrowLeft, Printer, Download, MonitorSmartphone, Wrench, UserCheck, 
+import {
+  ArrowLeft, Printer, Download, MonitorSmartphone, Wrench, UserCheck,
   CheckCircle2, Loader2, AlertCircle, History, Calendar, User, ArrowRight,
   Pencil, Save, X, QrCode, Image as ImageIcon, Maximize2, Sparkles,
   ShieldCheck, Tag, Globe, Activity
@@ -20,7 +20,7 @@ export default function AssetProfile() {
   const { id: assetCode } = useParams();
   const { showToast } = useToast();
   const [asset, setAsset] = useState(null);
-  const [timeline, setTimeline] = useState([]);
+  const [timeline, setTimeline] = useState([]);  /* The system have been design for the comuter */
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('details');
@@ -64,12 +64,12 @@ export default function AssetProfile() {
       const res = await fetch(`${API_URL}/assets/code/${encodeURIComponent(assetCode)}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      
+
       if (!res.ok) {
-         if (res.status === 404) throw new Error("Asset Code not found in database.");
-         throw new Error("Failed fetching asset logic bounds.");
+        if (res.status === 404) throw new Error("Asset Code not found in database.");
+        throw new Error("Failed fetching asset logic bounds.");
       }
-      
+
       const data = await res.json();
       setAsset(data);
       fetchAssetAuditLogs(data.id);
@@ -139,7 +139,7 @@ export default function AssetProfile() {
     try {
       const token = localStorage.getItem('token');
       const payload = { ...editData };
-      
+
       // Convert empty strings to null for optional fields
       Object.keys(payload).forEach(key => {
         if (payload[key] === '') payload[key] = null;
@@ -152,7 +152,7 @@ export default function AssetProfile() {
 
       const res = await fetch(`${API_URL}/assets/${asset.id}`, {
         method: 'PUT',
-        headers: { 
+        headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
@@ -182,13 +182,13 @@ export default function AssetProfile() {
   };
 
   const handlePrint = () => window.print();
-  
+
   const handleDownload = () => {
     const result = downloadQRCard(assetCode, "asset-profile-qr");
     if (result.success) {
-       showToast('QR Code downloaded successfully.', 'success');
+      showToast('QR Code downloaded successfully.', 'success');
     } else {
-       showToast(`PNG Error: ${result.error}`, 'error');
+      showToast(`PNG Error: ${result.error}`, 'error');
     }
   };
 
@@ -242,20 +242,20 @@ export default function AssetProfile() {
   };
 
   if (loading) return (
-     <div className="flex h-96 flex-col items-center justify-center space-y-4">
-        <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
-     </div>
+    <div className="flex h-96 flex-col items-center justify-center space-y-4">
+      <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
+    </div>
   );
 
   if (error || !asset) return (
-     <div className="flex flex-col h-[50vh] items-center justify-center p-8 bg-red-50 border border-red-100 rounded-3xl max-w-lg mx-auto mt-12">
-        <AlertCircle className="h-14 w-14 text-red-500 mb-4" />
-        <h2 className="text-xl font-bold text-red-600">Profile Not Found</h2>
-        <p className="text-red-500 text-center mt-2 max-w-md">{error}</p>
-        <Link to="/assets" className="mt-6 px-6 py-2 bg-red-600 text-white rounded-xl shadow-sm hover:bg-red-700 transition">
-          Return to Ledger
-        </Link>
-     </div>
+    <div className="flex flex-col h-[50vh] items-center justify-center p-8 bg-red-50 border border-red-100 rounded-3xl max-w-lg mx-auto mt-12">
+      <AlertCircle className="h-14 w-14 text-red-500 mb-4" />
+      <h2 className="text-xl font-bold text-red-600">Profile Not Found</h2>
+      <p className="text-red-500 text-center mt-2 max-w-md">{error}</p>
+      <Link to="/assets" className="mt-6 px-6 py-2 bg-red-600 text-white rounded-xl shadow-sm hover:bg-red-700 transition">
+        Return to Ledger
+      </Link>
+    </div>
   );
 
   return (
@@ -305,20 +305,20 @@ export default function AssetProfile() {
 
         {/* Tab Switcher */}
         <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl w-fit">
-          <button 
+          <button
             onClick={() => setActiveTab('details')}
             className={`px-6 py-2 rounded-xl text-sm font-semibold transition-all ${activeTab === 'details' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
           >
             Asset Details
           </button>
-          <button 
+          <button
             onClick={() => setActiveTab('timeline')}
             className={`px-6 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 ${activeTab === 'timeline' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
           >
             <History className="w-4 h-4" />
             Asset Timeline
           </button>
-          <button 
+          <button
             onClick={() => setActiveTab('audit')}
             className={`px-6 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 ${activeTab === 'audit' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
           >
@@ -332,17 +332,17 @@ export default function AssetProfile() {
             {/* Left Column: Photo / QR and Quick Status */}
             <div className="space-y-6">
               <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 flex flex-col items-center text-center">
-                
+
                 {/* Switcher Pill */}
                 <div className="flex p-1 bg-slate-100 dark:bg-slate-700/60 rounded-xl mb-4 w-full">
-                  <button 
+                  <button
                     onClick={() => setMediaView('photo')}
                     className={`flex-1 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${mediaView === 'photo' ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
                   >
                     <ImageIcon className="w-3.5 h-3.5" />
                     Asset Photo
                   </button>
-                  <button 
+                  <button
                     onClick={() => setMediaView('qr')}
                     className={`flex-1 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${mediaView === 'qr' ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
                   >
@@ -353,12 +353,12 @@ export default function AssetProfile() {
 
                 {mediaView === 'photo' ? (
                   <div className="mb-4 w-full">
-                    <PrimaryAssetPhoto 
-                      asset={asset} 
-                      onOpenModal={(url, name) => { 
-                        setPreviewModalUrl(url); 
-                        setPreviewModalName(name); 
-                      }} 
+                    <PrimaryAssetPhoto
+                      asset={asset}
+                      onOpenModal={(url, name) => {
+                        setPreviewModalUrl(url);
+                        setPreviewModalName(name);
+                      }}
                     />
                   </div>
                 ) : (
@@ -368,7 +368,7 @@ export default function AssetProfile() {
                 )}
 
                 <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">{asset.brand} {asset.model}</p>
-                
+
                 {mediaView === 'qr' && (
                   <div className="flex gap-2 mt-4 w-full">
                     <button onClick={handlePrint} className="flex-1 px-4 py-2 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-xl font-medium flex items-center justify-center gap-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors text-xs cursor-pointer">
@@ -386,11 +386,10 @@ export default function AssetProfile() {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-slate-500 dark:text-slate-400">Status</span>
-                    <span className={`px-2.5 py-1 rounded-full text-xs font-medium border flex items-center gap-1 ${
-                      asset.status === 'AVAILABLE' ? 'bg-green-100 text-green-700 border-green-200' :
-                      asset.status === 'ASSIGNED' ? 'bg-blue-100 text-blue-700 border-blue-200' :
-                      'bg-orange-100 text-orange-700 border-orange-200'
-                    }`}>
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-medium border flex items-center gap-1 ${asset.status === 'AVAILABLE' ? 'bg-green-100 text-green-700 border-green-200' :
+                        asset.status === 'ASSIGNED' ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                          'bg-orange-100 text-orange-700 border-orange-200'
+                      }`}>
                       <CheckCircle2 className="w-3 h-3" />
                       {asset.status}
                     </span>
@@ -398,7 +397,7 @@ export default function AssetProfile() {
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-slate-500 dark:text-slate-400">Condition</span>
                     {isEditing ? (
-                      <select 
+                      <select
                         className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-200 rounded-lg px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-blue-500"
                         value={editData.condition || ''}
                         onChange={(e) => handleFieldChange('condition', e.target.value)}
@@ -417,10 +416,10 @@ export default function AssetProfile() {
                       <span className="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                         <User className="w-3.5 h-3.5 text-slate-400" />
                         {(!asset.assignmentType || asset.assignmentType === 'EMPLOYEE') ? (asset.assignedEmployee?.fullName || 'Not Assigned') :
-                         asset.assignmentType === 'DEPARTMENT' ? (asset.department?.name || 'Not Assigned') :
-                         (asset.assignmentType === 'LOCATION' || asset.assignmentType === 'STORE') ? (asset.location?.name || 'Not Assigned') :
-                         asset.assignmentType === 'SHARED' ? (asset.department?.name || asset.location?.name || 'Not Assigned') :
-                         'Not Assigned'}
+                          asset.assignmentType === 'DEPARTMENT' ? (asset.department?.name || 'Not Assigned') :
+                            (asset.assignmentType === 'LOCATION' || asset.assignmentType === 'STORE') ? (asset.location?.name || 'Not Assigned') :
+                              asset.assignmentType === 'SHARED' ? (asset.department?.name || asset.location?.name || 'Not Assigned') :
+                                'Not Assigned'}
                       </span>
                     </div>
                   </div>
@@ -494,8 +493,8 @@ export default function AssetProfile() {
               </span>
               <span className="text-slate-400 text-xs ml-6">{previewModalName}</span>
             </div>
-            <button 
-              onClick={() => setPreviewModalUrl(null)} 
+            <button
+              onClick={() => setPreviewModalUrl(null)}
               className="p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition cursor-pointer"
             >
               <X className="w-6 h-6" />
@@ -509,9 +508,9 @@ export default function AssetProfile() {
 
       {/* Print only container */}
       <div className="hidden print:flex fixed inset-0 bg-white items-center justify-center z-[9999]">
-         <div className="w-full flex justify-center">
-            <QRCard assetCode={assetCode} id="asset-profile-qr-print" size={200} />
-         </div>
+        <div className="w-full flex justify-center">
+          <QRCard assetCode={assetCode} id="asset-profile-qr-print" size={200} />
+        </div>
       </div>
     </>
   );
@@ -570,7 +569,7 @@ function PrimaryAssetPhoto({ asset, onOpenModal }) {
     <div className="relative w-full h-48 rounded-xl overflow-hidden group bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-inner">
       <img src={photoUrl} alt={asset.model || asset.assetCode} className="w-full h-full object-cover" />
       <div className="absolute inset-0 bg-slate-950/50 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
-        <button 
+        <button
           onClick={() => onOpenModal && onOpenModal(photoUrl, asset.imageFileName || `${asset.assetCode}.webp`)}
           className="p-2.5 bg-white/20 hover:bg-white/30 text-white rounded-xl backdrop-blur-sm transition cursor-pointer flex items-center gap-1.5 text-xs font-medium"
           title="Inspect Full Screen"
@@ -605,17 +604,16 @@ function AssetTimeline({ timeline }) {
         <div className="relative space-y-8 before:absolute before:inset-0 before:ml-5 before:h-full before:w-0.5 before:bg-slate-100 dark:before:bg-slate-700">
           {timeline.map((item) => (
             <div key={item.id} className="relative flex items-start gap-6 group">
-              <div className={`absolute left-0 mt-1 w-10 h-10 rounded-full border-4 border-white dark:border-slate-800 shadow-sm flex items-center justify-center z-10 ${
-                item.eventType === 'CREATED' ? 'bg-green-500' :
-                item.eventType === 'ASSIGNED' ? 'bg-blue-600' :
-                item.eventType === 'RETURNED' ? 'bg-indigo-500' :
-                item.eventType.includes('MAINTENANCE') ? 'bg-orange-500' :
-                'bg-slate-500'
-              }`}>
+              <div className={`absolute left-0 mt-1 w-10 h-10 rounded-full border-4 border-white dark:border-slate-800 shadow-sm flex items-center justify-center z-10 ${item.eventType === 'CREATED' ? 'bg-green-500' :
+                  item.eventType === 'ASSIGNED' ? 'bg-blue-600' :
+                    item.eventType === 'RETURNED' ? 'bg-indigo-500' :
+                      item.eventType.includes('MAINTENANCE') ? 'bg-orange-500' :
+                        'bg-slate-500'
+                }`}>
                 {item.eventType === 'CREATED' ? <CheckCircle2 className="w-5 h-5 text-white" /> :
-                 item.eventType === 'ASSIGNED' ? <UserCheck className="w-5 h-5 text-white" /> :
-                 item.eventType === 'RETURNED' ? <ArrowLeft className="w-5 h-5 text-white" /> :
-                 <History className="w-5 h-5 text-white" />
+                  item.eventType === 'ASSIGNED' ? <UserCheck className="w-5 h-5 text-white" /> :
+                    item.eventType === 'RETURNED' ? <ArrowLeft className="w-5 h-5 text-white" /> :
+                      <History className="w-5 h-5 text-white" />
                 }
               </div>
               <div className="ml-12 flex-1">
@@ -626,7 +624,7 @@ function AssetTimeline({ timeline }) {
                   </span>
                 </div>
                 <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed mb-3">{item.description}</p>
-                
+
                 <div className="flex flex-wrap gap-3">
                   {item.oldStatus && item.newStatus && (
                     <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-700 px-2 py-1 rounded-lg border border-slate-100 dark:border-slate-600">

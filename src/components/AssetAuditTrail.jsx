@@ -131,3 +131,4 @@ export default function AssetAuditTrail({ auditLogs, loading }) {
     </div>
   );
 }
+
