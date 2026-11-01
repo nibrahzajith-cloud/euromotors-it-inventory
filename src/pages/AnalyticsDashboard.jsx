@@ -5,7 +5,7 @@ import {
   Wrench, ShieldCheck, Database, Server, Clock, History, 
   ChevronRight, PlusCircle, QrCode, FileText, ArrowRight,
   TrendingUp, TrendingDown, Building2, MapPin, AlertTriangle, Sparkles,
-  RefreshCw, Layers, ShieldAlert, Cpu, ArrowUpRight, Calendar,
+  RefreshCw, Layers, Wallet, ShieldAlert, Cpu, ArrowUpRight, Calendar,
   Share2, Users, HardDrive, Bell, Zap
 } from 'lucide-react';
 import { 
@@ -44,33 +44,72 @@ const useCountUp = (end, duration = 1400) => {
   return count;
 };
 
-// Decorative Luminous Wave Stream for KPI Cards
+// Precise Luminous Wave Ribbons matching reference image
 const WaveDecoration = ({ colorId, color1, color2 }) => (
   <svg 
-    className="absolute right-0 bottom-0 w-36 h-20 pointer-events-none opacity-45 overflow-visible" 
-    viewBox="0 0 140 80" 
+    className="absolute right-0 bottom-0 w-44 sm:w-52 h-16 pointer-events-none overflow-hidden select-none" 
+    viewBox="0 0 200 60" 
     fill="none" 
     xmlns="http://www.w3.org/2000/svg"
   >
     <defs>
-      <linearGradient id={`wave-grad-${colorId}`} x1="0%" y1="100%" x2="100%" y2="0%">
-        <stop offset="0%" stopColor={color1} stopOpacity="0.1" />
-        <stop offset="60%" stopColor={color1} stopOpacity="0.8" />
-        <stop offset="100%" stopColor={color2} stopOpacity="1" />
+      <linearGradient id={`kpi-wave-grad-${colorId}`} x1="0%" y1="100%" x2="100%" y2="0%">
+        <stop offset="0%" stopColor={color1} stopOpacity="0" />
+        <stop offset="35%" stopColor={color1} stopOpacity="0.3" />
+        <stop offset="75%" stopColor={color2} stopOpacity="0.85" />
+        <stop offset="100%" stopColor={color2} stopOpacity="0.95" />
       </linearGradient>
+      <linearGradient id={`kpi-wave-sec-${colorId}`} x1="0%" y1="100%" x2="100%" y2="0%">
+        <stop offset="0%" stopColor={color1} stopOpacity="0" />
+        <stop offset="45%" stopColor={color1} stopOpacity="0.2" />
+        <stop offset="100%" stopColor={color2} stopOpacity="0.5" />
+      </linearGradient>
+      <linearGradient id={`kpi-wave-fill-${colorId}`} x1="0%" y1="100%" x2="100%" y2="0%">
+        <stop offset="0%" stopColor={color1} stopOpacity="0" />
+        <stop offset="60%" stopColor={color1} stopOpacity="0.04" />
+        <stop offset="100%" stopColor={color2} stopOpacity="0.12" />
+      </linearGradient>
+      <filter id={`kpi-wave-glow-${colorId}`} x="-20%" y="-20%" width="140%" height="140%">
+        <feGaussianBlur stdDeviation="2.5" result="blur" />
+        <feMerge>
+          <feMergeNode in="blur" />
+          <feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
     </defs>
+
+    {/* Ambient glowing under-surface */}
     <path 
-      d="M0 68 C35 68, 55 24, 85 38 C115 52, 128 14, 140 26" 
-      stroke={`url(#wave-grad-${colorId})`} 
+      d="M20 60 C70 60, 105 38, 150 46 C172 50, 186 34, 200 38 L200 60 L20 60 Z" 
+      fill={`url(#kpi-wave-fill-${colorId})`} 
+    />
+
+    {/* Main crisp luminous curve with soft glow filter */}
+    <path 
+      d="M20 58 C70 58, 105 34, 150 42 C175 46, 188 28, 200 32" 
+      stroke={`url(#kpi-wave-grad-${colorId})`} 
       strokeWidth="2.2" 
-      strokeLinecap="round"
+      strokeLinecap="round" 
+      filter={`url(#kpi-wave-glow-${colorId})`}
       fill="none" 
     />
+
+    {/* Secondary harmonic wave curve */}
     <path 
-      d="M15 78 C48 72, 70 34, 100 48 C120 58, 132 28, 140 38" 
-      stroke={`url(#wave-grad-${colorId})`} 
-      strokeWidth="1.2" 
-      strokeOpacity="0.5" 
+      d="M45 60 C90 59, 120 42, 160 50 C178 54, 190 36, 200 40" 
+      stroke={`url(#kpi-wave-sec-${colorId})`} 
+      strokeWidth="1.3" 
+      strokeLinecap="round" 
+      fill="none" 
+    />
+
+    {/* Third trailing delicate shimmer */}
+    <path 
+      d="M75 60 C115 60, 138 48, 172 54 C185 57, 193 43, 200 46" 
+      stroke={`url(#kpi-wave-sec-${colorId})`} 
+      strokeWidth="0.8" 
+      strokeOpacity="0.6" 
+      strokeLinecap="round" 
       fill="none" 
     />
   </svg>
@@ -81,71 +120,88 @@ const MasterKPICard = ({
   title, 
   value, 
   trend, 
+  trendSubtext,
   trendType = 'up', 
   icon: Icon, 
-  theme = 'blue', 
+  theme = 'blue-purple', 
   onClick 
 }) => {
   const animatedValue = useCountUp(value);
 
   const themeConfig = {
-    blue: {
-      iconBg: 'bg-blue-50 dark:bg-[#1e3a8a]/40 border-blue-200 dark:border-blue-500/30 text-blue-600 dark:text-blue-400',
-      waveColors: ['#3b82f6', '#60a5fa'],
-      hoverBorder: 'hover:border-blue-500/50',
-      glow: 'from-blue-600/10'
+    'blue-purple': {
+      bgGradient: 'from-[#0c1228] via-[#0f1738] to-[#161233]',
+      borderColor: 'border-[#253266]/70',
+      hoverBorder: 'hover:border-[#3d4f9b]',
+      shadow: 'shadow-[0_4px_20px_-2px_rgba(79,70,229,0.22)]',
+      iconBox: 'bg-[#141d47]/85 border border-[#2b3a82]/85 text-[#6085ff] shadow-[0_0_18px_rgba(59,130,246,0.32)]',
+      waveColors: ['#3b82f6', '#818cf8']
     },
-    emerald: {
-      iconBg: 'bg-emerald-50 dark:bg-[#064e3b]/40 border-emerald-200 dark:border-emerald-500/30 text-emerald-600 dark:text-emerald-400',
-      waveColors: ['#10b981', '#34d399'],
-      hoverBorder: 'hover:border-emerald-500/50',
-      glow: 'from-emerald-600/10'
+    'emerald': {
+      bgGradient: 'from-[#06171a] via-[#082024] to-[#071a1d]',
+      borderColor: 'border-[#10403d]/70',
+      hoverBorder: 'hover:border-[#1a6661]',
+      shadow: 'shadow-[0_4px_20px_-2px_rgba(16,185,129,0.2)]',
+      iconBox: 'bg-[#0a2727]/85 border border-[#146358]/85 text-[#10b981] shadow-[0_0_18px_rgba(16,185,129,0.32)]',
+      waveColors: ['#059669', '#34d399']
     },
-    indigo: {
-      iconBg: 'bg-indigo-50 dark:bg-[#312e81]/40 border-indigo-200 dark:border-indigo-500/30 text-indigo-600 dark:text-indigo-400',
-      waveColors: ['#6366f1', '#818cf8'],
-      hoverBorder: 'hover:border-indigo-500/50',
-      glow: 'from-indigo-600/10'
+    'royal-blue': {
+      bgGradient: 'from-[#081730] via-[#0b2043] to-[#091a35]',
+      borderColor: 'border-[#184077]/70',
+      hoverBorder: 'hover:border-[#2762b3]',
+      shadow: 'shadow-[0_4px_20px_-2px_rgba(37,99,235,0.22)]',
+      iconBox: 'bg-[#0d234d]/85 border border-[#1e4e97]/85 text-[#3b82f6] shadow-[0_0_18px_rgba(59,130,246,0.32)]',
+      waveColors: ['#2563eb', '#60a5fa']
     },
-    purple: {
-      iconBg: 'bg-purple-50 dark:bg-[#581c87]/40 border-purple-200 dark:border-purple-500/30 text-purple-600 dark:text-purple-400',
-      waveColors: ['#a855f7', '#c084fc'],
-      hoverBorder: 'hover:border-purple-500/50',
-      glow: 'from-purple-600/10'
+    'purple': {
+      bgGradient: 'from-[#140e29] via-[#1c133a] to-[#150d29]',
+      borderColor: 'border-[#3c2463]/70',
+      hoverBorder: 'hover:border-[#5e389b]',
+      shadow: 'shadow-[0_4px_20px_-2px_rgba(147,51,234,0.22)]',
+      iconBox: 'bg-[#241544]/85 border border-[#552c93]/85 text-[#c084fc] shadow-[0_0_18px_rgba(168,85,247,0.32)]',
+      waveColors: ['#7c3aed', '#c084fc']
     },
-    teal: {
-      iconBg: 'bg-teal-50 dark:bg-[#134e4a]/40 border-teal-200 dark:border-teal-500/30 text-teal-600 dark:text-teal-400',
-      waveColors: ['#14b8a6', '#2dd4bf'],
-      hoverBorder: 'hover:border-teal-500/50',
-      glow: 'from-teal-600/10'
+    'cyan': {
+      bgGradient: 'from-[#061726] via-[#082136] to-[#061a28]',
+      borderColor: 'border-[#124261]/70',
+      hoverBorder: 'hover:border-[#1b6594]',
+      shadow: 'shadow-[0_4px_20px_-2px_rgba(6,182,212,0.22)]',
+      iconBox: 'bg-[#09293c]/85 border border-[#165f83]/85 text-[#06b6d4] shadow-[0_0_18px_rgba(6,182,212,0.32)]',
+      waveColors: ['#0891b2', '#22d3ee']
     },
-    cyan: {
-      iconBg: 'bg-cyan-50 dark:bg-[#164e63]/40 border-cyan-200 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400',
-      waveColors: ['#06b6d4', '#22d3ee'],
-      hoverBorder: 'hover:border-cyan-500/50',
-      glow: 'from-cyan-600/10'
+    'teal': {
+      bgGradient: 'from-[#061a20] via-[#07252f] to-[#061e24]',
+      borderColor: 'border-[#12444f]/70',
+      hoverBorder: 'hover:border-[#1b6777]',
+      shadow: 'shadow-[0_4px_20px_-2px_rgba(20,184,166,0.22)]',
+      iconBox: 'bg-[#082b31]/85 border border-[#14606a]/85 text-[#14b8a6] shadow-[0_0_18px_rgba(20,184,166,0.32)]',
+      waveColors: ['#0d9488', '#2dd4bf']
     },
-    amber: {
-      iconBg: 'bg-amber-50 dark:bg-[#78350f]/40 border-amber-200 dark:border-amber-500/30 text-amber-600 dark:text-amber-400',
-      waveColors: ['#f59e0b', '#fbbf24'],
-      hoverBorder: 'hover:border-amber-500/50',
-      glow: 'from-amber-600/10'
+    'amber': {
+      bgGradient: 'from-[#1a140d] via-[#261d11] to-[#1a130a]',
+      borderColor: 'border-[#463116]/70',
+      hoverBorder: 'hover:border-[#6f4e24]',
+      shadow: 'shadow-[0_4px_20px_-2px_rgba(245,158,11,0.22)]',
+      iconBox: 'bg-[#2c200e]/85 border border-[#694b1c]/85 text-[#fbbf24] shadow-[0_0_18px_rgba(245,158,11,0.32)]',
+      waveColors: ['#d97706', '#fbbf24']
     },
-    rose: {
-      iconBg: 'bg-rose-50 dark:bg-[#881337]/40 border-rose-200 dark:border-rose-500/30 text-rose-600 dark:text-rose-400',
-      waveColors: ['#f43f5e', '#fb7185'],
-      hoverBorder: 'hover:border-rose-500/50',
-      glow: 'from-rose-600/10'
+    'rose': {
+      bgGradient: 'from-[#1d0e17] via-[#2a1322] to-[#1c0a15]',
+      borderColor: 'border-[#521e36]/70',
+      hoverBorder: 'hover:border-[#7e2f54]',
+      shadow: 'shadow-[0_4px_20px_-2px_rgba(244,63,94,0.22)]',
+      iconBox: 'bg-[#301221]/85 border border-[#722244]/85 text-[#fb7185] shadow-[0_0_18px_rgba(244,63,94,0.32)]',
+      waveColors: ['#e11d48', '#fb7185']
     }
   };
 
-  const current = themeConfig[theme] || themeConfig.blue;
+  const current = themeConfig[theme] || themeConfig['blue-purple'];
 
   return (
     <motion.div
-      whileHover={onClick ? { y: -2, transition: { duration: 0.15 } } : {}}
+      whileHover={onClick ? { y: -3, transition: { duration: 0.15 } } : {}}
       onClick={onClick}
-      className={`group relative bg-white dark:bg-gradient-to-b dark:from-[#0e1626] dark:to-[#090e1a] border border-slate-200 dark:border-slate-800/90 ${current.hoverBorder} rounded-2xl p-4 shadow-sm dark:shadow-lg dark:shadow-black/30 overflow-hidden cursor-pointer transition-all duration-200 select-none`}
+      className={`group relative bg-gradient-to-r ${current.bgGradient} border ${current.borderColor} ${current.hoverBorder} ${current.shadow} rounded-2xl p-4 sm:p-4.5 overflow-hidden cursor-pointer transition-all duration-200 select-none flex items-center min-h-[108px]`}
     >
       {/* Decorative Wave Sweep on Lower-Right */}
       <WaveDecoration 
@@ -154,46 +210,52 @@ const MasterKPICard = ({
         color2={current.waveColors[1]} 
       />
 
-      <div className="relative z-10 flex flex-col justify-between h-full">
-        {/* Top: Icon + Label */}
-        <div className="flex items-center gap-3 mb-2.5">
-          <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${current.iconBg} shadow-inner`}>
-            <Icon className="w-4 h-4" />
-          </div>
-          <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 tracking-wide truncate">
+      {/* Card Content Row */}
+      <div className="relative z-10 flex items-center gap-3.5 sm:gap-4 w-full">
+        {/* Left: Rounded-Square Icon Box */}
+        <div className={`w-[54px] h-[54px] rounded-2xl flex items-center justify-center shrink-0 ${current.iconBox} transition-transform group-hover:scale-105 duration-200`}>
+          <Icon className="w-6 h-6 shrink-0" strokeWidth={2.2} />
+        </div>
+
+        {/* Right: Title, Number, Trend */}
+        <div className="flex-1 flex flex-col justify-center min-w-0">
+          <span className="text-[13px] font-medium text-slate-300 tracking-normal truncate leading-tight">
             {title}
           </span>
-        </div>
-
-        {/* Big Value */}
-        <div className="my-1">
-          <h3 className="text-3xl font-bold font-mono text-slate-900 dark:text-white tracking-tight">
+          
+          <h3 className="text-2xl sm:text-[28px] font-bold text-white tracking-tight leading-none my-1">
             {animatedValue.toLocaleString()}
           </h3>
-        </div>
 
-        {/* Trend Indicator Row */}
-        <div className="flex items-center gap-1.5 mt-1 text-[11px] font-medium">
-          {trendType === 'up' && (
-            <span className="text-emerald-500 dark:text-emerald-400 flex items-center gap-1">
-              <span>▲</span> {trend}
-            </span>
-          )}
-          {trendType === 'down' && (
-            <span className="text-rose-500 dark:text-rose-400 flex items-center gap-1">
-              <span>▲</span> {trend}
-            </span>
-          )}
-          {trendType === 'repair-good' && (
-            <span className="text-emerald-500 dark:text-emerald-400 flex items-center gap-1">
-              <span>▼</span> {trend}
-            </span>
-          )}
-          {trendType === 'neutral' && (
-            <span className="text-slate-500 dark:text-slate-400">
-              {trend}
-            </span>
-          )}
+          <div className="flex items-center gap-1.5 text-xs font-semibold leading-tight pt-0.5">
+            {trendType === 'up' && (
+              <span className="text-[#10b981] flex items-center gap-1 font-medium">
+                <span className="text-[9px]">▲</span>
+                <span>{trend}</span>
+                {trendSubtext && (
+                  <span className="text-slate-400 font-normal text-[11px] ml-0.5">{trendSubtext}</span>
+                )}
+              </span>
+            )}
+            {trendType === 'neutral' && (
+              <span className="text-slate-400 flex items-center gap-1.5 font-normal">
+                <span className="font-bold text-slate-500">—</span>
+                <span>{trend}</span>
+              </span>
+            )}
+            {trendType === 'repair-good' && (
+              <span className="text-[#10b981] flex items-center gap-1 font-medium">
+                <span className="text-[9px]">▼</span>
+                <span>{trend}</span>
+              </span>
+            )}
+            {trendType === 'alert' && (
+              <span className="text-[#f43f5e] flex items-center gap-1 font-medium">
+                <span className="text-[9px]">▲</span>
+                <span>{trend}</span>
+              </span>
+            )}
+          </div>
         </div>
       </div>
     </motion.div>
@@ -386,25 +448,26 @@ export default function AnalyticsDashboard() {
         </div>
       </div>
 
-      {/* 2. SECTION 4: KPI CARDS (EXACT REFERENCE 2 ROWS OF 4) */}
+            {/* 2. SECTION 4: KPI CARDS (EXACT REFERENCE 2 ROWS OF 4) */}
       <div className="space-y-4">
         {/* Row 1 */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <MasterKPICard 
             title="Total Assets" 
             value={data?.summary?.totalAssets?.value ?? 663} 
-            trend="+3.0% (vs. last month)" 
+            trend="+3.0%" 
+            trendSubtext="(vs. last month)"
             trendType="up" 
             icon={Layers} 
-            theme="blue" 
+            theme="blue-purple" 
             onClick={() => navigate('/assets')} 
           />
           <MasterKPICard 
             title="Assets in Store" 
             value={data?.summary?.inStoreAssets?.value ?? data?.summary?.available?.value ?? 27} 
-            trend="- No change" 
+            trend="No change" 
             trendType="neutral" 
-            icon={Server} 
+            icon={Wallet} 
             theme="emerald" 
             onClick={() => navigate('/assets?status=AVAILABLE')} 
           />
@@ -414,13 +477,13 @@ export default function AnalyticsDashboard() {
             trend="+0.5%" 
             trendType="up" 
             icon={Users} 
-            theme="indigo" 
+            theme="royal-blue" 
             onClick={() => navigate('/assets?status=ASSIGNED')} 
           />
           <MasterKPICard 
             title="Assigned to Departments" 
             value={data?.summary?.departmentAssets?.value ?? data?.summary?.department?.value ?? 22} 
-            trend="- No change" 
+            trend="No change" 
             trendType="neutral" 
             icon={Building2} 
             theme="purple" 
@@ -433,19 +496,19 @@ export default function AnalyticsDashboard() {
           <MasterKPICard 
             title="Assigned to Locations" 
             value={data?.summary?.locationAssets?.value ?? data?.summary?.location?.value ?? 150} 
-            trend="- No change" 
+            trend="No change" 
             trendType="neutral" 
             icon={MapPin} 
-            theme="teal" 
+            theme="cyan" 
             onClick={() => navigate('/assets?status=ASSIGNED')} 
           />
           <MasterKPICard 
             title="Shared Assets" 
             value={data?.summary?.sharedAssets?.value ?? data?.summary?.shared?.value ?? 56} 
-            trend="- No change" 
+            trend="No change" 
             trendType="neutral" 
             icon={Share2} 
-            theme="cyan" 
+            theme="teal" 
             onClick={() => navigate('/assets?status=ASSIGNED')} 
           />
           <MasterKPICard 
@@ -461,7 +524,7 @@ export default function AnalyticsDashboard() {
             title="Warranty Alerts" 
             value={data?.summary?.warranty?.value ?? 13} 
             trend="+5 new" 
-            trendType="down" 
+            trendType="alert" 
             icon={ShieldCheck} 
             theme="rose" 
             onClick={() => navigate('/reports')} 
