@@ -99,6 +99,9 @@ prisma.$connect()
       await prisma.$executeRawUnsafe(`
         ALTER TABLE "SystemSettings" ADD COLUMN IF NOT EXISTS "dbStorageLimitMB" INTEGER;
       `);
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE "Employee" ADD COLUMN IF NOT EXISTS "avatarUrl" TEXT;
+      `);
     } catch (_) {}
   })
   .catch((err) => {

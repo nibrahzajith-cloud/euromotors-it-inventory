@@ -27,7 +27,7 @@ const documentFilter = (req, file, cb) => {
 
 const uploadImageMiddleware = multer({
   storage: memoryStorage,
-  limits: { files: 2, fileSize: 1 * 1024 * 1024 }, // 1 MB buffer limit
+  limits: { files: 2, fileSize: 5 * 1024 * 1024 }, // 5 MB buffer limit (matches UI max size)
   fileFilter: imageFilter,
 });
 
@@ -48,4 +48,3 @@ module.exports = {
   uploadGalleryMiddleware,
   uploadDocumentMiddleware,
 };
-

@@ -10,6 +10,15 @@ import { useConfirm } from '../context/ConfirmContext';
 const _rawApi = import.meta.env.VITE_API_URL || '/api';
 const API_URL = _rawApi.endsWith('/api') ? _rawApi : `${_rawApi.replace(/\/$/, '')}/api`;
 
+const getAvatarUrl = (url) => {
+  if (!url) return null;
+  if (url.startsWith('data:') || url.startsWith('http://') || url.startsWith('https://') || url.startsWith('blob:')) {
+    return url;
+  }
+  const cleanPath = url.startsWith('/api') ? url.replace(/^\/api/, '') : url;
+  return `${API_URL}${cleanPath.startsWith('/') ? '' : '/'}${cleanPath}`;
+};
+
 export default function Employees({ defaultOpenAdd = false }) {
   const { user } = useAuth();
   const { showToast } = useToast();
@@ -211,8 +220,8 @@ export default function Employees({ defaultOpenAdd = false }) {
       let compressedFile = file;
       try {
         compressedFile = await imageCompression(file, {
-          maxSizeMB: 0.3,
-          maxWidthOrHeight: 400,
+          maxSizeMB: 0.4,
+          maxWidthOrHeight: 500,
           useWebWorker: false,
           fileType: 'image/webp',
           initialQuality: 0.85
@@ -237,10 +246,14 @@ export default function Employees({ defaultOpenAdd = false }) {
           uploadedUrl = resData.url;
         }
       } catch (uErr) {
-        console.warn('Backend avatar upload endpoint unreachable:', uErr);
+        console.warn('Backend avatar upload endpoint unreachable, falling back to direct attachment:', uErr);
       }
 
-      if (!uploadedUrl) {
+      if (uploadedUrl) {
+        setFormData(prev => ({ ...prev, avatarUrl: uploadedUrl }));
+        showToast('Profile photo uploaded successfully!', 'success');
+      } else {
+        // Fallback to base64 Data URL so user never gets blocked
         const reader = new FileReader();
         reader.onloadend = () => {
           setFormData(prev => ({ ...prev, avatarUrl: reader.result }));
@@ -250,9 +263,6 @@ export default function Employees({ defaultOpenAdd = false }) {
         reader.readAsDataURL(compressedFile);
         return;
       }
-
-      setFormData(prev => ({ ...prev, avatarUrl: uploadedUrl }));
-      showToast('Profile photo uploaded successfully!', 'success');
     } catch (err) {
       showToast(err.message || 'Failed to process avatar', 'error');
     } finally {
@@ -260,7 +270,6 @@ export default function Employees({ defaultOpenAdd = false }) {
       if (avatarInputRef.current) avatarInputRef.current.value = '';
     }
   };
-
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -284,6 +293,8 @@ export default function Employees({ defaultOpenAdd = false }) {
           ...formData,
           email: formData.email?.trim() === '' ? null : formData.email?.trim(),
           phone: formData.phone?.trim() === '' ? null : formData.phone?.trim(),
+          departmentId: formData.departmentId && formData.departmentId.trim() !== '' ? formData.departmentId : null,
+          locationId: formData.locationId && formData.locationId.trim() !== '' ? formData.locationId : null,
           avatarUrl: formData.avatarUrl ? formData.avatarUrl.trim() : null
         })
       });
@@ -573,7 +584,7 @@ export default function Employees({ defaultOpenAdd = false }) {
                         <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-tr from-blue-100 to-indigo-100 dark:from-slate-700 dark:to-slate-800 border border-slate-200 dark:border-slate-600 shrink-0 flex items-center justify-center font-bold text-xs text-blue-600 dark:text-blue-400 shadow-sm">
                           {emp.avatarUrl ? (
                             <img 
-                              src={emp.avatarUrl} 
+                              src={getAvatarUrl(emp.avatarUrl)} 
                               alt={emp.fullName} 
                               className="w-full h-full object-cover"
                               onError={(e) => { 
@@ -697,7 +708,7 @@ export default function Employees({ defaultOpenAdd = false }) {
                       <div className="w-20 h-20 rounded-full overflow-hidden bg-white dark:bg-slate-700 border-2 border-slate-200 dark:border-slate-600 shadow-sm flex items-center justify-center">
                         {formData.avatarUrl ? (
                           <img 
-                            src={formData.avatarUrl} 
+                            src={getAvatarUrl(formData.avatarUrl)} 
                             alt="Avatar preview" 
                             className="w-full h-full object-cover"
                             onError={(e) => { e.target.style.display = 'none'; }}
@@ -986,7 +997,7 @@ export default function Employees({ defaultOpenAdd = false }) {
                 <div className="w-11 h-11 rounded-full overflow-hidden bg-gradient-to-tr from-blue-600 to-indigo-600 border border-blue-400/30 flex items-center justify-center text-white font-bold text-sm shadow-md shrink-0">
                   {auditModal.employee.avatarUrl ? (
                     <img 
-                      src={auditModal.employee.avatarUrl} 
+                      src={getAvatarUrl(auditModal.employee.avatarUrl)} 
                       alt={auditModal.employee.fullName} 
                       className="w-full h-full object-cover" 
                     />
