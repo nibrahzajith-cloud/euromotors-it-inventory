@@ -100,3 +100,20 @@ body {
   }
 }
 
+
+/* Universal text selection styling */
+::selection {
+  background-color: rgba(59, 130, 246, 0.35);
+  color: inherit;
+}
+
+/* Ensure code, text, tables, and inputs are always easily selectable and copyable */
+code,
+pre,
+input,
+textarea,
+table,
+.select-text {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+}

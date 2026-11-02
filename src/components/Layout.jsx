@@ -9,7 +9,7 @@ export default function Layout() {
   const location = useLocation();
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50 dark:bg-[#060913] text-slate-800 dark:text-slate-200 overflow-hidden select-none transition-colors duration-300">
+    <div className="flex flex-col h-screen bg-slate-50 dark:bg-[#060913] text-slate-800 dark:text-slate-200 overflow-hidden transition-colors duration-300">
       <CommandPalette />
       
       {/* Top Header Spanning Full Width */}
@@ -22,7 +22,7 @@ export default function Layout() {
         <Sidebar />
 
         {/* Scrollable Center Content Area */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-y-auto overflow-x-hidden bg-slate-50 dark:bg-[#060913] relative custom-scrollbar transition-colors duration-300">
+        <div className="flex-1 flex flex-col min-w-0 overflow-y-auto overflow-x-hidden bg-slate-50 dark:bg-[#060913] relative custom-scrollbar select-text transition-colors duration-300">
           <AnimatePresence mode="wait">
             <motion.main
               key={location.pathname}
@@ -30,7 +30,7 @@ export default function Layout() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.18, ease: "easeOut" }}
-              className="flex-1"
+              className="flex-1 select-text"
             >
               <Outlet />
             </motion.main>

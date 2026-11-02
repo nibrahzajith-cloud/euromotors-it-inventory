@@ -6,6 +6,7 @@ import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
+import CopyButton from '../components/CopyButton';
 
 const _rawApi = import.meta.env.VITE_API_URL || '/api';
 const API_URL = _rawApi.endsWith('/api') ? _rawApi : `${_rawApi.replace(/\/$/, '')}/api`;
@@ -597,7 +598,10 @@ export default function Employees({ defaultOpenAdd = false }) {
                         </div>
                         <div className="flex flex-col">
                           <span className="font-bold text-slate-800 dark:text-white">{emp.fullName}</span>
-                        <span className="text-xs font-mono text-slate-500 mt-1">{emp.employeeCode}</span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-xs font-mono text-slate-500">{emp.employeeCode}</span>
+                          <CopyButton text={emp.employeeCode} label="Employee Code" iconSize="w-2.5 h-2.5" className="opacity-0 group-hover:opacity-100 p-0.5" />
+                        </div>
                           {emp.email && <span className="text-xs text-slate-500 flex items-center gap-1 mt-0.5"><Mail className="w-3 h-3"/> {emp.email}</span>}
                         </div>
                       </div>
@@ -1008,8 +1012,9 @@ export default function Employees({ defaultOpenAdd = false }) {
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="text-base font-bold text-white">{auditModal.employee.fullName}</h3>
-                    <span className="font-mono text-xs text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded">
+                    <span className="font-mono text-xs text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded flex items-center gap-1.5">
                       {auditModal.employee.employeeCode}
+                      <CopyButton text={auditModal.employee.employeeCode} label="Employee Code" iconSize="w-2.5 h-2.5" className="p-0.5" />
                     </span>
                   </div>
                   <p className="text-xs text-slate-400 mt-0.5">

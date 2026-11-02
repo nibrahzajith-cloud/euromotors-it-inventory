@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { exportToCSV, exportToPDF } from '../utils/exportUtils';
+import CopyButton from '../components/CopyButton';
 import { AnimatePresence, motion } from 'framer-motion';
 
 const _rawApi = import.meta.env.VITE_API_URL || '/api';
@@ -432,10 +433,16 @@ export default function Assets() {
                           </div>
                         ) : null}
                         <div className="flex flex-col">
-                          <Link to={`/assets/${encodeURIComponent(asset.assetCode)}`} className="font-bold text-blue-600 hover:underline">{asset.assetCode}</Link>
+                          <div className="flex items-center gap-1.5">
+                            <Link to={`/assets/${encodeURIComponent(asset.assetCode)}`} className="font-bold text-blue-600 hover:underline">{asset.assetCode}</Link>
+                            <CopyButton text={asset.assetCode} label="Asset Code" iconSize="w-2.5 h-2.5" className="opacity-0 group-hover:opacity-100 p-0.5" />
+                          </div>
                           <span className="text-sm font-medium text-slate-800 dark:text-slate-200 mt-0.5">{asset.model || asset.deviceType}</span>
                           <div className="flex items-center gap-2 mt-1">
-                            <span className="text-[10px] font-mono text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">S/N: {asset.serialNumber}</span>
+                            <span className="text-[10px] font-mono text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded flex items-center gap-1">
+                              S/N: {asset.serialNumber}
+                              {asset.serialNumber && <CopyButton text={asset.serialNumber} label="Serial Number" iconSize="w-2.5 h-2.5" className="p-0.5" />}
+                            </span>
                             {asset.ipAddress && (
                               <span className="text-[10px] font-mono text-purple-600 bg-purple-50 dark:bg-purple-900/30 px-1.5 py-0.5 rounded">IP: {asset.ipAddress}</span>
                             )}

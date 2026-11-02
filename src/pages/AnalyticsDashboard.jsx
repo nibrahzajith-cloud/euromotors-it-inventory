@@ -403,7 +403,7 @@ export default function AnalyticsDashboard() {
   }, [data]);
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#060913] text-slate-800 dark:text-slate-200 p-4 md:p-6 space-y-6 antialiased select-none transition-colors duration-300">
+    <div className="min-h-screen bg-slate-50 dark:bg-[#060913] text-slate-800 dark:text-slate-200 p-4 md:p-6 space-y-6 antialiased select-text transition-colors duration-300">
       
       {/* 1. Header Bar: Title, Subtitle, Date/Time Badge, Refresh, Audit Reports */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">

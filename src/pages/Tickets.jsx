@@ -6,6 +6,7 @@ import {
   CheckCircle2, Clock, Wrench, XCircle, LayoutGrid, List, UserCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import CopyButton from '../components/CopyButton';
 
 const _rawApi = import.meta.env.VITE_API_URL || '/api';
 const API_URL = _rawApi.endsWith('/api') ? _rawApi : `${_rawApi.replace(/\/$/, '')}/api`;
@@ -198,7 +199,10 @@ export default function Tickets() {
             <div key={ticket.id} className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 hover:border-blue-500/30 group p-6 relative overflow-hidden transition-all">
                <div className="flex justify-between items-start mb-4">
                   <div>
+                    <div className="flex items-center gap-1.5">
                     <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest">{ticket.ticketCode}</span>
+                    <CopyButton text={ticket.ticketCode} label="Ticket Code" iconSize="w-2.5 h-2.5" className="p-0.5" />
+                  </div>
                     <h3 className="text-sm font-bold text-slate-800 dark:text-white mt-1 group-hover:text-blue-600 transition-colors">{ticket.subject}</h3>
                   </div>
                   <div className={`px-2.5 py-1 rounded-full border text-[10px] font-bold flex items-center gap-1.5 ${

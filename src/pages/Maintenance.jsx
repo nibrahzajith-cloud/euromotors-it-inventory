@@ -3,6 +3,7 @@ import { Wrench, Plus, CheckCircle2, Search, Loader2, AlertCircle, Edit, Trash2,
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
+import CopyButton from '../components/CopyButton';
 
 const _rawApi = import.meta.env.VITE_API_URL || '/api';
 const API_URL = _rawApi.endsWith('/api') ? _rawApi : `${_rawApi.replace(/\/$/, '')}/api`;
@@ -244,7 +245,12 @@ export default function Maintenance() {
                         
                         <td className="px-5 py-4">
                            <div className="flex flex-col">
-                              <span className="font-bold text-blue-600">{log.asset?.assetCode || 'DELETED'}</span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-blue-600">{log.asset?.assetCode || 'DELETED'}</span>
+                                {log.asset?.assetCode && (
+                                  <CopyButton text={log.asset.assetCode} label="Asset Code" iconSize="w-2.5 h-2.5" className="opacity-0 group-hover:opacity-100 p-0.5" />
+                                )}
+                              </div>
                               <span className="text-xs text-slate-500 mt-0.5">{log.asset?.model || 'Link Corrupted'}</span>
                            </div>
                         </td>

@@ -3,6 +3,7 @@ import { ArrowRightLeft, Search, Loader2, AlertCircle, Trash2, Undo2, MousePoint
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
+import CopyButton from '../components/CopyButton';
 import { DndContext, useDraggable, useDroppable, PointerSensor, useSensor, useSensors, DragOverlay, closestCenter } from '@dnd-kit/core';
 
 const _rawApi = import.meta.env.VITE_API_URL || '/api';
@@ -419,14 +420,20 @@ export default function AssetAssignment() {
               {filteredAssignments.map((log) => (
                 <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                   <td className="px-4 py-3">
-                    <p className="font-bold text-slate-800 dark:text-white">{log.asset?.assetCode}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="font-bold text-slate-800 dark:text-white">{log.asset?.assetCode}</p>
+                      {log.asset?.assetCode && <CopyButton text={log.asset.assetCode} label="Asset Code" iconSize="w-2.5 h-2.5" className="p-0.5" />}
+                    </div>
                     <p className="text-xs">{log.asset?.model}</p>
                   </td>
                   <td className="px-4 py-3">
                     <p className="font-semibold text-slate-700 dark:text-slate-300">
                       {log.employee?.fullName || (log.asset?.assignmentType === 'DEPARTMENT' ? 'Department Asset' : log.asset?.assignmentType === 'LOCATION' ? 'Location Asset' : 'Non-Employee Entity')}
                     </p>
-                    <p className="text-xs">{log.employee?.employeeCode || 'Check Timeline for details'}</p>
+                    <div className="flex items-center gap-1">
+                      <p className="text-xs">{log.employee?.employeeCode || 'Check Timeline for details'}</p>
+                      {log.employee?.employeeCode && <CopyButton text={log.employee.employeeCode} label="Employee Code" iconSize="w-2.5 h-2.5" className="p-0.5" />}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-center">
                     <span className={`px-2 py-1 rounded-full text-xs font-semibold ${log.status === 'ACTIVE' ? 'bg-orange-100 text-orange-700' : 'bg-emerald-100 text-emerald-700'}`}>

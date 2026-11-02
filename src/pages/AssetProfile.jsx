@@ -12,6 +12,7 @@ import { downloadQRCard } from '../utils/qrUtils';
 import AssetImage from '../components/AssetMedia/AssetImage';
 import AssetDocuments from '../components/AssetMedia/AssetDocuments';
 import AssetAuditTrail from '../components/AssetAuditTrail';
+import CopyButton from '../components/CopyButton';
 
 const _rawApi = import.meta.env.VITE_API_URL || '/api';
 const API_URL = _rawApi.endsWith('/api') ? _rawApi : `${_rawApi.replace(/\/$/, '')}/api`;
@@ -268,7 +269,10 @@ export default function AssetProfile() {
             </Link>
             <div>
               <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Asset Profile</h1>
-              <p className="text-slate-600 dark:text-slate-400 text-sm mt-1 font-mono uppercase">{asset.assetCode}</p>
+              <div className="flex items-center gap-2 mt-1">
+                <p className="text-slate-600 dark:text-slate-400 text-sm font-mono uppercase">{asset.assetCode}</p>
+                <CopyButton text={asset.assetCode} label="Asset Code" />
+              </div>
             </div>
           </div>
           <div className="flex gap-3">
