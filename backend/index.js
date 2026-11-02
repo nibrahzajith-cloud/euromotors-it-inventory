@@ -102,6 +102,16 @@ prisma.$connect()
       await prisma.$executeRawUnsafe(`
         ALTER TABLE "Employee" ADD COLUMN IF NOT EXISTS "avatarUrl" TEXT;
       `);
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE "Asset" 
+          ADD COLUMN IF NOT EXISTS "imageStorageKey" TEXT,
+          ADD COLUMN IF NOT EXISTS "imageFileName" TEXT,
+          ADD COLUMN IF NOT EXISTS "imageFileSize" INTEGER,
+          ADD COLUMN IF NOT EXISTS "imageMimeType" TEXT,
+          ADD COLUMN IF NOT EXISTS "imageUploadedAt" TIMESTAMP,
+          ADD COLUMN IF NOT EXISTS "imageUploadedBy" TEXT,
+          ADD COLUMN IF NOT EXISTS "thumbnailUrl" TEXT;
+      `);
     } catch (_) {}
   })
   .catch((err) => {

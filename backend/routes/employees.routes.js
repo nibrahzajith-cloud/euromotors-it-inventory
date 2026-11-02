@@ -4,6 +4,7 @@ const prisma = require('../prismaClient');
 const { authenticate, requirePermission } = require('../middleware/auth.middleware');
 const { generateEmployeeCode } = require('../utils/codeGenerator');
 const { logAudit } = require('../utils/logger');
+const crypto = require('crypto');
 
 router.use(authenticate);
 
@@ -53,28 +54,34 @@ router.post('/', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
       }
     }
 
-    const payload = {
+    const deptId = rawPayload.departmentId && String(rawPayload.departmentId).trim() !== '' ? String(rawPayload.departmentId).trim() : null;
+    const locId = rawPayload.locationId && String(rawPayload.locationId).trim() !== '' ? String(rawPayload.locationId).trim() : null;
+    const avatarUrl = rawPayload.avatarUrl && String(rawPayload.avatarUrl).trim() !== '' ? String(rawPayload.avatarUrl).trim() : null;
+
+    // Build canonical relation-connected data object
+    const dataToCreate = {
       fullName: rawPayload.fullName ? String(rawPayload.fullName).trim() : '',
       email: rawPayload.email && String(rawPayload.email).trim() !== '' ? String(rawPayload.email).trim() : null,
       designation: rawPayload.designation && String(rawPayload.designation).trim() !== '' ? String(rawPayload.designation).trim() : null,
       phone: rawPayload.phone && String(rawPayload.phone).trim() !== '' ? String(rawPayload.phone).trim() : null,
-      departmentId: rawPayload.departmentId && String(rawPayload.departmentId).trim() !== '' ? String(rawPayload.departmentId).trim() : null,
-      locationId: rawPayload.locationId && String(rawPayload.locationId).trim() !== '' ? String(rawPayload.locationId).trim() : null,
       status: rawPayload.status || 'ACTIVE',
-      avatarUrl: rawPayload.avatarUrl && String(rawPayload.avatarUrl).trim() !== '' ? String(rawPayload.avatarUrl).trim() : null,
+      ...(avatarUrl ? { avatarUrl } : {}),
+      ...(deptId ? { department: { connect: { id: deptId } } } : {}),
+      ...(locId ? { location: { connect: { id: locId } } } : {})
     };
-    if (rawPayload.employeeCode) {
-      payload.employeeCode = String(rawPayload.employeeCode).trim();
-    }
 
     let record;
     try {
       record = await prisma.$transaction(async (tx) => {
-        if (!payload.employeeCode) {
-          payload.employeeCode = await generateEmployeeCode(tx);
-        }
+        const employeeCode = rawPayload.employeeCode && String(rawPayload.employeeCode).trim() !== '' 
+          ? String(rawPayload.employeeCode).trim() 
+          : await generateEmployeeCode(tx);
+
         return await tx.employee.create({ 
-          data: payload,
+          data: {
+            ...dataToCreate,
+            employeeCode
+          },
           include: {
             department: true,
             location: true,
@@ -88,38 +95,57 @@ router.post('/', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
         isolationLevel: 'ReadCommitted'
       });
     } catch (createErr) {
-      // If Prisma client doesn't recognize avatarUrl yet, create without it and update via raw SQL
-      if (createErr.message && createErr.message.includes('avatarUrl')) {
-        const { avatarUrl: pendingAvatar, ...safePayload } = payload;
-        record = await prisma.$transaction(async (tx) => {
-          if (!safePayload.employeeCode) {
-            safePayload.employeeCode = await generateEmployeeCode(tx);
-          }
-          return await tx.employee.create({ 
-            data: safePayload,
-            include: {
-              department: true,
-              location: true,
-              assignedAssets: true,
-              assignments: { where: { status: 'ACTIVE' } }
-            }
-          });
-        }, {
-          maxWait: 5000,
-          timeout: 10000,
-          isolationLevel: 'ReadCommitted'
-        });
+      console.warn('Prisma create standard invocation failed, attempting resilient fallback:', createErr.message);
 
-        if (pendingAvatar) {
-          await prisma.$executeRawUnsafe(
-            `UPDATE "Employee" SET "avatarUrl" = $1 WHERE id = $2`,
-            pendingAvatar,
-            record.id
-          );
-          record.avatarUrl = pendingAvatar;
-        }
-      } else {
-        throw createErr;
+      const employeeCode = rawPayload.employeeCode && String(rawPayload.employeeCode).trim() !== '' 
+        ? String(rawPayload.employeeCode).trim() 
+        : await generateEmployeeCode(prisma);
+
+      try {
+        record = await prisma.employee.create({
+          data: {
+            employeeCode,
+            fullName: dataToCreate.fullName,
+            email: dataToCreate.email,
+            designation: dataToCreate.designation,
+            phone: dataToCreate.phone,
+            status: dataToCreate.status,
+            departmentId: deptId,
+            locationId: locId,
+            ...(avatarUrl ? { avatarUrl } : {})
+          },
+          include: {
+            department: true,
+            location: true
+          }
+        });
+      } catch (fallbackErr) {
+        // Ultimate fallback: direct PostgreSQL insert via Prisma raw SQL
+        const empId = crypto.randomUUID();
+        await prisma.$executeRawUnsafe(
+          `INSERT INTO "Employee" ("id", "employeeCode", "fullName", "email", "designation", "phone", "departmentId", "locationId", "status", "avatarUrl", "createdAt", "updatedAt")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::"GeneralStatus", $10, NOW(), NOW())`,
+          empId,
+          employeeCode,
+          dataToCreate.fullName,
+          dataToCreate.email,
+          dataToCreate.designation,
+          dataToCreate.phone,
+          deptId,
+          locId,
+          dataToCreate.status,
+          avatarUrl
+        );
+
+        record = await prisma.employee.findUnique({
+          where: { id: empId },
+          include: {
+            department: true,
+            location: true,
+            assignedAssets: true,
+            assignments: { where: { status: 'ACTIVE' } }
+          }
+        });
       }
     }
 
@@ -156,21 +182,30 @@ router.put('/:id', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
     if (raw.email !== undefined) dataToUpdate.email = raw.email && String(raw.email).trim() !== '' ? String(raw.email).trim() : null;
     if (raw.designation !== undefined) dataToUpdate.designation = raw.designation && String(raw.designation).trim() !== '' ? String(raw.designation).trim() : null;
     if (raw.phone !== undefined) dataToUpdate.phone = raw.phone && String(raw.phone).trim() !== '' ? String(raw.phone).trim() : null;
-    if (raw.departmentId !== undefined) dataToUpdate.departmentId = raw.departmentId && String(raw.departmentId).trim() !== '' ? String(raw.departmentId).trim() : null;
-    if (raw.locationId !== undefined) dataToUpdate.locationId = raw.locationId && String(raw.locationId).trim() !== '' ? String(raw.locationId).trim() : null;
     if (raw.status !== undefined) dataToUpdate.status = raw.status;
+
+    const hasDept = raw.departmentId !== undefined;
+    const deptId = hasDept ? (raw.departmentId && String(raw.departmentId).trim() !== '' ? String(raw.departmentId).trim() : null) : undefined;
+
+    const hasLoc = raw.locationId !== undefined;
+    const locId = hasLoc ? (raw.locationId && String(raw.locationId).trim() !== '' ? String(raw.locationId).trim() : null) : undefined;
 
     const hasAvatar = raw.avatarUrl !== undefined;
     const cleanAvatar = hasAvatar ? (raw.avatarUrl && String(raw.avatarUrl).trim() !== '' ? String(raw.avatarUrl).trim() : null) : undefined;
+
+    // Use canonical Prisma relation update syntax
+    const relationData = {
+      ...dataToUpdate,
+      ...(hasAvatar ? { avatarUrl: cleanAvatar } : {}),
+      ...(hasDept ? (deptId ? { department: { connect: { id: deptId } } } : { department: { disconnect: true } }) : {}),
+      ...(hasLoc ? (locId ? { location: { connect: { id: locId } } } : { location: { disconnect: true } }) : {})
+    };
 
     let record;
     try {
       record = await prisma.employee.update({ 
         where: { id: req.params.id }, 
-        data: {
-          ...dataToUpdate,
-          ...(hasAvatar && { avatarUrl: cleanAvatar })
-        },
+        data: relationData,
         include: {
           department: true,
           location: true,
@@ -179,11 +214,18 @@ router.put('/:id', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
         }
       });
     } catch (prismaErr) {
-      // Fallback if Prisma Client does not recognize avatarUrl
-      if (prismaErr.message && prismaErr.message.includes('avatarUrl')) {
+      console.warn('Prisma employee update relation syntax threw, using resilient fallback:', prismaErr.message);
+
+      try {
+        // Fallback 1: try scalar IDs
         record = await prisma.employee.update({ 
           where: { id: req.params.id }, 
-          data: dataToUpdate,
+          data: {
+            ...dataToUpdate,
+            ...(hasDept ? { departmentId: deptId } : {}),
+            ...(hasLoc ? { locationId: locId } : {}),
+            ...(hasAvatar ? { avatarUrl: cleanAvatar } : {})
+          },
           include: {
             department: true,
             location: true,
@@ -191,17 +233,40 @@ router.put('/:id', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
             assignments: { where: { status: 'ACTIVE' } }
           }
         });
+      } catch (scalarErr) {
+        // Fallback 2: Direct raw SQL update
+        await prisma.$executeRawUnsafe(
+          `UPDATE "Employee" 
+           SET "fullName" = COALESCE($1, "fullName"),
+               "email" = $2,
+               "designation" = $3,
+               "phone" = $4,
+               "departmentId" = $5,
+               "locationId" = $6,
+               "status" = COALESCE($7::"GeneralStatus", "status"),
+               "avatarUrl" = $8,
+               "updatedAt" = NOW()
+           WHERE id = $9`,
+          dataToUpdate.fullName || null,
+          dataToUpdate.email !== undefined ? dataToUpdate.email : oldRecord.email,
+          dataToUpdate.designation !== undefined ? dataToUpdate.designation : oldRecord.designation,
+          dataToUpdate.phone !== undefined ? dataToUpdate.phone : oldRecord.phone,
+          deptId !== undefined ? deptId : oldRecord.departmentId,
+          locId !== undefined ? locId : oldRecord.locationId,
+          dataToUpdate.status || null,
+          cleanAvatar !== undefined ? cleanAvatar : oldRecord.avatarUrl,
+          req.params.id
+        );
 
-        if (hasAvatar) {
-          await prisma.$executeRawUnsafe(
-            `UPDATE "Employee" SET "avatarUrl" = $1 WHERE id = $2`,
-            cleanAvatar,
-            req.params.id
-          );
-          record.avatarUrl = cleanAvatar;
-        }
-      } else {
-        throw prismaErr;
+        record = await prisma.employee.findUnique({
+          where: { id: req.params.id },
+          include: {
+            department: true,
+            location: true,
+            assignedAssets: true,
+            assignments: { where: { status: 'ACTIVE' } }
+          }
+        });
       }
     }
 
