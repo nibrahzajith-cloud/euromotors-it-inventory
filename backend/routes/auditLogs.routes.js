@@ -166,9 +166,14 @@ router.get('/employees/:employeeId', requirePermission('VIEW_AUDIT_LOG'), async 
   try {
     const { employeeId } = req.params;
     
-    // Find employee
-    const employee = await prisma.employee.findUnique({
-      where: { id: employeeId },
+    // Find employee by id or employeeCode
+    const employee = await prisma.employee.findFirst({
+      where: {
+        OR: [
+          { id: employeeId },
+          { employeeCode: employeeId }
+        ]
+      },
       include: { department: true, location: true }
     });
 
@@ -182,34 +187,158 @@ router.get('/employees/:employeeId', requirePermission('VIEW_AUDIT_LOG'), async 
       matchingUser = await prisma.user.findUnique({ where: { email: employee.email } });
     }
 
+    // 1. Query Central Audit Logs
     const whereConditions = [
       { employeeId: employee.id },
+      { entityId: employee.id },
       { description: { contains: employee.fullName, mode: 'insensitive' } }
     ];
 
     if (employee.employeeCode) {
       whereConditions.push({ entityCode: employee.employeeCode });
+      whereConditions.push({ description: { contains: employee.employeeCode, mode: 'insensitive' } });
     }
 
     if (matchingUser) {
       whereConditions.push({ userId: matchingUser.id });
     }
 
-    const logs = await prisma.auditLog.findMany({
-      where: { OR: whereConditions },
-      orderBy: { createdAt: 'desc' },
-      take: 100
-    });
+    let auditLogs = [];
+    try {
+      auditLogs = await prisma.auditLog.findMany({
+        where: { OR: whereConditions },
+        orderBy: { createdAt: 'desc' },
+        take: 100
+      });
+    } catch (e) {
+      console.warn('AuditLog query failed:', e.message);
+    }
+
+    // 2. Query Asset Timeline records for this employee
+    let timelineEvents = [];
+    try {
+      timelineEvents = await prisma.assetTimeline.findMany({
+        where: {
+          OR: [
+            { employeeId: employee.id },
+            { employeeName: { contains: employee.fullName, mode: 'insensitive' } },
+            { description: { contains: employee.fullName, mode: 'insensitive' } }
+          ]
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 100
+      });
+    } catch (e) {
+      console.warn('AssetTimeline query failed:', e.message);
+    }
+
+    // 3. Query historical AssetAssignments for this employee
+    let assignments = [];
+    try {
+      assignments = await prisma.assetAssignment.findMany({
+        where: { employeeId: employee.id },
+        include: { asset: true },
+        orderBy: { assignedDate: 'desc' },
+        take: 100
+      });
+    } catch (e) {
+      console.warn('AssetAssignment query failed:', e.message);
+    }
+
+    // 4. Merge and unify into single comprehensive chronological audit stream
+    const unified = [...auditLogs.map(l => ({
+      id: l.id,
+      action: l.action,
+      module: l.module,
+      entityType: l.entityType,
+      entityId: l.entityId,
+      entityCode: l.entityCode,
+      description: l.description,
+      userName: l.userName || 'System',
+      ipAddress: l.ipAddress || 'Internal',
+      createdAt: l.createdAt
+    }))];
+
+    // Merge timeline events not already present
+    for (const t of timelineEvents) {
+      const isDuplicate = unified.some(u => 
+        u.entityCode === t.assetCode && 
+        (u.action === t.eventType || (u.action === 'ASSIGN' && t.eventType === 'ASSIGNED') || (u.action === 'RETURN' && t.eventType === 'RETURNED')) &&
+        Math.abs(new Date(u.createdAt) - new Date(t.createdAt)) < 10000
+      );
+      if (!isDuplicate) {
+        unified.push({
+          id: t.id,
+          action: t.eventType === 'ASSIGNED' ? 'ASSIGN' : t.eventType === 'RETURNED' ? 'RETURN' : t.eventType,
+          module: 'ASSIGNMENTS',
+          entityType: 'ASSET',
+          entityId: t.assetId,
+          entityCode: t.assetCode,
+          description: t.description || `${t.title} (${t.assetCode})`,
+          userName: t.performedByName || 'System',
+          ipAddress: 'Internal',
+          createdAt: t.createdAt
+        });
+      }
+    }
+
+    // Merge assignments not already present
+    for (const asg of assignments) {
+      if (asg.asset) {
+        const hasAssign = unified.some(u => 
+          u.entityCode === asg.asset.assetCode && 
+          (u.action === 'ASSIGN' || u.action === 'ASSIGNED')
+        );
+        if (!hasAssign) {
+          unified.push({
+            id: `asg-assign-${asg.id}`,
+            action: 'ASSIGN',
+            module: 'ASSIGNMENTS',
+            entityType: 'ASSET',
+            entityId: asg.assetId,
+            entityCode: asg.asset.assetCode,
+            description: `Asset ${asg.asset.assetCode} assigned to ${employee.fullName} (${employee.employeeCode || 'Staff'})`,
+            userName: 'System',
+            ipAddress: 'Internal',
+            createdAt: asg.assignedDate || asg.createdAt
+          });
+        }
+
+        if (asg.status === 'RETURNED') {
+          const hasReturn = unified.some(u => 
+            u.entityCode === asg.asset.assetCode && 
+            (u.action === 'RETURN' || u.action === 'RETURNED')
+          );
+          if (!hasReturn) {
+            unified.push({
+              id: `asg-return-${asg.id}`,
+              action: 'RETURN',
+              module: 'ASSIGNMENTS',
+              entityType: 'ASSET',
+              entityId: asg.assetId,
+              entityCode: asg.asset.assetCode,
+              description: `Asset ${asg.asset.assetCode} returned by ${employee.fullName} (${employee.employeeCode || 'Staff'})`,
+              userName: 'System',
+              ipAddress: 'Internal',
+              createdAt: asg.returnedDate || asg.updatedAt
+            });
+          }
+        }
+      }
+    }
+
+    // Sort descending by date
+    unified.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     // Compute activity metrics
-    const summary = {
-      totalActions: logs.length,
-      assetsCreated: logs.filter(l => l.action === 'CREATE' && l.module === 'ASSETS').length,
-      assetsUpdated: logs.filter(l => l.action === 'UPDATE' && l.module === 'ASSETS').length,
-      assetsAssigned: logs.filter(l => l.action === 'ASSIGN').length,
-      assetsReturned: logs.filter(l => l.action === 'RETURN').length,
-      failedActions: logs.filter(l => l.status === 'FAILED').length,
-      lastActive: logs.length > 0 ? logs[0].createdAt : null
+    const stats = {
+      totalActions: unified.length,
+      assetsAssigned: unified.filter(l => l.action === 'ASSIGN' || l.action === 'RETURN').length,
+      profileUpdates: unified.filter(l => l.action === 'UPDATE' && (l.module === 'EMPLOYEES' || l.entityType === 'EMPLOYEE')).length,
+      assetsCreated: unified.filter(l => l.action === 'CREATE').length,
+      assetsReturned: unified.filter(l => l.action === 'RETURN').length,
+      failedActions: unified.filter(l => l.status === 'FAILED').length,
+      lastActive: unified.length > 0 ? unified[0].createdAt : null
     };
 
     res.json({
@@ -224,15 +353,16 @@ router.get('/employees/:employeeId', requirePermission('VIEW_AUDIT_LOG'), async 
         location: employee.location?.name || 'Unassigned',
         status: employee.status
       },
-      summary,
-      logs
+      summary: stats,
+      stats: stats,
+      logs: unified,
+      timeline: unified
     });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch employee activity history', details: err.message });
   }
 });
 
-// -----------------------------------------------------------------------------
 // 4. GET /api/audit-logs/assets/:assetId - Individual Asset Lifecycle History
 // -----------------------------------------------------------------------------
 router.get('/assets/:assetId', requirePermission('VIEW_AUDIT_LOG'), async (req, res) => {

@@ -231,7 +231,7 @@ export default function AssetAssignment() {
   };
 
   const handleReturn = async (id) => {
-    if (!await confirm({ title: 'Confirm Check-in', message: 'Return this hardware asset?', confirmText: 'Check-in Asset' })) return;
+    if (!await confirm({ title: 'Confirm Check-in', message: 'Return this hardware asset back to Available Store stock?', confirmText: 'Check-in Asset' })) return;
     try {
       const res = await fetch(`${API_URL}/assignments/${id}`, {
         method: 'PUT',
@@ -239,7 +239,11 @@ export default function AssetAssignment() {
         body: JSON.stringify({ status: 'RETURNED', returnedDate: new Date().toISOString() })
       });
       if (!res.ok) throw new Error('Return failed.');
-      showToast('Asset returned.', 'success');
+      showToast('Asset returned to available store stock.', 'success');
+      localStorage.removeItem('analyticsDashboardCache');
+      localStorage.removeItem('assetsCache');
+      localStorage.removeItem('assignmentsCache');
+      localStorage.removeItem('employeesCache');
       await fetchData();
     } catch(err) { showToast(err.message, 'error'); }
   };

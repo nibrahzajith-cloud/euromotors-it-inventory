@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
+import { useConfirm } from '../context/ConfirmContext';
 import {
   ArrowLeft, Printer, Download, MonitorSmartphone, Wrench, UserCheck,
   CheckCircle2, Loader2, AlertCircle, History, Calendar, User, ArrowRight,
@@ -20,6 +21,37 @@ const API_URL = _rawApi.endsWith('/api') ? _rawApi : `${_rawApi.replace(/\/$/, '
 export default function AssetProfile() {
   const { id: assetCode } = useParams();
   const { showToast } = useToast();
+  const { confirm } = useConfirm();
+  const [returning, setReturning] = useState(false);
+
+  const handleReturnAsset = async () => {
+    if (!asset) return;
+    if (!await confirm({
+      title: 'Confirm Check-in to Store',
+      message: `Return asset ${asset.assetCode} (${asset.model || asset.deviceType}) back to Store / Available stock?`,
+      confirmText: 'Check-in to Store'
+    })) return;
+
+    setReturning(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/assets/${asset.id}/return`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Return failed');
+      showToast(`Asset ${asset.assetCode} successfully returned to store inventory.`, 'success');
+      localStorage.removeItem('analyticsDashboardCache');
+      localStorage.removeItem('assetsCache');
+      localStorage.removeItem('assignmentsCache');
+      localStorage.removeItem('employeesCache');
+      await fetchAssetProfile();
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setReturning(false);
+    }
+  };
   const [asset, setAsset] = useState(null);
   const [timeline, setTimeline] = useState([]);
   const [loading, setLoading] = useState(true);

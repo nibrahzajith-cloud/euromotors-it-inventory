@@ -695,6 +695,16 @@ router.put('/:id', requirePermission('EDIT_ASSETS'), async (req, res) => {
     
     const record = await prisma.asset.update({ where: { id: req.params.id }, data: payload });
 
+    // If status was changed to AVAILABLE or STORE, close active assignments
+    if ((record.status === 'AVAILABLE' || record.assignmentType === 'STORE') && oldRecord.status !== 'AVAILABLE') {
+      try {
+        await prisma.assetAssignment.updateMany({
+          where: { assetId: record.id, status: 'ACTIVE' },
+          data: { status: 'RETURNED', returnedDate: new Date() }
+        });
+      } catch (_) {}
+    }
+
     // Log Audit
     await logAudit({
       req,
@@ -800,6 +810,84 @@ router.get('/code/:code/timeline', async (req, res) => {
     res.json(timeline);
   } catch (err) {
     res.status(500).json({ error: 'Server error fetching asset timeline', details: err.message });
+  }
+});
+
+
+// Direct asset check-in / return endpoint
+router.post('/:id/return', requirePermission('ASSIGN_ASSETS'), async (req, res) => {
+  try {
+    const asset = await prisma.asset.findFirst({
+      where: {
+        OR: [
+          { id: req.params.id },
+          { assetCode: req.params.id }
+        ]
+      },
+      include: {
+        assignedEmployee: { include: { department: true } },
+        assignments: { where: { status: 'ACTIVE' }, include: { employee: true } }
+      }
+    });
+
+    if (!asset) return res.status(404).json({ error: 'Asset not found' });
+
+    // Mark all active assignments as RETURNED
+    const now = new Date();
+    await prisma.assetAssignment.updateMany({
+      where: { assetId: asset.id, status: 'ACTIVE' },
+      data: { status: 'RETURNED', returnedDate: now }
+    });
+
+    const emp = asset.assignedEmployee || asset.assignments?.[0]?.employee || null;
+    const empName = emp ? emp.fullName : 'Employee';
+    const empCode = emp?.employeeCode || '';
+
+    // Update asset status to AVAILABLE
+    const updated = await prisma.asset.update({
+      where: { id: asset.id },
+      data: {
+        status: 'AVAILABLE',
+        assignedEmployeeId: null,
+        assignmentType: 'STORE'
+      },
+      include: { location: true, department: true, assignedEmployee: true }
+    });
+
+    // Central Audit Log
+    await logAudit({
+      req,
+      action: 'RETURN',
+      module: 'ASSIGNMENTS',
+      entityType: 'ASSET',
+      entityId: asset.id,
+      entityCode: asset.assetCode,
+      employeeOverride: emp ? {
+        id: emp.id,
+        fullName: emp.fullName,
+        departmentName: emp.department?.name || null
+      } : null,
+      description: `Asset ${asset.assetCode} returned to store by ${empName}${empCode ? ` (${empCode})` : ''}`
+    });
+
+    // Asset Lifecycle Timeline
+    await logAssetTimeline({
+      assetId: asset.id,
+      assetCode: asset.assetCode,
+      eventType: 'RETURNED',
+      title: 'Asset Returned',
+      description: `Returned to store by ${empName}${empCode ? ` (${empCode})` : ''}`,
+      oldStatus: asset.status,
+      newStatus: 'AVAILABLE',
+      employeeId: emp?.id || null,
+      employeeName: empName,
+      performedById: req.user.id,
+      performedByName: req.user.fullName
+    });
+
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

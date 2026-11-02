@@ -103,6 +103,22 @@ prisma.$connect()
         ALTER TABLE "Employee" ADD COLUMN IF NOT EXISTS "avatarUrl" TEXT;
       `);
       await prisma.$executeRawUnsafe(`
+        ALTER TABLE "AuditLog" 
+          ADD COLUMN IF NOT EXISTS "userEmail" TEXT,
+          ADD COLUMN IF NOT EXISTS "employeeId" TEXT,
+          ADD COLUMN IF NOT EXISTS "employeeName" TEXT,
+          ADD COLUMN IF NOT EXISTS "departmentName" TEXT,
+          ADD COLUMN IF NOT EXISTS "initiatedById" TEXT,
+          ADD COLUMN IF NOT EXISTS "executedBy" TEXT,
+          ADD COLUMN IF NOT EXISTS "activityType" TEXT DEFAULT 'HUMAN',
+          ADD COLUMN IF NOT EXISTS "changedFields" TEXT,
+          ADD COLUMN IF NOT EXISTS "status" TEXT DEFAULT 'SUCCESS',
+          ADD COLUMN IF NOT EXISTS "severity" TEXT DEFAULT 'INFO',
+          ADD COLUMN IF NOT EXISTS "errorMessage" TEXT,
+          ADD COLUMN IF NOT EXISTS "userAgent" TEXT,
+          ADD COLUMN IF NOT EXISTS "correlationId" TEXT;
+      `);
+      await prisma.$executeRawUnsafe(`
         ALTER TABLE "Asset" 
           ADD COLUMN IF NOT EXISTS "imageStorageKey" TEXT,
           ADD COLUMN IF NOT EXISTS "imageFileName" TEXT,

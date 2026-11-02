@@ -8,7 +8,17 @@ router.use(authenticate);
 
 router.get('/', async (req, res) => {
   try {
-    const records = await prisma.assetAssignment.findMany({ include: { asset: true, employee: true } });
+    const records = await prisma.assetAssignment.findMany({ 
+      include: { 
+        asset: {
+          include: { department: true, location: true }
+        }, 
+        employee: {
+          include: { department: true, location: true }
+        }
+      },
+      orderBy: { assignedDate: 'desc' }
+    });
     res.json(records);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -46,8 +56,11 @@ router.post('/', requirePermission('ASSIGN_ASSETS'), async (req, res) => {
         data: {
           assetId: req.body.assetId,
           employeeId: req.body.employeeId,
+          assignedDate: req.body.assignedDate ? new Date(req.body.assignedDate) : new Date(),
+          status: 'ACTIVE',
           remarks: req.body.remarks || null
-        }
+        },
+        include: { asset: true, employee: true }
       });
       
       await prisma.asset.update({
@@ -78,7 +91,7 @@ router.post('/', requirePermission('ASSIGN_ASSETS'), async (req, res) => {
       });
     }
 
-    // Log Audit
+    // Central Audit Log with employee attribution
     await logAudit({
       req,
       action: 'ASSIGN',
@@ -86,26 +99,33 @@ router.post('/', requirePermission('ASSIGN_ASSETS'), async (req, res) => {
       entityType: 'ASSET',
       entityId: asset.id,
       entityCode: asset.assetCode,
-      description: `Asset ${asset.assetCode} assigned (${aType})`
+      employeeOverride: employee ? {
+        id: employee.id,
+        fullName: employee.fullName,
+        departmentName: employee.department?.name || null
+      } : null,
+      description: aType === 'EMPLOYEE' && employee
+        ? `Asset ${asset.assetCode} assigned to ${employee.fullName} (${employee.employeeCode || 'EMP'})`
+        : `Asset ${asset.assetCode} assigned (${aType}${dept ? ` - ${dept.name}` : ''}${loc ? ` - ${loc.name}` : ''})`
     });
 
-    // Log Timeline
+    // Asset Lifecycle Timeline Event
     await logAssetTimeline({
       assetId: asset.id,
       assetCode: asset.assetCode,
       eventType: 'ASSIGNED',
       title: 'Asset Assigned',
-      description: aType === 'EMPLOYEE' 
-        ? `Assigned to ${employee.fullName} (${employee.employeeCode})`
-        : `Assigned as ${aType} ` + (dept ? `to ${dept.name}` : '') + (loc ? ` at ${loc.name}` : ''),
+      description: aType === 'EMPLOYEE' && employee
+        ? `Assigned to ${employee.fullName} (${employee.employeeCode || 'EMP'})`
+        : `Assigned as ${aType}` + (dept ? ` to ${dept.name}` : '') + (loc ? ` at ${loc.name}` : ''),
       oldStatus: 'AVAILABLE',
       newStatus: 'ASSIGNED',
-      employeeId: employee?.id,
-      employeeName: employee?.fullName,
-      departmentId: employee?.departmentId || req.body.departmentId,
-      departmentName: employee?.department?.name || dept?.name,
-      locationId: employee?.locationId || req.body.locationId,
-      locationName: employee?.location?.name || loc?.name,
+      employeeId: employee?.id || null,
+      employeeName: employee?.fullName || null,
+      departmentId: employee?.departmentId || req.body.departmentId || null,
+      departmentName: employee?.department?.name || dept?.name || null,
+      locationId: employee?.locationId || req.body.locationId || null,
+      locationName: employee?.location?.name || loc?.name || null,
       performedById: req.user.id,
       performedByName: req.user.fullName
     });
@@ -120,43 +140,90 @@ router.put('/:id', requirePermission('ASSIGN_ASSETS'), async (req, res) => {
   try {
     const oldAssignment = await prisma.assetAssignment.findUnique({ 
        where: { id: req.params.id },
-       include: { asset: true, employee: true }
+       include: { 
+         asset: true, 
+         employee: { include: { department: true } }
+       }
     });
     if (!oldAssignment) return res.status(404).json({ error: 'Assignment not found' });
 
+    const updateData = { ...req.body };
+    if (updateData.returnedDate) {
+      updateData.returnedDate = new Date(updateData.returnedDate);
+    }
+    if (updateData.assignedDate) {
+      updateData.assignedDate = new Date(updateData.assignedDate);
+    }
+
     const record = await prisma.assetAssignment.update({ 
        where: { id: req.params.id }, 
-       data: req.body 
+       data: updateData,
+       include: { 
+         asset: true, 
+         employee: { include: { department: true } }
+       }
     });
 
-    if(req.body.status === 'RETURNED' && oldAssignment.status !== 'RETURNED') {
+    const isMarkingReturned = String(req.body.status || '').toUpperCase() === 'RETURNED';
+
+    if (isMarkingReturned && oldAssignment.status !== 'RETURNED') {
+       const assetIdToUpdate = oldAssignment.assetId || record.assetId;
+       const ast = record.asset || oldAssignment.asset;
+       const emp = record.employee || oldAssignment.employee;
+       const empName = emp ? emp.fullName : 'Employee';
+       const empCode = emp?.employeeCode || '';
+       const astCode = ast ? ast.assetCode : 'Asset';
+
+       // 1. Return asset to available stock in store
        await prisma.asset.update({
-          where: { id: record.assetId },
-          data: { status: 'AVAILABLE', assignedEmployeeId: null, assignmentType: 'STORE' }
+          where: { id: assetIdToUpdate },
+          data: { 
+            status: 'AVAILABLE', 
+            assignedEmployeeId: null, 
+            assignmentType: 'STORE' 
+          }
        });
 
-       // Log Audit
+       // 2. Automatically close any other orphan active assignments for this asset
+       await prisma.assetAssignment.updateMany({
+         where: { 
+           assetId: assetIdToUpdate, 
+           id: { not: record.id }, 
+           status: 'ACTIVE' 
+         },
+         data: { 
+           status: 'RETURNED', 
+           returnedDate: updateData.returnedDate || new Date() 
+         }
+       });
+
+       // 3. Central Audit Log
        await logAudit({
          req,
          action: 'RETURN',
          module: 'ASSIGNMENTS',
-         entityType: 'ASSIGNMENT',
-         entityId: record.id,
-         entityCode: oldAssignment.asset.assetCode,
-         description: `Asset ${oldAssignment.asset.assetCode} returned by ${oldAssignment.employee.fullName}`
+         entityType: 'ASSET',
+         entityId: assetIdToUpdate,
+         entityCode: astCode,
+         employeeOverride: emp ? {
+           id: emp.id,
+           fullName: emp.fullName,
+           departmentName: emp.department?.name || null
+         } : null,
+         description: `Asset ${astCode} returned by ${empName}${empCode ? ` (${empCode})` : ''}`
        });
 
-       // Log Timeline
+       // 4. Asset Timeline Record
        await logAssetTimeline({
-         assetId: oldAssignment.asset.id,
-         assetCode: oldAssignment.asset.assetCode,
+         assetId: assetIdToUpdate,
+         assetCode: astCode,
          eventType: 'RETURNED',
          title: 'Asset Returned',
-         description: `Returned by ${oldAssignment.employee.fullName}`,
+         description: `Returned by ${empName}${empCode ? ` (${empCode})` : ''}`,
          oldStatus: 'ASSIGNED',
          newStatus: 'AVAILABLE',
-         employeeId: oldAssignment.employee.id,
-         employeeName: oldAssignment.employee.fullName,
+         employeeId: emp?.id || null,
+         employeeName: empName,
          performedById: req.user.id,
          performedByName: req.user.fullName
        });
@@ -172,11 +239,14 @@ router.delete('/:id', requirePermission('ASSIGN_ASSETS'), async (req, res) => {
   try {
     const record = await prisma.assetAssignment.findUnique({ 
        where: { id: req.params.id },
-       include: { asset: true }
+       include: { 
+         asset: true,
+         employee: { include: { department: true } }
+       }
     });
     if (!record) return res.status(404).json({ error: 'Assignment not found' });
     
-    if (record.status === 'ACTIVE') {
+    if (record.status === 'ACTIVE' && record.assetId) {
        await prisma.asset.update({
           where: { id: record.assetId },
           data: { status: 'AVAILABLE', assignedEmployeeId: null, assignmentType: 'STORE' }
@@ -193,7 +263,12 @@ router.delete('/:id', requirePermission('ASSIGN_ASSETS'), async (req, res) => {
       entityType: 'ASSIGNMENT',
       entityId: req.params.id,
       entityCode: record.asset?.assetCode,
-      description: `Historical assignment record deleted for asset ${record.asset?.assetCode}`
+      employeeOverride: record.employee ? {
+        id: record.employee.id,
+        fullName: record.employee.fullName,
+        departmentName: record.employee.department?.name || null
+      } : null,
+      description: `Assignment record deleted for asset ${record.asset?.assetCode || 'Unknown'}`
     });
 
     res.json({ message: 'Deleted historical assignment record.' });
