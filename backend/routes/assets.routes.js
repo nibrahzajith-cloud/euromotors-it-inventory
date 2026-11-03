@@ -36,7 +36,21 @@ router.use(authenticate);
 
 router.get('/', async (req, res) => {
   try {
-    const records = await prisma.asset.findMany({ include: { location: true, department: true, assignedEmployee: true } });
+    const records = await prisma.asset.findMany({ 
+      include: { 
+        location: true, 
+        department: true, 
+        assignedEmployee: true,
+        assignments: {
+          include: {
+            employee: {
+              include: { department: true, location: true }
+            }
+          },
+          orderBy: { assignedDate: 'desc' }
+        }
+      } 
+    });
     res.json(records);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -53,7 +67,19 @@ router.get('/code/:code', async (req, res) => {
           mode: 'insensitive'
         }
       },
-      include: { location: true, department: true, assignedEmployee: true }
+      include: { 
+        location: true, 
+        department: true, 
+        assignedEmployee: true,
+        assignments: {
+          include: {
+            employee: {
+              include: { department: true, location: true }
+            }
+          },
+          orderBy: { assignedDate: 'desc' }
+        }
+      }
     });
     if (!record) return res.status(404).json({ error: 'Asset not found in database.' });
     res.json(record);
@@ -851,7 +877,19 @@ router.post('/:id/return', requirePermission('ASSIGN_ASSETS'), async (req, res) 
         assignedEmployeeId: null,
         assignmentType: 'STORE'
       },
-      include: { location: true, department: true, assignedEmployee: true }
+      include: { 
+        location: true, 
+        department: true, 
+        assignedEmployee: true,
+        assignments: {
+          include: {
+            employee: {
+              include: { department: true, location: true }
+            }
+          },
+          orderBy: { assignedDate: 'desc' }
+        }
+      }
     });
 
     // Central Audit Log

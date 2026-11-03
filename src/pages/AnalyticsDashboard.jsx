@@ -363,14 +363,14 @@ export default function AnalyticsDashboard() {
 
   // Inventory Status Doughnut data matching reference
   const inventoryData = useMemo(() => {
-    const avail = data?.summary?.inStoreAssets?.value ?? data?.summary?.available?.value ?? 27;
-    const assigned = data?.summary?.assigned?.value ?? 408;
+    const avail = data?.summary?.available?.value ?? data?.summary?.inStoreAssets?.value ?? 0;
+    const assigned = data?.summary?.assigned?.value ?? 0;
     const rep = data?.summary?.repair?.value ?? 0;
-    const war = data?.summary?.warranty?.value ?? 13;
+    const war = data?.summary?.warranty?.value ?? 0;
     const total = avail + assigned + rep + war;
 
     return {
-      total: total || 448,
+      total: total || 0,
       items: [
         { name: 'Available', value: avail, color: '#06b6d4' },
         { name: 'Assigned', value: assigned, color: '#10b981' },
@@ -454,7 +454,7 @@ export default function AnalyticsDashboard() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <MasterKPICard 
             title="Total Assets" 
-            value={data?.summary?.totalAssets?.value ?? 663} 
+            value={data?.summary?.totalAssets?.value ?? 0} 
             trend="+3.0%" 
             trendSubtext="(vs. last month)"
             trendType="up" 
@@ -463,17 +463,17 @@ export default function AnalyticsDashboard() {
             onClick={() => navigate('/assets')} 
           />
           <MasterKPICard 
-            title="Assets in Store" 
-            value={data?.summary?.inStoreAssets?.value ?? data?.summary?.available?.value ?? 27} 
-            trend="No change" 
-            trendType="neutral" 
+            title="Available Assets" 
+            value={data?.summary?.available?.value ?? data?.summary?.inStoreAssets?.value ?? 0} 
+            trend={data?.summary?.available?.trend ? `+${data?.summary?.available?.trend} returned` : 'In Store'} 
+            trendType={data?.summary?.available?.trend ? 'up' : 'neutral'} 
             icon={Wallet} 
             theme="emerald" 
             onClick={() => navigate('/assets?status=AVAILABLE')} 
           />
           <MasterKPICard 
             title="Assigned to Employees" 
-            value={data?.summary?.assigned?.value ?? 408} 
+            value={data?.summary?.assigned?.value ?? 0} 
             trend="+0.5%" 
             trendType="up" 
             icon={Users} 
@@ -482,7 +482,7 @@ export default function AnalyticsDashboard() {
           />
           <MasterKPICard 
             title="Assigned to Departments" 
-            value={data?.summary?.departmentAssets?.value ?? data?.summary?.department?.value ?? 22} 
+            value={data?.summary?.departmentAssets?.value ?? data?.summary?.department?.value ?? 0} 
             trend="No change" 
             trendType="neutral" 
             icon={Building2} 
@@ -495,7 +495,7 @@ export default function AnalyticsDashboard() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <MasterKPICard 
             title="Assigned to Locations" 
-            value={data?.summary?.locationAssets?.value ?? data?.summary?.location?.value ?? 150} 
+            value={data?.summary?.locationAssets?.value ?? data?.summary?.location?.value ?? 0} 
             trend="No change" 
             trendType="neutral" 
             icon={MapPin} 
@@ -504,7 +504,7 @@ export default function AnalyticsDashboard() {
           />
           <MasterKPICard 
             title="Shared Assets" 
-            value={data?.summary?.sharedAssets?.value ?? data?.summary?.shared?.value ?? 56} 
+            value={data?.summary?.sharedAssets?.value ?? data?.summary?.shared?.value ?? 0} 
             trend="No change" 
             trendType="neutral" 
             icon={Share2} 
@@ -522,7 +522,7 @@ export default function AnalyticsDashboard() {
           />
           <MasterKPICard 
             title="Warranty Alerts" 
-            value={data?.summary?.warranty?.value ?? 13} 
+            value={data?.summary?.warranty?.value ?? 0} 
             trend="+5 new" 
             trendType="alert" 
             icon={ShieldCheck} 
@@ -893,7 +893,7 @@ export default function AnalyticsDashboard() {
                       Warranty Expirations
                     </h4>
                     <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                      {data?.alerts?.warranty30 ?? 13} assets warranties expiring in &le; 30 days.
+                      {data?.alerts?.warranty30 ?? 0} assets warranties expiring in &le; 30 days.
                     </p>
                   </div>
                 </div>
@@ -914,7 +914,7 @@ export default function AnalyticsDashboard() {
                       Hardware Refresh Pipeline
                     </h4>
                     <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                      {data?.alerts?.hardwareRefresh ?? 14} operational assets are &gt; 4 years old.
+                      {data?.alerts?.hardwareRefresh ?? 0} operational assets are &gt; 4 years old.
                     </p>
                   </div>
                 </div>

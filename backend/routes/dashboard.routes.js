@@ -60,7 +60,7 @@ router.get('/summary', authenticate, async (req, res) => {
       prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'DEPARTMENT' } }),
       prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'LOCATION' } }),
       prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'SHARED' } }),
-      prisma.asset.count({ where: { OR: [{ assignmentType: 'STORE' }, { status: 'AVAILABLE' }], status: { not: 'UNDER_REPAIR' } } })
+      prisma.asset.count({ where: { status: 'AVAILABLE' } })
     ]);
 
     res.json({
@@ -161,7 +161,7 @@ router.get('/advanced', authenticate, async (req, res) => {
       prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'DEPARTMENT' } }),
       prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'LOCATION' } }),
       prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'SHARED' } }),
-      prisma.asset.count({ where: { OR: [{ assignmentType: 'STORE' }, { status: 'AVAILABLE' }], status: { not: 'UNDER_REPAIR' } } })
+      prisma.asset.count({ where: { status: 'AVAILABLE' } })
     ]);
 
     // Build all 7-day buckets upfront, then fire ALL queries in a single Promise.all.
