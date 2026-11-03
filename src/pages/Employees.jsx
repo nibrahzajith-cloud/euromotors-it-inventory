@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
 import CopyButton from '../components/CopyButton';
+import { returnAssetToStore } from '../utils/assetReturn';
 
 const _rawApi = import.meta.env.VITE_API_URL || '/api';
 const API_URL = _rawApi.endsWith('/api') ? _rawApi : `${_rawApi.replace(/\/$/, '')}/api`;
@@ -67,7 +68,7 @@ export default function Employees({ defaultOpenAdd = false }) {
   const [departmentFilter, setDepartmentFilter] = useState('');
 
   // Asset picker modal state
-  const [assetPickerModal, setAssetPickerModal] = useState({ open: false, empName: '', assets: [] });
+  const [assetPickerModal, setAssetPickerModal] = useState({ open: false, empName: '', employeeId: '', assets: [], assignments: [] });
   const [auditModal, setAuditModal] = useState({ open: false, employee: null, logs: [], loading: false, stats: null });
 
   const openEmployeeAudit = async (emp) => {
@@ -427,7 +428,7 @@ export default function Employees({ defaultOpenAdd = false }) {
     } else if (assigned.length === 1) {
       navigate(`/assets/${assigned[0].assetCode}`);
     } else {
-      setAssetPickerModal({ open: true, empName: emp.fullName, assets: assigned });
+      setAssetPickerModal({ open: true, empName: emp.fullName, employeeId: emp.id, assets: assigned, assignments: emp.assignments || [] });
     }
   };
 
@@ -971,27 +972,22 @@ export default function Employees({ defaultOpenAdd = false }) {
                           })) return;
 
                           try {
-                            const token = localStorage.getItem('token');
-                            const res = await fetch(`${API_URL}/assets/${asset.id}/return`, {
-                              method: 'POST',
-                              headers: { 'Authorization': `Bearer ${token}` }
+                            await returnAssetToStore({
+                              assetId: asset.id,
+                              assetCode: asset.assetCode,
+                              activeAssignments: assetPickerModal.assignments
                             });
-                            if (!res.ok) { const errData = await res.json().catch(() => ({})); throw new Error(errData.error || errData.message || 'Return failed'); }
                             showToast(`Asset ${asset.assetCode} returned to available store stock.`, 'success');
-                            localStorage.removeItem('analyticsDashboardCache');
-                            localStorage.removeItem('assetsCache');
-                            localStorage.removeItem('employeesCache');
-                            localStorage.removeItem('assignmentsCache');
                             await fetchData();
                             setAssetPickerModal(prev => {
                               const remaining = prev.assets.filter(a => a.id !== asset.id);
                               if (remaining.length === 0) {
-                                return { open: false, empName: '', assets: [] };
+                                return { open: false, empName: '', employeeId: '', assets: [], assignments: [] };
                               }
                               return { ...prev, assets: remaining };
                             });
                           } catch (err) {
-                            showToast(err.message, 'error');
+                            showToast(err.message || 'Return failed', 'error');
                           }
                         }}
                         className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 transition-colors cursor-pointer"

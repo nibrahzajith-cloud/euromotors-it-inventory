@@ -14,6 +14,7 @@ import AssetImage from '../components/AssetMedia/AssetImage';
 import AssetDocuments from '../components/AssetMedia/AssetDocuments';
 import AssetAuditTrail from '../components/AssetAuditTrail';
 import CopyButton from '../components/CopyButton';
+import { returnAssetToStore } from '../utils/assetReturn';
 
 const _rawApi = import.meta.env.VITE_API_URL || '/api';
 const API_URL = _rawApi.endsWith('/api') ? _rawApi : `${_rawApi.replace(/\/$/, '')}/api`;
@@ -43,20 +44,15 @@ export default function AssetProfile() {
 
     setReturning(true);
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/assets/${asset.id}/return`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
+      await returnAssetToStore({
+        assetId: asset.id,
+        assetCode: asset.assetCode,
+        activeAssignments: asset.assignments
       });
-      if (!res.ok) { const errData = await res.json().catch(() => ({})); throw new Error(errData.error || errData.message || 'Return failed'); }
       showToast(`Asset ${asset.assetCode} successfully returned to store inventory.`, 'success');
-      localStorage.removeItem('analyticsDashboardCache');
-      localStorage.removeItem('assetsCache');
-      localStorage.removeItem('assignmentsCache');
-      localStorage.removeItem('employeesCache');
       await fetchAssetProfile();
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast(err.message || 'Return failed', 'error');
     } finally {
       setReturning(false);
     }
