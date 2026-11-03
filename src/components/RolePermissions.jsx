@@ -113,7 +113,7 @@ export default function RolePermissions() {
                   {role.id === 'VIEWER' && <ShieldAlert className="w-4 h-4 text-slate-600" />}
                   {role.name}
                 </h3>
-                <p className="text-sm text-slate-500">{role.desc}</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">{role.desc}</p>
               </div>
               <button 
                 onClick={() => handleEditRole(role.id)}
@@ -129,10 +129,10 @@ export default function RolePermissions() {
       {/* Editing Modal */}
       {editingRole && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex justify-center items-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl my-8 overflow-hidden">
-            <div className="flex justify-between items-center p-5 border-b border-slate-100 bg-slate-50">
+          <div className="bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-3xl my-8 overflow-hidden">
+            <div className="flex justify-between items-center p-5 border-b border-slate-200 dark:border-slate-800/80 bg-slate-50/80 dark:bg-[#080d18]">
               <div>
-                <h3 className="font-bold text-xl text-slate-800">Edit Permissions: {editingRole}</h3>
+                <h3 className="font-bold text-xl text-slate-900 dark:text-white">Edit Permissions: {editingRole}</h3>
                 <p className="text-sm text-slate-500">Configure access levels and capabilities for this role.</p>
               </div>
               <button onClick={() => setEditingRole(null)} className="text-slate-400 hover:text-slate-600 bg-white p-2 rounded-lg shadow-sm">
@@ -140,12 +140,12 @@ export default function RolePermissions() {
               </button>
             </div>
             
-            <div className="p-6 max-h-[60vh] overflow-y-auto bg-slate-50/50">
+            <div className="p-6 max-h-[60vh] overflow-y-auto bg-slate-50/50 dark:bg-[#070b13]">
               <div className="space-y-6">
                 {Object.entries(PERMISSION_GROUPS).map(([groupName, perms]) => (
-                  <div key={groupName} className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                    <div className="bg-slate-100 px-4 py-2 border-b border-slate-200">
-                      <h4 className="font-semibold text-slate-700 text-sm uppercase tracking-wider">{groupName}</h4>
+                  <div key={groupName} className="bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm">
+                    <div className="bg-slate-100 dark:bg-[#090e17] px-4 py-2 border-b border-slate-200 dark:border-slate-800">
+                      <h4 className="font-bold text-slate-800 dark:text-slate-200 text-sm uppercase tracking-wider">{groupName}</h4>
                     </div>
                     <div className="divide-y divide-slate-100">
                       {perms.map(perm => {
@@ -153,9 +153,9 @@ export default function RolePermissions() {
                         const isCriticalAdmin = editingRole === 'ADMIN' && ['MANAGE_USERS', 'MANAGE_ROLES', 'VIEW_AUDIT_LOG', 'CONFIGURE_SYSTEM'].includes(perm);
                         
                         return (
-                          <div key={perm} className="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors">
+                          <div key={perm} className="flex items-center justify-between p-4 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
                             <div>
-                              <span className="font-medium text-slate-800">{perm.replace(/_/g, ' ')}</span>
+                              <span className="font-medium text-slate-800 dark:text-slate-200">{perm.replace(/_/g, ' ')}</span>
                               {isCriticalAdmin && <p className="text-xs text-purple-600 mt-1">Required for Administrator</p>}
                             </div>
                             <button

@@ -60,6 +60,7 @@ export default function Assets() {
   const [locationFilter, setLocationFilter] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('');
   const [employeeFilter, setEmployeeFilter] = useState('');
+  const [assignmentTypeFilter, setAssignmentTypeFilter] = useState('');
 
   // Bulk Selection
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -118,6 +119,10 @@ export default function Assets() {
     if (deptId) setDepartmentFilter(deptId);
     if (status) setStatusFilter(status);
     if (empId) setEmployeeFilter(empId);
+    const aType = searchParams.get('assignmentType') || searchParams.get('type');
+    if (aType) setAssignmentTypeFilter(aType);
+    const qParam = searchParams.get('search') || searchParams.get('q');
+    if (qParam) setSearchTerm(qParam);
   }, [searchParams]);
 
   const handleDelete = async (id) => {
@@ -206,8 +211,9 @@ export default function Assets() {
     const locationMatch = locationFilter ? asset.locationId === locationFilter : true;
     const departmentMatch = departmentFilter ? asset.departmentId === departmentFilter : true;
     const employeeMatch = employeeFilter ? asset.assignedEmployeeId === employeeFilter : true;
+    const assignmentTypeMatch = assignmentTypeFilter ? asset.assignmentType === assignmentTypeFilter : true;
 
-    return textMatch && statusMatch && locationMatch && departmentMatch && employeeMatch;
+    return textMatch && statusMatch && locationMatch && departmentMatch && employeeMatch && assignmentTypeMatch;
   });
 
   const toggleSelection = (id) => {
@@ -361,27 +367,56 @@ export default function Assets() {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-sm rounded-xl outline-none p-2 focus:ring-2 focus:ring-blue-500">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-xl outline-none p-2.5 focus:ring-2 focus:ring-blue-500">
               <option value="">All Statuses</option>
-              <option value="AVAILABLE">Available</option>
+              <option value="AVAILABLE">Available (In Store)</option>
               <option value="ASSIGNED">Assigned</option>
               <option value="UNDER_REPAIR">Under Repair</option>
               <option value="RETIRED">Retired</option>
             </select>
-            <select value={locationFilter} onChange={e => setLocationFilter(e.target.value)} className="bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-sm rounded-xl outline-none p-2 focus:ring-2 focus:ring-blue-500">
+            <select value={assignmentTypeFilter} onChange={e => setAssignmentTypeFilter(e.target.value)} className="bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-xl outline-none p-2.5 focus:ring-2 focus:ring-blue-500">
+              <option value="">All Allocations</option>
+              <option value="EMPLOYEE">Direct Employee</option>
+              <option value="DEPARTMENT">Departmental</option>
+              <option value="LOCATION">Branch/Location</option>
+              <option value="SHARED">Shared Pool</option>
+              <option value="STORE">Store Stock</option>
+            </select>
+            <select value={locationFilter} onChange={e => setLocationFilter(e.target.value)} className="bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-xl outline-none p-2.5 focus:ring-2 focus:ring-blue-500">
               <option value="">All Locations</option>
               {locations.map(loc => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
             </select>
-            <select value={departmentFilter} onChange={e => setDepartmentFilter(e.target.value)} className="bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-sm rounded-xl outline-none p-2 focus:ring-2 focus:ring-blue-500">
+            <select value={departmentFilter} onChange={e => setDepartmentFilter(e.target.value)} className="bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-xl outline-none p-2.5 focus:ring-2 focus:ring-blue-500">
               <option value="">All Departments</option>
               {departments.map(dept => <option key={dept.id} value={dept.id}>{dept.name}</option>)}
             </select>
-            <select value={employeeFilter} onChange={e => setEmployeeFilter(e.target.value)} className="bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-sm rounded-xl outline-none p-2 focus:ring-2 focus:ring-blue-500">
+            <select value={employeeFilter} onChange={e => setEmployeeFilter(e.target.value)} className="bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-xl outline-none p-2.5 focus:ring-2 focus:ring-blue-500">
               <option value="">All Employees</option>
               {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.fullName}</option>)}
             </select>
           </div>
+
+          {(Boolean(statusFilter) || Boolean(assignmentTypeFilter) || Boolean(locationFilter) || Boolean(departmentFilter) || Boolean(employeeFilter) || Boolean(searchTerm)) && (
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                Filtering: <strong className="text-slate-800 dark:text-white">{filteredAssets.length}</strong> matching of {assets.length} total
+              </span>
+              <button
+                onClick={() => {
+                  setStatusFilter('');
+                  setAssignmentTypeFilter('');
+                  setLocationFilter('');
+                  setDepartmentFilter('');
+                  setEmployeeFilter('');
+                  setSearchTerm('');
+                }}
+                className="text-xs text-blue-600 dark:text-blue-400 font-bold hover:underline cursor-pointer"
+              >
+                Clear all filters
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Table */}

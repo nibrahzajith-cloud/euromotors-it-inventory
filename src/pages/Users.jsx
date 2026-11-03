@@ -263,8 +263,8 @@ export default function Users() {
       {/* Add/Edit Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex justify-center items-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
-            <div className="flex justify-between items-center p-5 border-b border-slate-100">
+          <div className="bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="flex justify-between items-center p-5 border-b border-slate-200 dark:border-slate-800/80 bg-slate-50/80 dark:bg-[#080d18]">
               <h3 className="font-bold text-lg text-slate-800 dark:text-white">{modalMode === 'add' ? 'Add New User' : 'Edit User'}</h3>
               <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
                 <X className="w-5 h-5" />
@@ -272,16 +272,16 @@ export default function Users() {
             </div>
             <form onSubmit={handleSaveUser} className="p-5 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Full Name</label>
                 <input required type="text" value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Email</label>
                 <input required type="email" disabled={modalMode === 'edit'} value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Role</label>
+                  <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Role</label>
                   <select disabled={modalMode === 'edit' && formData.id === user?.id} value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50">
                     <option value="VIEWER">Viewer</option>
                     <option value="IT_OFFICER">IT Officer</option>
@@ -289,7 +289,7 @@ export default function Users() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Status</label>
+                  <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Status</label>
                   <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
                     <option value="ACTIVE">Active</option>
                     <option value="INACTIVE">Inactive</option>
@@ -311,14 +311,14 @@ export default function Users() {
       {/* Temporary Password Modal */}
       {isTempModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[60] flex justify-center items-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden text-center p-6 border-t-4 border-amber-500">
+          <div className="bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden text-center p-6 border-t-4 border-amber-500">
             <div className="mx-auto w-12 h-12 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mb-4">
               <KeyRound className="w-6 h-6" />
             </div>
             <h3 className="font-bold text-lg text-slate-800 dark:text-white mb-2">Temporary Password</h3>
             <p className="text-sm text-slate-500 mb-6">Please securely share this temporary password with the user. They will be forced to change it on their first login.</p>
             
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center justify-between mb-6">
+            <div className="bg-slate-50 dark:bg-[#080d18] border border-slate-200 dark:border-slate-700 rounded-xl p-4 flex items-center justify-between mb-6">
               <code className="text-lg font-bold font-mono text-slate-800 dark:text-white">{tempPassword}</code>
               <button onClick={copyTempPassword} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
                 <Copy className="w-5 h-5" />

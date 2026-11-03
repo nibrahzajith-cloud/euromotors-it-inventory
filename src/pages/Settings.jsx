@@ -605,12 +605,12 @@ export default function Settings() {
             {/* IMPORTING PROGRESS MODAL */}
             {isImporting && (
                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300">
-                 <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-2xl flex flex-col items-center justify-center space-y-6 max-w-md w-full mx-4">
+                 <div className="bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-800 rounded-2xl p-8 shadow-2xl flex flex-col items-center justify-center space-y-6 max-w-md w-full mx-4">
                   <div className="flex flex-col items-center gap-3">
                     <div className="p-4 bg-indigo-50 rounded-full">
                        <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
                     </div>
-                    <span className="text-slate-800 font-bold text-xl">Transferring assets to database...</span>
+                    <span className="text-slate-900 dark:text-white font-bold text-xl">Transferring assets to database...</span>
                     <span className="text-slate-500 text-sm text-center">
                        Processing {selectedFileInfo?.count || (csvData && csvData.length) || 0} records.<br/>
                        Please do not close or refresh this window.

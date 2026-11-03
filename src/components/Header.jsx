@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { 
-  Search, Bell, Sun, Moon, 
-  LayoutDashboard, MonitorSmartphone, PlusCircle, Users, 
-  UserPlus, Building2, MapPin, ArrowRightLeft, QrCode, 
-  Wrench, FileText, Settings, ShieldCheck, History, 
+import {
+  Search, Bell, Sun, Moon,
+  LayoutDashboard, MonitorSmartphone, PlusCircle, Users,
+  UserPlus, Building2, MapPin, ArrowRightLeft, QrCode,
+  Wrench, FileText, Settings, ShieldCheck, History,
   Camera, Ticket, Database, KeyRound
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -15,7 +15,7 @@ export default function Header() {
   const { toggleTheme, isDark } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
-  
+
   const [showNotifications, setShowNotifications] = useState(false);
   const notifRef = useRef(null);
   const [notifications, setNotifications] = useState([]);
@@ -39,9 +39,9 @@ export default function Header() {
             read: false
           })));
         }
-      } catch (e) {}
+      } catch (e) { }
     };
-    
+
     fetchOpenTickets();
     const interval = setInterval(fetchOpenTickets, 30000);
     return () => clearInterval(interval);
@@ -81,12 +81,12 @@ export default function Header() {
 
   return (
     <header className="h-16 bg-white dark:bg-[#070b13] border-b border-slate-200 dark:border-slate-800/80 px-4 md:px-6 flex items-center justify-between shrink-0 z-30 select-none transition-colors duration-300">
-      
+
       {/* Left: Euro Motors Branding & Module Title */}
       <div className="flex items-center gap-4">
         {/* Euro Motors Wing Emblem */}
-        <div 
-          onClick={() => navigate('/')} 
+        <div
+          onClick={() => navigate('/')}
           className="flex items-center gap-2.5 cursor-pointer group"
         >
           <div className="relative flex items-center justify-center">
@@ -123,9 +123,9 @@ export default function Header() {
 
       {/* Right Controls: Search, Notifications, Theme, User */}
       <div className="flex items-center gap-3">
-        
+
         {/* Global Search Bar (with Ctrl + K) */}
-        <div 
+        <div
           onClick={openSearch}
           className="relative hidden md:flex items-center bg-slate-100 hover:bg-slate-200/70 dark:bg-[#0d1424] dark:hover:bg-[#111a2e] border border-slate-200 dark:border-slate-700/60 hover:border-slate-300 dark:hover:border-slate-600 rounded-xl px-3.5 py-1.5 cursor-pointer transition-all w-64 lg:w-72 shadow-inner"
         >
@@ -137,7 +137,7 @@ export default function Header() {
         </div>
 
         {/* Mobile Search Button */}
-        <button 
+        <button
           onClick={openSearch}
           className="md:hidden p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800/80 transition-colors"
           title="Search (Ctrl + K)"
@@ -147,7 +147,7 @@ export default function Header() {
 
         {/* Notification Bell */}
         <div className="relative" ref={notifRef}>
-          <button 
+          <button
             onClick={() => setShowNotifications(!showNotifications)}
             className="relative p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800/80 transition-colors"
             title="Notifications"
@@ -183,7 +183,7 @@ export default function Header() {
         </div>
 
         {/* Theme Toggle (Moon button matching reference) */}
-        <button 
+        <button
           onClick={toggleTheme}
           className="p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800/80 transition-colors"
           title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
@@ -192,7 +192,7 @@ export default function Header() {
         </button>
 
         {/* User Avatar & Name */}
-        <div 
+        <div
           onClick={() => navigate('/settings')}
           className="flex items-center gap-2.5 pl-2 cursor-pointer group"
           title="Profile & Settings"

@@ -4,6 +4,7 @@ import Sidebar from './Sidebar';
 import Header from './Header';
 import CommandPalette from './CommandPalette';
 import MobileNav from './MobileNav';
+import Breadcrumb from './Breadcrumb';
 
 export default function Layout() {
   const location = useLocation();
@@ -23,6 +24,7 @@ export default function Layout() {
 
         {/* Scrollable Center Content Area */}
         <div className="flex-1 flex flex-col min-w-0 overflow-y-auto overflow-x-hidden bg-slate-50 dark:bg-[#060913] relative custom-scrollbar select-text transition-colors duration-300">
+          <Breadcrumb />
           <AnimatePresence mode="wait">
             <motion.main
               key={location.pathname}

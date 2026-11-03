@@ -205,6 +205,7 @@ export default function AddAsset() {
   }, [id]);
 
   const handleChange = (field, value) => {
+    setIsDirty(true);
     setFormData(prev => {
       const newData = { ...prev, [field]: value };
       
@@ -330,76 +331,76 @@ export default function AddAsset() {
         </div>
       )}
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden relative">
+      <div className="bg-white dark:bg-[#0c1322] rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden relative">
         <form className="p-6 space-y-8" onSubmit={handleSubmit}>
           
           {/* Basic Information */}
-          <div className="bg-slate-50/50 p-6 rounded-2xl border border-slate-100">
+          <div className="bg-slate-50/70 dark:bg-[#080d18] p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800/80">
             <h2 className="text-lg font-bold text-slate-800 dark:text-white mb-5 flex items-center gap-2">
               <div className="w-2 h-6 bg-blue-600 rounded-full"></div> Core Identification
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Asset Code</label>
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Asset Code</label>
                 <input type="text" value={formData.assetCode} readOnly className="w-full bg-slate-100 border border-slate-200 text-slate-500 rounded-xl px-4 py-2.5 outline-none font-mono text-sm cursor-not-allowed" placeholder="Auto-generated upon save" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Serial Number *</label>
-                <input required type="text" value={formData.serialNumber} onChange={e => handleChange('serialNumber', e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm uppercase" />
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Serial Number *</label>
+                <input required type="text" value={formData.serialNumber} onChange={e => handleChange('serialNumber', e.target.value)} className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm uppercase placeholder:text-slate-400 dark:placeholder:text-slate-500" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Device Type *</label>
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Device Type *</label>
                 <DynamicSelect value={formData.deviceType} onChange={v => handleChange('deviceType', v)} optionsKey="deviceTypes" defaultOptions={['Laptop', 'Desktop', 'Monitor', 'Mobile Phone', 'Tablet', 'Printer']} placeholder="Device category..." />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Brand/Vendor</label>
-                <input type="text" value={formData.brand} onChange={e => handleChange('brand', e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g. Dell" />
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Brand/Vendor</label>
+                <input type="text" value={formData.brand} onChange={e => handleChange('brand', e.target.value)} className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="e.g. Dell" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Hardware Model *</label>
-                <input required type="text" value={formData.model} onChange={e => handleChange('model', e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g. Latitude 5420" />
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Hardware Model *</label>
+                <input required type="text" value={formData.model} onChange={e => handleChange('model', e.target.value)} className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="e.g. Latitude 5420" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Physical Condition *</label>
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Physical Condition *</label>
                 <DynamicSelect value={formData.condition} onChange={v => handleChange('condition', v)} optionsKey="conditions" defaultOptions={['New', 'Good', 'Fair', 'Poor']} placeholder="Condition..." />
               </div>
             </div>
           </div>
 
           {/* Internal Specifications */}
-          <div className="bg-slate-50/50 p-6 rounded-2xl border border-slate-100">
+          <div className="bg-slate-50/70 dark:bg-[#080d18] p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800/80">
             <h2 className="text-lg font-bold text-slate-800 dark:text-white mb-5 flex items-center gap-2">
               <div className="w-2 h-6 bg-indigo-500 rounded-full"></div> Specifications
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Processor (CPU)</label>
-                <input type="text" value={formData.processor} onChange={e => handleChange('processor', e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500" placeholder="e.g. Intel i7" />
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Processor (CPU)</label>
+                <input type="text" value={formData.processor} onChange={e => handleChange('processor', e.target.value)} className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="e.g. Intel i7" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">System Memory</label>
-                <input type="text" value={formData.ram} onChange={e => handleChange('ram', e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500" placeholder="e.g. 16GB Array" />
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">System Memory</label>
+                <input type="text" value={formData.ram} onChange={e => handleChange('ram', e.target.value)} className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="e.g. 16GB Array" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Storage Array</label>
-                <input type="text" value={formData.storage} onChange={e => handleChange('storage', e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500" placeholder="e.g. 512GB NVMe" />
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Storage Array</label>
+                <input type="text" value={formData.storage} onChange={e => handleChange('storage', e.target.value)} className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="e.g. 512GB NVMe" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Operating OS</label>
-                <input type="text" value={formData.operatingSystem} onChange={e => handleChange('operatingSystem', e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500" placeholder="e.g. Win 11 Pro" />
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Operating OS</label>
+                <input type="text" value={formData.operatingSystem} onChange={e => handleChange('operatingSystem', e.target.value)} className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="e.g. Win 11 Pro" />
               </div>
             </div>
           </div>
 
           {/* Allocation Bindings */}
-          <div className="bg-slate-50/50 p-6 rounded-2xl border border-slate-100">
+          <div className="bg-slate-50/70 dark:bg-[#080d18] p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800/80">
             <h2 className="text-lg font-bold text-slate-800 dark:text-white mb-5 flex items-center gap-2">
               <div className="w-2 h-6 bg-teal-500 rounded-full"></div> Network Bindings & Registration
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Assignment Type</label>
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Assignment Type</label>
                 <select value={formData.assignmentType} onChange={e => handleChange('assignmentType', e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-teal-500">
                    <option value="EMPLOYEE">Employee Asset</option>
                    <option value="DEPARTMENT">Department Asset</option>
@@ -410,7 +411,7 @@ export default function AddAsset() {
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Current Status</label>
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Current Status</label>
                 <select value={formData.status} onChange={e => handleChange('status', e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-teal-500">
                    <option value="AVAILABLE">Available</option>
                    <option value="ASSIGNED">Assigned</option>
@@ -420,7 +421,7 @@ export default function AddAsset() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Base Location</label>
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Base Location</label>
                 <select value={formData.locationId} onChange={e => handleChange('locationId', e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-teal-500">
                    <option value="">Unassigned Location</option>
                    {locations.map(loc => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
@@ -428,7 +429,7 @@ export default function AddAsset() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Assigned Department</label>
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Assigned Department</label>
                 <select value={formData.departmentId} onChange={e => handleChange('departmentId', e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-teal-500">
                    <option value="">Unaffiliated Dept</option>
                    {departments.map(dept => <option key={dept.id} value={dept.id}>{dept.name}</option>)}
@@ -437,7 +438,7 @@ export default function AddAsset() {
 
               {formData.assignmentType === 'EMPLOYEE' && (
                 <div className="md:col-span-3 border-t border-slate-200 pt-5 mt-2 transition-all">
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Direct Employee Allocation</label>
+                  <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Direct Employee Allocation</label>
                   <EmployeeSearchDropdown
                     employees={employees}
                     value={formData.assignedEmployeeId}
@@ -450,30 +451,30 @@ export default function AddAsset() {
           </div>
           
           {/* IPAM Information */}
-          <div className="bg-slate-50/50 p-6 rounded-2xl border border-slate-100">
+          <div className="bg-slate-50/70 dark:bg-[#080d18] p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800/80">
             <h2 className="text-lg font-bold text-slate-800 dark:text-white mb-5 flex items-center gap-2">
               <div className="w-2 h-6 bg-purple-500 rounded-full"></div> IPAM & Network Identity
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">MAC Address</label>
-                <input type="text" value={formData.macAddress} onChange={e => handleChange('macAddress', e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-purple-500 font-mono text-sm uppercase" placeholder="e.g. 00:1B:44:11:3A:B7" />
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">MAC Address</label>
+                <input type="text" value={formData.macAddress} onChange={e => handleChange('macAddress', e.target.value)} className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-purple-500 font-mono text-sm uppercase placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="e.g. 00:1B:44:11:3A:B7" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Static IP Address</label>
-                <input type="text" value={formData.ipAddress} onChange={e => handleChange('ipAddress', e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-purple-500 font-mono text-sm" placeholder="e.g. 192.168.1.50" />
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Static IP Address</label>
+                <input type="text" value={formData.ipAddress} onChange={e => handleChange('ipAddress', e.target.value)} className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-purple-500 font-mono text-sm placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="e.g. 192.168.1.50" />
               </div>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-6">
              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Warranty Term Validity</label>
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Warranty Term Validity</label>
                 <DynamicSelect value={formData.warrantyStatus} onChange={v => handleChange('warrantyStatus', v)} optionsKey="warrantyStatuses" defaultOptions={['Active', 'Expired', 'None', 'Extended']} placeholder="Status..." />
              </div>
              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Warranty End Date</label>
-                <input type="date" value={formData.warrantyExpiryDate} onChange={e => handleChange('warrantyExpiryDate', e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-slate-500 text-slate-700" />
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Warranty End Date</label>
+                <input type="date" value={formData.warrantyExpiryDate} onChange={e => handleChange('warrantyExpiryDate', e.target.value)} className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-slate-500" />
              </div>
           </div>
 

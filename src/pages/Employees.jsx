@@ -906,14 +906,14 @@ export default function Employees({ defaultOpenAdd = false }) {
           onClick={() => setAssetPickerModal({ open: false, empName: '', assets: [] })}
         >
           <div
-            className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden"
+            className="bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-800 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden"
             onClick={e => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-800/80 bg-slate-50/80 dark:bg-[#080d18]">
               <div className="flex items-center gap-3.5">
                 <h3 className="font-bold text-slate-800 dark:text-white text-sm">Assigned Assets</h3>
-                <p className="text-xs text-slate-500 mt-0.5">{assetPickerModal.empName} · {assetPickerModal.assets.length} assets</p>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">{assetPickerModal.empName} · {assetPickerModal.assets.length} assets</p>
               </div>
               <button
                 onClick={() => setAssetPickerModal({ open: false, empName: '', assets: [] })}
@@ -976,7 +976,7 @@ export default function Employees({ defaultOpenAdd = false }) {
                               method: 'POST',
                               headers: { 'Authorization': `Bearer ${token}` }
                             });
-                            if (!res.ok) throw new Error('Return failed');
+                            if (!res.ok) { const errData = await res.json().catch(() => ({})); throw new Error(errData.error || errData.message || 'Return failed'); }
                             showToast(`Asset ${asset.assetCode} returned to available store stock.`, 'success');
                             localStorage.removeItem('analyticsDashboardCache');
                             localStorage.removeItem('assetsCache');
@@ -1006,7 +1006,7 @@ export default function Employees({ defaultOpenAdd = false }) {
               ))}
             </div>
 
-            <div className="px-5 py-3 bg-slate-50 dark:bg-slate-800/60 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <div className="px-5 py-3 bg-slate-50/80 dark:bg-[#080d18] border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
               <p className="text-[10px] text-slate-400">Click asset to inspect profile or use Return to check-in</p>
               <button
                 type="button"

@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
 import {
@@ -20,6 +20,15 @@ const API_URL = _rawApi.endsWith('/api') ? _rawApi : `${_rawApi.replace(/\/$/, '
 
 export default function AssetProfile() {
   const { id: assetCode } = useParams();
+  const navigate = useNavigate();
+
+  const handleBack = () => {
+    if (window.history.state && window.history.state.idx > 0) {
+      navigate(-1);
+    } else {
+      navigate('/assets');
+    }
+  };
   const { showToast } = useToast();
   const { confirm } = useConfirm();
   const [returning, setReturning] = useState(false);
@@ -39,7 +48,7 @@ export default function AssetProfile() {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (!res.ok) throw new Error('Return failed');
+      if (!res.ok) { const errData = await res.json().catch(() => ({})); throw new Error(errData.error || errData.message || 'Return failed'); }
       showToast(`Asset ${asset.assetCode} successfully returned to store inventory.`, 'success');
       localStorage.removeItem('analyticsDashboardCache');
       localStorage.removeItem('assetsCache');

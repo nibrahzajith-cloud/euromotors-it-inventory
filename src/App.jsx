@@ -85,6 +85,11 @@ const AppRoutes = () => {
         <Route path="scanner" element={<ProtectedRoute allowedRoles={['ADMIN', 'IT_OFFICER']}><Scanner /></ProtectedRoute>} />
         <Route path="tickets" element={<Tickets />} />
         
+        <Route path="inventory" element={<Navigate to="/assets?status=AVAILABLE" replace />} />
+        <Route path="shared-assets" element={<Navigate to="/assets?assignmentType=SHARED" replace />} />
+        <Route path="warranty" element={<Navigate to="/reports" replace />} />
+        <Route path="qr-management" element={<Navigate to="/qr-code" replace />} />
+        
         <Route path="reports" element={<ProtectedRoute allowedRoles={['ADMIN']}><Reports /></ProtectedRoute>} />
         <Route path="settings" element={<ProtectedRoute allowedRoles={['ADMIN']}><Settings /></ProtectedRoute>} />
         <Route path="users" element={<ProtectedRoute allowedRoles={['ADMIN']} requiredPermission="MANAGE_USERS"><Users /></ProtectedRoute>} />

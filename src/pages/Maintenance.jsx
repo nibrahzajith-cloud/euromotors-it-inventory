@@ -306,8 +306,8 @@ export default function Maintenance() {
 
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-xl ring-1 ring-slate-900/5">
-            <div className="flex items-center justify-between p-6 border-b border-slate-100 sticky top-0 bg-white z-10">
+          <div className="bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl ring-1 ring-slate-900/5">
+            <div className="flex items-center justify-between p-6 border-b border-slate-200 dark:border-slate-800/80 sticky top-0 bg-white dark:bg-[#0c1322] z-10">
               <div className="flex items-center gap-3">
                  <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center border border-blue-100">
                     <Wrench className="w-5 h-5 text-blue-600" />
@@ -325,7 +325,7 @@ export default function Maintenance() {
             <form onSubmit={handleFormSubmit} className="p-6 space-y-6">
               
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Target Hardware Platform *</label>
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Target Hardware Platform *</label>
                 <select 
                   required value={formData.assetId} onChange={e => setFormData({...formData, assetId: e.target.value})}
                   className="w-full bg-slate-50 border border-slate-200 text-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 p-2.5 outline-none transition-all"
@@ -339,37 +339,37 @@ export default function Maintenance() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Status Override *</label>
-                    <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500">
+                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Status Override *</label>
+                    <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="w-full bg-slate-50 dark:bg-[#080d18] border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500">
                        <option value="OPEN">Open (Awaiting triage)</option>
                        <option value="IN_PROGRESS">In Progress (Vendor transit)</option>
                        <option value="RESOLVED">Resolved (Ticket closed)</option>
                     </select>
                  </div>
                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Execution Date</label>
+                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Execution Date</label>
                     <input type="date" value={formData.repairDate} onChange={e => setFormData({...formData, repairDate: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 text-slate-700" />
                  </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Diagnostic Issue Array *</label>
-                <textarea required value={formData.issueDescription} onChange={e => setFormData({...formData, issueDescription: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400" rows="3" placeholder="Exact symptom behavior..."></textarea>
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Diagnostic Issue Array *</label>
+                <textarea required value={formData.issueDescription} onChange={e => setFormData({...formData, issueDescription: e.target.value})} className="w-full bg-slate-50 dark:bg-[#080d18] border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400 dark:placeholder:text-slate-500" rows="3" placeholder="Exact symptom behavior..."></textarea>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Repair Action Protocol</label>
-                <textarea value={formData.repairAction} onChange={e => setFormData({...formData, repairAction: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400" rows="2" placeholder="Tasks undertaken..."></textarea>
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Repair Action Protocol</label>
+                <textarea value={formData.repairAction} onChange={e => setFormData({...formData, repairAction: e.target.value})} className="w-full bg-slate-50 dark:bg-[#080d18] border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400 dark:placeholder:text-slate-500" rows="2" placeholder="Tasks undertaken..."></textarea>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Third-Party Vendor Entity</label>
-                    <input type="text" value={formData.vendor} onChange={e => setFormData({...formData, vendor: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g. Lenovo Auth Service" />
+                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Third-Party Vendor Entity</label>
+                    <input type="text" value={formData.vendor} onChange={e => setFormData({...formData, vendor: e.target.value})} className="w-full bg-slate-50 dark:bg-[#080d18] border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g. Lenovo Auth Service" />
                  </div>
                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Billing Analytics (Cost)</label>
-                    <input type="number" step="0.01" value={formData.repairCost} onChange={e => setFormData({...formData, repairCost: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500" placeholder="0.00" />
+                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Billing Analytics (Cost)</label>
+                    <input type="number" step="0.01" value={formData.repairCost} onChange={e => setFormData({...formData, repairCost: e.target.value})} className="w-full bg-slate-50 dark:bg-[#080d18] border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500" placeholder="0.00" />
                  </div>
               </div>
 

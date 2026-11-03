@@ -58,22 +58,32 @@ exports.requirePermission = (requiredPermission) => {
         return next();
       }
 
-      const rolePerm = await prisma.rolePermission.findUnique({
-        where: { role: req.user.role }
-      });
+      let rolePerm = null;
+      try {
+        rolePerm = await prisma.rolePermission.findUnique({
+          where: { role: req.user.role }
+        });
+      } catch (dbErr) {
+        console.warn('RolePermission lookup query failed, using safe fallback:', dbErr.message);
+      }
 
-      // Default fallback logic if DB is not populated yet
-      const defaultPermissions = {
-        IT_OFFICER: true,
-        VIEWER: true
-      };
+      // Safe defaults: IT_OFFICER has access to all operational tasks
+      const itOfficerAllowed = [
+        'VIEW_ASSETS', 'CREATE_ASSETS', 'EDIT_ASSETS', 'ASSIGN_ASSETS',
+        'MANAGE_MAINTENANCE', 'GENERATE_REPORTS', 'VIEW_AUDIT_LOGS'
+      ];
+      const viewerAllowed = ['VIEW_ASSETS', 'GENERATE_REPORTS'];
 
       let hasPermission = false;
 
-      if (rolePerm && rolePerm.permissions) {
+      if (rolePerm && rolePerm.permissions && typeof rolePerm.permissions === 'object') {
         hasPermission = !!rolePerm.permissions[requiredPermission];
       } else {
-        hasPermission = !!defaultPermissions[req.user.role];
+        if (req.user.role === 'IT_OFFICER') {
+          hasPermission = itOfficerAllowed.includes(requiredPermission);
+        } else if (req.user.role === 'VIEWER') {
+          hasPermission = viewerAllowed.includes(requiredPermission);
+        }
       }
 
       if (!hasPermission) {
@@ -83,6 +93,9 @@ exports.requirePermission = (requiredPermission) => {
       next();
     } catch (err) {
       console.error('Permission Check Error:', err);
+      if (req.user.role === 'ADMIN' || req.user.role === 'IT_OFFICER') {
+        return next();
+      }
       return res.status(500).json({ error: 'Internal Server Error verifying permissions' });
     }
   };
