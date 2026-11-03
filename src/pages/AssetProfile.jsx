@@ -15,6 +15,18 @@ import AssetDocuments from '../components/AssetMedia/AssetDocuments';
 import AssetAuditTrail from '../components/AssetAuditTrail';
 import CopyButton from '../components/CopyButton';
 import { returnAssetToStore } from '../utils/assetReturn';
+import {
+  STANDARD_DEVICE_TYPES,
+  STANDARD_BRANDS,
+  STANDARD_CONDITIONS,
+  STANDARD_WARRANTY_STATUSES,
+  STANDARD_PROCESSORS,
+  STANDARD_RAM_OPTIONS,
+  STANDARD_STORAGE_OPTIONS,
+  STANDARD_OS_OPTIONS,
+  isValidMacAddress,
+  isValidIpv4
+} from '../constants/assetOptions';
 
 const _rawApi = import.meta.env.VITE_API_URL || '/api';
 const API_URL = _rawApi.endsWith('/api') ? _rawApi : `${_rawApi.replace(/\/$/, '')}/api`;
@@ -173,6 +185,14 @@ export default function AssetProfile() {
   };
 
   const handleSave = async () => {
+    if (editData.macAddress && !isValidMacAddress(editData.macAddress)) {
+      showToast('Invalid MAC Address format. Example: 00:1B:44:11:3A:B7 or 00-1B-44-11-3A-B7', 'error');
+      return;
+    }
+    if (editData.ipAddress && !isValidIpv4(editData.ipAddress)) {
+      showToast('Invalid Static IP Address format. Example: 192.168.1.50', 'error');
+      return;
+    }
     setSaving(true);
     try {
       const token = localStorage.getItem('token');
@@ -249,14 +269,22 @@ export default function AssetProfile() {
     const inputClass = "w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all";
 
     if (type === 'select' && options) {
+      const currentVal = editData[field];
+      const optValues = options.map(opt => typeof opt === 'object' ? opt.value : opt);
+      const hasCurrent = !currentVal || optValues.includes(currentVal);
       return (
         <div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">{label}</p>
           <select className={inputClass} value={editData[field] || ''} onChange={(e) => handleFieldChange(field, e.target.value)}>
             <option value="">-- Select --</option>
-            {options.map(opt => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
+            {!hasCurrent && currentVal && (
+              <option value={currentVal}>{currentVal} (Current)</option>
+            )}
+            {options.map(opt => {
+              const val = typeof opt === 'object' ? opt.value : opt;
+              const lbl = typeof opt === 'object' ? opt.label : opt;
+              return <option key={val} value={val}>{lbl}</option>;
+            })}
           </select>
         </div>
       );
@@ -443,7 +471,7 @@ export default function AssetProfile() {
                         value={editData.condition || ''}
                         onChange={(e) => handleFieldChange('condition', e.target.value)}
                       >
-                        {['New', 'Good', 'Fair', 'Poor', 'Damaged'].map(c => <option key={c} value={c}>{c}</option>)}
+                        {STANDARD_CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
                     ) : (
                       <span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-full text-xs font-medium border border-slate-200 dark:border-slate-600">
@@ -476,14 +504,14 @@ export default function AssetProfile() {
                   Hardware Specifications
                 </h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
-                  {renderEditableField("Device Type", "deviceType")}
-                  {renderEditableField("Brand", "brand")}
+                  {renderEditableField("Device Type", "deviceType", "select", STANDARD_DEVICE_TYPES)}
+                  {renderEditableField("Brand", "brand", "select", STANDARD_BRANDS)}
                   {renderEditableField("Model", "model")}
                   {renderEditableField("Serial Number", "serialNumber")}
-                  {renderEditableField("Processor", "processor")}
-                  {renderEditableField("Memory (RAM)", "ram")}
-                  {renderEditableField("Storage", "storage")}
-                  {renderEditableField("Operating System", "operatingSystem")}
+                  {renderEditableField("Processor", "processor", "select", STANDARD_PROCESSORS)}
+                  {renderEditableField("Memory (RAM)", "ram", "select", STANDARD_RAM_OPTIONS)}
+                  {renderEditableField("Storage", "storage", "select", STANDARD_STORAGE_OPTIONS)}
+                  {renderEditableField("Operating System", "operatingSystem", "select", STANDARD_OS_OPTIONS)}
                   {renderEditableField("Vendor", "vendor")}
                   {renderEditableField("MAC Address", "macAddress")}
                   {renderEditableField("IP Address", "ipAddress")}
@@ -495,7 +523,7 @@ export default function AssetProfile() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
                   {renderEditableField("Location", "locationId", "select", locations.map(l => ({ value: l.id, label: l.name })))}
                   {renderEditableField("Department", "departmentId", "select", departments.map(d => ({ value: d.id, label: d.name })))}
-                  {renderEditableField("Warranty Status", "warrantyStatus", "select", [{ value: 'Active', label: 'Active' }, { value: 'Expired', label: 'Expired' }, { value: 'N/A', label: 'N/A' }])}
+                  {renderEditableField("Warranty Status", "warrantyStatus", "select", STANDARD_WARRANTY_STATUSES)}
                   {renderEditableField("Warranty Expiry", "warrantyExpiryDate", "date")}
                   <div className="col-span-2 sm:col-span-3">
                     {renderEditableField("Remarks", "remarks", isEditing ? 'textarea' : 'text')}

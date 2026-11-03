@@ -1,10 +1,23 @@
 import { useState, useEffect, useRef } from 'react';
-import { Save, QrCode, ArrowLeft, Loader2, AlertCircle, X } from 'lucide-react';
+import { Save, QrCode, ArrowLeft, Loader2, AlertCircle, X, ShieldAlert, Cpu } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import DynamicSelect from '../components/DynamicSelect';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
+import {
+  STANDARD_DEVICE_TYPES,
+  STANDARD_BRANDS,
+  STANDARD_CONDITIONS,
+  STANDARD_WARRANTY_STATUSES,
+  STANDARD_PROCESSORS,
+  STANDARD_RAM_OPTIONS,
+  STANDARD_STORAGE_OPTIONS,
+  STANDARD_OS_OPTIONS,
+  REQUIRES_MODEL_TYPES,
+  isPeripheralDevice,
+  isValidMacAddress,
+  isValidIpv4
+} from '../constants/assetOptions';
 
 const _rawApi = import.meta.env.VITE_API_URL || '/api';
 const API_URL = _rawApi.endsWith('/api') ? _rawApi : `${_rawApi.replace(/\/$/, '')}/api`;
@@ -39,7 +52,7 @@ const EmployeeSearchDropdown = ({ employees, value, onChange }) => {
   return (
     <div className="relative w-full" ref={dropdownRef}>
       <div 
-        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus-within:ring-2 focus-within:ring-teal-500 flex items-center justify-between cursor-pointer"
+        className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 outline-none focus-within:ring-2 focus-within:ring-teal-500 flex items-center justify-between cursor-pointer"
         onClick={() => setIsOpen(true)}
       >
         <div className="flex-1">
@@ -47,13 +60,13 @@ const EmployeeSearchDropdown = ({ employees, value, onChange }) => {
             <input 
               autoFocus
               type="text" 
-              className="w-full outline-none bg-transparent" 
+              className="w-full outline-none bg-transparent text-slate-800 dark:text-slate-200" 
               placeholder="Search by name, ID, email..." 
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           ) : (
-            <div className={`text-sm ${value ? 'text-slate-800' : 'text-slate-500'}`}>
+            <div className={`text-sm ${value ? 'text-slate-800 dark:text-slate-200 font-medium' : 'text-slate-500'}`}>
               {selectedEmp ? `${selectedEmp.employeeCode} - ${selectedEmp.fullName}` : 'System Stock (No explicit user)'}
             </div>
           )}
@@ -71,9 +84,9 @@ const EmployeeSearchDropdown = ({ employees, value, onChange }) => {
       </div>
 
       {isOpen && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-60 overflow-y-auto">
+        <div className="absolute z-50 w-full mt-1 bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg max-h-60 overflow-y-auto">
           <div 
-            className="px-4 py-2 hover:bg-slate-50 cursor-pointer text-sm text-slate-500"
+            className="px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer text-sm text-slate-500"
             onClick={() => { onChange(''); setIsOpen(false); setSearch(''); }}
           >
             System Stock (No explicit user)
@@ -81,10 +94,10 @@ const EmployeeSearchDropdown = ({ employees, value, onChange }) => {
           {filteredEmployees.map(emp => (
             <div 
               key={emp.id}
-              className="px-4 py-2 hover:bg-slate-50 cursor-pointer border-t border-slate-50"
+              className="px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer border-t border-slate-50 dark:border-slate-800"
               onClick={() => { onChange(emp.id); setIsOpen(false); setSearch(''); }}
             >
-              <div className="font-medium text-sm text-slate-800">{emp.fullName}</div>
+              <div className="font-medium text-sm text-slate-800 dark:text-slate-200">{emp.fullName}</div>
               <div className="text-xs text-slate-500">{emp.employeeCode} {emp.department?.name ? `• ${emp.department.name}` : ''} {emp.email ? `• ${emp.email}` : ''}</div>
             </div>
           ))}
@@ -110,8 +123,9 @@ export default function AddAsset() {
 
   const [loading, setLoading] = useState(true);
   const [submitError, setSubmitError] = useState('');
-  const [uidSuccess, setUidSuccess] = useState(false);
   const [savedAssetCode, setSavedAssetCode] = useState(null);
+  const [isDirty, setIsDirty] = useState(false);
+  const [showCustomBrand, setShowCustomBrand] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -156,47 +170,45 @@ export default function AddAsset() {
         }
 
         const results = await Promise.all(fetchPromises);
-        setEmployees(results[0]);
-        setDepartments(results[1]);
-        setLocations(results[2]);
+        setEmployees(Array.isArray(results[0]) ? results[0] : []);
+        setDepartments(Array.isArray(results[1]) ? results[1] : []);
+        setLocations(Array.isArray(results[2]) ? results[2] : []);
 
         if (id) {
-          // Find logic since backend findMany() array returned
           const assets = results[3];
-          const target = assets.find(a => a.id === id);
-          if(target) {
-             setFormData({
-               assetCode: target.assetCode || '',
-               deviceType: target.deviceType || '',
-               brand: target.brand || '',
-               model: target.model || '',
-               serialNumber: target.serialNumber || '',
-               condition: target.condition || 'New',
-               processor: target.processor || '',
-               ram: target.ram || '',
-               storage: target.storage || '',
-               operatingSystem: target.operatingSystem || '',
-               vendor: target.vendor || '',
-               warrantyStatus: target.warrantyStatus || 'Active',
-               warrantyExpiryDate: target.warrantyExpiryDate ? target.warrantyExpiryDate.split('T')[0] : '',
-               status: target.status || 'AVAILABLE',
-               assignmentType: target.assignmentType || 'EMPLOYEE',
-               locationId: target.locationId || '',
-               departmentId: target.departmentId || '',
-               assignedEmployeeId: target.assignedEmployeeId || '',
-               remarks: target.remarks || '',
-               macAddress: target.macAddress || '',
-               ipAddress: target.ipAddress || ''
-             });
+          const target = Array.isArray(assets) ? assets.find(a => a.id === id) : null;
+          if (target) {
+            setFormData({
+              assetCode: target.assetCode || '',
+              deviceType: target.deviceType || '',
+              brand: target.brand || '',
+              model: target.model || '',
+              serialNumber: target.serialNumber || '',
+              condition: target.condition || 'New',
+              processor: target.processor || '',
+              ram: target.ram || '',
+              storage: target.storage || '',
+              operatingSystem: target.operatingSystem || '',
+              vendor: target.vendor || '',
+              warrantyStatus: target.warrantyStatus || 'Active',
+              warrantyExpiryDate: target.warrantyExpiryDate ? target.warrantyExpiryDate.split('T')[0] : '',
+              status: target.status || 'AVAILABLE',
+              assignmentType: target.assignmentType || 'EMPLOYEE',
+              locationId: target.locationId || '',
+              departmentId: target.departmentId || '',
+              assignedEmployeeId: target.assignedEmployeeId || '',
+              remarks: target.remarks || '',
+              macAddress: target.macAddress || '',
+              ipAddress: target.ipAddress || ''
+            });
+
+            if (target.brand && !STANDARD_BRANDS.includes(target.brand)) {
+              setShowCustomBrand(true);
+            }
           }
-        } else {
-           setFormData(prev => ({
-             ...prev,
-             assetCode: ''
-           }));
         }
       } catch (err) {
-         setSubmitError("Failed to initialize remote registries.");
+        setSubmitError("Failed to initialize remote registries.");
       } finally {
         setLoading(false);
       }
@@ -209,17 +221,32 @@ export default function AddAsset() {
     setFormData(prev => {
       const newData = { ...prev, [field]: value };
       
+      // Smart peripheral auto-handling
+      if (field === 'deviceType') {
+        if (isPeripheralDevice(value)) {
+          newData.processor = 'N/A';
+          newData.ram = 'N/A';
+          newData.storage = 'N/A';
+          newData.operatingSystem = 'N/A';
+        } else if (isPeripheralDevice(prev.deviceType) && !isPeripheralDevice(value)) {
+          if (newData.processor === 'N/A') newData.processor = '';
+          if (newData.ram === 'N/A') newData.ram = '';
+          if (newData.storage === 'N/A') newData.storage = '';
+          if (newData.operatingSystem === 'N/A') newData.operatingSystem = '';
+        }
+      }
+
       // Auto-update status when assigning an employee or department
       if ((field === 'assignedEmployeeId' || field === 'departmentId' || field === 'locationId') && value) {
-         if (newData.status === 'AVAILABLE' && newData.assignmentType !== 'STORE') {
-            newData.status = 'ASSIGNED';
-         }
+        if (newData.status === 'AVAILABLE' && newData.assignmentType !== 'STORE') {
+          newData.status = 'ASSIGNED';
+        }
       }
       // If assignment type changes to STORE, set status back to AVAILABLE
       if (field === 'assignmentType' && value === 'STORE') {
-         if (newData.status === 'ASSIGNED') {
-            newData.status = 'AVAILABLE';
-         }
+        if (newData.status === 'ASSIGNED') {
+          newData.status = 'AVAILABLE';
+        }
       }
 
       return newData;
@@ -229,6 +256,31 @@ export default function AddAsset() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitError('');
+
+    // Strict client-side validation
+    if (!formData.deviceType || !formData.deviceType.trim()) {
+      setSubmitError('Device Type is mandatory. Please select a valid category from the list.');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    if (REQUIRES_MODEL_TYPES.includes(formData.deviceType) && (!formData.model || !formData.model.trim())) {
+      setSubmitError(`Hardware Model is mandatory for device category: ${formData.deviceType}`);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    if (formData.macAddress && !isValidMacAddress(formData.macAddress)) {
+      setSubmitError('Invalid MAC Address format. Example: 00:1B:44:11:3A:B7 or 00-1B-44-11-3A-B7');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    if (formData.ipAddress && !isValidIpv4(formData.ipAddress)) {
+      setSubmitError('Invalid Static IP Address format. Example: 192.168.1.50');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
     
     try {
       const token = localStorage.getItem('token');
@@ -238,13 +290,13 @@ export default function AddAsset() {
       
       // Clean up empty strings wrapping to null for backend
       Object.keys(payload).forEach(k => {
-         if(typeof payload[k] === 'string') payload[k] = payload[k].trim();
-         if(payload[k] === '') payload[k] = null;
+        if (typeof payload[k] === 'string') payload[k] = payload[k].trim();
+        if (payload[k] === '') payload[k] = null;
       });
       
       // Enforce date mapping structure for Prisma
-      if(payload.warrantyExpiryDate) {
-         payload.warrantyExpiryDate = new Date(payload.warrantyExpiryDate).toISOString();
+      if (payload.warrantyExpiryDate) {
+        payload.warrantyExpiryDate = new Date(payload.warrantyExpiryDate).toISOString();
       }
 
       const res = await fetch(url, {
@@ -264,77 +316,76 @@ export default function AddAsset() {
       setSubmitError('');
       setSavedAssetCode(data.assetCode);
       showToast('Asset Saved Successfully!', 'success');
+      
+      if (!id) {
+        // Scroll to top to show success or QR option
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        navigate(`/assets/code/${data.assetCode || formData.assetCode}`);
+      }
     } catch (err) {
-       // Look for unique constraint violations mapping out of Prisma
-       if(err.message.includes('assetCode')) {
-          setSubmitError('The Asset Code provided already exists in the system. Use a unique identifier.');
-       } else if(err.message.includes('serialNumber')) {
-          setSubmitError('The Serial Number provided overlaps with an existing secure asset. Hardware serial maps must be unique.');
-       } else {
-          setSubmitError(err.message);
-       }
-       window.scrollTo({ top: 0, behavior: 'smooth' });
+      if (err.message.includes('assetCode')) {
+        setSubmitError('The Asset Code provided already exists in the system. Use a unique identifier.');
+      } else if (err.message.includes('serialNumber')) {
+        setSubmitError('The Serial Number provided overlaps with an existing secure asset. Hardware serial maps must be unique.');
+      } else {
+        setSubmitError(err.message);
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  };
-
-  const handleGenerateUID = async () => {
-    if (formData.assetCode?.trim().length > 0) {
-      const confirmed = await confirm({ 
-        title: "Confirm Overwrite", 
-        message: "Are you sure you want to overwrite the existing Asset Code?",
-        confirmText: "Overwrite"
-      });
-      if(!confirmed) return;
-    }
-    
-    let prefix = 'OTH';
-    const type = formData.deviceType?.toLowerCase() || '';
-    if (type.includes('laptop')) prefix = 'LAP';
-    else if (type.includes('desktop')) prefix = 'DES';
-    else if (type.includes('printer')) prefix = 'PRN';
-    else if (type.includes('monitor')) prefix = 'MON';
-    else if (type.includes('ups')) prefix = 'UPS';
-    else if (type.includes('mobile') || type.includes('phone')) prefix = 'MOB';
-    else if (type.includes('tablet')) prefix = 'TAB';
-    
-    const randomSuffix = Math.floor(Math.random() * 9000 + 1000);
-    handleChange('assetCode', `EM-IT-${prefix}-${randomSuffix}`);
-    setUidSuccess(true);
-    setTimeout(() => setUidSuccess(false), 2500);
   };
 
   if (loading) {
     return (
       <div className="flex h-64 flex-col items-center justify-center space-y-4">
         <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
-        <p className="text-slate-500 font-medium">Hydrating Edit Matrix Forms...</p>
+        <p className="text-slate-500 font-medium">Loading hardware registries...</p>
       </div>
     );
   }
 
+  const isPeripheral = isPeripheralDevice(formData.deviceType);
+
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-20">
       <div className="flex items-center gap-4">
-        <Link to="/assets" className="p-2 hover:bg-slate-200 rounded-lg transition-colors text-slate-500">
+        <Link to="/assets" className="p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg transition-colors text-slate-500">
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div>
           <h1 className="text-2xl font-bold text-slate-800 dark:text-white">{id ? 'Edit System Asset' : 'Register New Asset'}</h1>
-          <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">{id ? 'Modify hardware state and deployment bindings.' : 'Enter the complete hardware identifiers and system allocations.'}</p>
+          <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">{id ? 'Modify hardware state and deployment bindings.' : 'Standardized enterprise IT hardware registration.'}</p>
         </div>
       </div>
 
       {submitError && (
-        <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-xl flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-red-500 mt-0.5" />
-          <p className="text-red-700 font-medium">{submitError}</p>
+        <div className="bg-red-50 dark:bg-red-950/30 border-l-4 border-red-500 p-4 rounded-r-xl flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
+          <p className="text-red-700 dark:text-red-400 font-medium text-sm">{submitError}</p>
+        </div>
+      )}
+
+      {savedAssetCode && (
+        <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h3 className="font-bold text-green-800 dark:text-green-300">Asset Registered Successfully!</h3>
+            <p className="text-sm text-green-700 dark:text-green-400 font-mono mt-0.5">Asset Code: {savedAssetCode}</p>
+          </div>
+          <div className="flex gap-2">
+            <Link to={`/qr-code`} state={{ presetCode: savedAssetCode }} className="px-4 py-2 bg-green-600 text-white rounded-xl text-sm font-medium hover:bg-green-700 transition flex items-center gap-2">
+              <QrCode className="w-4 h-4" /> View / Print QR Profile
+            </Link>
+            <Link to={`/assets/code/${savedAssetCode}`} className="px-4 py-2 border border-green-600 text-green-700 dark:text-green-300 rounded-xl text-sm font-medium hover:bg-green-100 dark:hover:bg-green-900/40 transition">
+              View Profile
+            </Link>
+          </div>
         </div>
       )}
 
       <div className="bg-white dark:bg-[#0c1322] rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden relative">
         <form className="p-6 space-y-8" onSubmit={handleSubmit}>
           
-          {/* Basic Information */}
+          {/* Core Identification */}
           <div className="bg-slate-50/70 dark:bg-[#080d18] p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800/80">
             <h2 className="text-lg font-bold text-slate-800 dark:text-white mb-5 flex items-center gap-2">
               <div className="w-2 h-6 bg-blue-600 rounded-full"></div> Core Identification
@@ -342,52 +393,201 @@ export default function AddAsset() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <div>
                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Asset Code</label>
-                <input type="text" value={formData.assetCode} readOnly className="w-full bg-slate-100 border border-slate-200 text-slate-500 rounded-xl px-4 py-2.5 outline-none font-mono text-sm cursor-not-allowed" placeholder="Auto-generated upon save" />
+                <input 
+                  type="text" 
+                  value={formData.assetCode} 
+                  readOnly 
+                  className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 rounded-xl px-4 py-2.5 outline-none font-mono text-sm cursor-not-allowed" 
+                  placeholder="Auto-generated upon save" 
+                />
               </div>
+
               <div>
                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Serial Number *</label>
-                <input required type="text" value={formData.serialNumber} onChange={e => handleChange('serialNumber', e.target.value)} className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm uppercase placeholder:text-slate-400 dark:placeholder:text-slate-500" />
+                <input 
+                  required 
+                  type="text" 
+                  value={formData.serialNumber} 
+                  onChange={e => handleChange('serialNumber', e.target.value)} 
+                  className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm uppercase placeholder:text-slate-400 dark:placeholder:text-slate-500" 
+                  placeholder="e.g. 5CD234ABC1"
+                />
               </div>
+
+              {/* Standardized Device Type */}
               <div>
                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Device Type *</label>
-                <DynamicSelect value={formData.deviceType} onChange={v => handleChange('deviceType', v)} optionsKey="deviceTypes" defaultOptions={['Laptop', 'Desktop', 'Monitor', 'Mobile Phone', 'Tablet', 'Printer']} placeholder="Device category..." />
+                <select
+                  required
+                  value={formData.deviceType}
+                  onChange={e => handleChange('deviceType', e.target.value)}
+                  className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 font-sans text-sm cursor-pointer"
+                >
+                  <option value="">Select standard category...</option>
+                  {formData.deviceType && !STANDARD_DEVICE_TYPES.includes(formData.deviceType) && (
+                    <option value={formData.deviceType}>{formData.deviceType} (Custom)</option>
+                  )}
+                  {STANDARD_DEVICE_TYPES.map(type => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
               </div>
+
+              {/* Standardized Brand with Other fallback */}
               <div>
-                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Brand/Vendor</label>
-                <input type="text" value={formData.brand} onChange={e => handleChange('brand', e.target.value)} className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="e.g. Dell" />
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Brand / Vendor *</label>
+                <select
+                  required
+                  value={STANDARD_BRANDS.includes(formData.brand) ? formData.brand : (formData.brand ? 'Other' : '')}
+                  onChange={e => {
+                    const val = e.target.value;
+                    if (val === 'Other') {
+                      setShowCustomBrand(true);
+                      if (STANDARD_BRANDS.includes(formData.brand) && formData.brand !== 'Other') {
+                        handleChange('brand', '');
+                      }
+                    } else {
+                      setShowCustomBrand(false);
+                      handleChange('brand', val);
+                    }
+                  }}
+                  className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 font-sans text-sm cursor-pointer"
+                >
+                  <option value="">Select brand...</option>
+                  {STANDARD_BRANDS.map(brand => (
+                    <option key={brand} value={brand}>{brand}</option>
+                  ))}
+                </select>
+                {(showCustomBrand || (!STANDARD_BRANDS.includes(formData.brand) && formData.brand)) && (
+                  <div className="mt-2">
+                    <input
+                      type="text"
+                      placeholder="Specify other brand..."
+                      value={formData.brand === 'Other' ? '' : formData.brand}
+                      onChange={e => handleChange('brand', e.target.value)}
+                      className="w-full bg-white dark:bg-[#0c1322] border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-xl px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400"
+                    />
+                  </div>
+                )}
               </div>
+
+              {/* Hardware Model */}
               <div>
-                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Hardware Model *</label>
-                <input required type="text" value={formData.model} onChange={e => handleChange('model', e.target.value)} className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="e.g. Latitude 5420" />
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Hardware Model {REQUIRES_MODEL_TYPES.includes(formData.deviceType) ? '*' : '(Optional)'}
+                </label>
+                <input 
+                  type="text" 
+                  required={REQUIRES_MODEL_TYPES.includes(formData.deviceType)}
+                  value={formData.model} 
+                  onChange={e => handleChange('model', e.target.value)} 
+                  className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400 dark:placeholder:text-slate-500 font-sans text-sm" 
+                  placeholder={REQUIRES_MODEL_TYPES.includes(formData.deviceType) ? "e.g. Latitude 5420 / Vivobook X1504VA" : "e.g. Standard / Optical"} 
+                />
               </div>
+
+              {/* Standardized Physical Condition */}
               <div>
                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Physical Condition *</label>
-                <DynamicSelect value={formData.condition} onChange={v => handleChange('condition', v)} optionsKey="conditions" defaultOptions={['New', 'Good', 'Fair', 'Poor']} placeholder="Condition..." />
+                <select
+                  required
+                  value={formData.condition}
+                  onChange={e => handleChange('condition', e.target.value)}
+                  className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 font-sans text-sm cursor-pointer"
+                >
+                  {STANDARD_CONDITIONS.map(cond => (
+                    <option key={cond} value={cond}>{cond}</option>
+                  ))}
+                </select>
               </div>
             </div>
           </div>
 
           {/* Internal Specifications */}
           <div className="bg-slate-50/70 dark:bg-[#080d18] p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800/80">
-            <h2 className="text-lg font-bold text-slate-800 dark:text-white mb-5 flex items-center gap-2">
-              <div className="w-2 h-6 bg-indigo-500 rounded-full"></div> Specifications
-            </h2>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-5">
+              <h2 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                <div className="w-2 h-6 bg-indigo-500 rounded-full"></div> Specifications
+              </h2>
+              {isPeripheral && (
+                <span className="text-xs font-medium px-3 py-1 bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 rounded-lg inline-flex items-center gap-1.5">
+                  <ShieldAlert className="w-3.5 h-3.5" />
+                  Peripheral device ({formData.deviceType}) — Specifications set to N/A
+                </span>
+              )}
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <div>
                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Processor (CPU)</label>
-                <input type="text" value={formData.processor} onChange={e => handleChange('processor', e.target.value)} className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="e.g. Intel i7" />
+                <select
+                  disabled={isPeripheral}
+                  value={formData.processor || (isPeripheral ? 'N/A' : '')}
+                  onChange={e => handleChange('processor', e.target.value)}
+                  className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 font-sans text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  <option value="">Select CPU...</option>
+                  {formData.processor && !STANDARD_PROCESSORS.includes(formData.processor) && (
+                    <option value={formData.processor}>{formData.processor} (Custom)</option>
+                  )}
+                  {STANDARD_PROCESSORS.map(p => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
               </div>
+
               <div>
-                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">System Memory</label>
-                <input type="text" value={formData.ram} onChange={e => handleChange('ram', e.target.value)} className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="e.g. 16GB Array" />
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">System Memory (RAM)</label>
+                <select
+                  disabled={isPeripheral}
+                  value={formData.ram || (isPeripheral ? 'N/A' : '')}
+                  onChange={e => handleChange('ram', e.target.value)}
+                  className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 font-sans text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  <option value="">Select RAM...</option>
+                  {formData.ram && !STANDARD_RAM_OPTIONS.includes(formData.ram) && (
+                    <option value={formData.ram}>{formData.ram} (Custom)</option>
+                  )}
+                  {STANDARD_RAM_OPTIONS.map(r => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
               </div>
+
               <div>
                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Storage Array</label>
-                <input type="text" value={formData.storage} onChange={e => handleChange('storage', e.target.value)} className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="e.g. 512GB NVMe" />
+                <select
+                  disabled={isPeripheral}
+                  value={formData.storage || (isPeripheral ? 'N/A' : '')}
+                  onChange={e => handleChange('storage', e.target.value)}
+                  className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 font-sans text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  <option value="">Select Storage...</option>
+                  {formData.storage && !STANDARD_STORAGE_OPTIONS.includes(formData.storage) && (
+                    <option value={formData.storage}>{formData.storage} (Custom)</option>
+                  )}
+                  {STANDARD_STORAGE_OPTIONS.map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
               </div>
+
               <div>
                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Operating OS</label>
-                <input type="text" value={formData.operatingSystem} onChange={e => handleChange('operatingSystem', e.target.value)} className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="e.g. Win 11 Pro" />
+                <select
+                  disabled={isPeripheral}
+                  value={formData.operatingSystem || (isPeripheral ? 'N/A' : '')}
+                  onChange={e => handleChange('operatingSystem', e.target.value)}
+                  className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 font-sans text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  <option value="">Select OS...</option>
+                  {formData.operatingSystem && !STANDARD_OS_OPTIONS.includes(formData.operatingSystem) && (
+                    <option value={formData.operatingSystem}>{formData.operatingSystem} (Custom)</option>
+                  )}
+                  {STANDARD_OS_OPTIONS.map(o => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
               </div>
             </div>
           </div>
@@ -395,13 +595,17 @@ export default function AddAsset() {
           {/* Allocation Bindings */}
           <div className="bg-slate-50/70 dark:bg-[#080d18] p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800/80">
             <h2 className="text-lg font-bold text-slate-800 dark:text-white mb-5 flex items-center gap-2">
-              <div className="w-2 h-6 bg-teal-500 rounded-full"></div> Network Bindings & Registration
+              <div className="w-2 h-6 bg-teal-500 rounded-full"></div> Allocation & Deployment Bindings
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               
               <div>
                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Assignment Type</label>
-                <select value={formData.assignmentType} onChange={e => handleChange('assignmentType', e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-teal-500">
+                <select 
+                  value={formData.assignmentType} 
+                  onChange={e => handleChange('assignmentType', e.target.value)} 
+                  className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-teal-500 font-sans text-sm cursor-pointer"
+                >
                    <option value="EMPLOYEE">Employee Asset</option>
                    <option value="DEPARTMENT">Department Asset</option>
                    <option value="LOCATION">Location Asset</option>
@@ -412,7 +616,11 @@ export default function AddAsset() {
               
               <div>
                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Current Status</label>
-                <select value={formData.status} onChange={e => handleChange('status', e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-teal-500">
+                <select 
+                  value={formData.status} 
+                  onChange={e => handleChange('status', e.target.value)} 
+                  className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-teal-500 font-sans text-sm cursor-pointer"
+                >
                    <option value="AVAILABLE">Available</option>
                    <option value="ASSIGNED">Assigned</option>
                    <option value="UNDER_REPAIR">Under Repair</option>
@@ -422,7 +630,11 @@ export default function AddAsset() {
 
               <div>
                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Base Location</label>
-                <select value={formData.locationId} onChange={e => handleChange('locationId', e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-teal-500">
+                <select 
+                  value={formData.locationId} 
+                  onChange={e => handleChange('locationId', e.target.value)} 
+                  className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-teal-500 font-sans text-sm cursor-pointer"
+                >
                    <option value="">Unassigned Location</option>
                    {locations.map(loc => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
                 </select>
@@ -430,14 +642,18 @@ export default function AddAsset() {
 
               <div>
                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Assigned Department</label>
-                <select value={formData.departmentId} onChange={e => handleChange('departmentId', e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-teal-500">
+                <select 
+                  value={formData.departmentId} 
+                  onChange={e => handleChange('departmentId', e.target.value)} 
+                  className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-teal-500 font-sans text-sm cursor-pointer"
+                >
                    <option value="">Unaffiliated Dept</option>
                    {departments.map(dept => <option key={dept.id} value={dept.id}>{dept.name}</option>)}
                 </select>
               </div>
 
               {formData.assignmentType === 'EMPLOYEE' && (
-                <div className="md:col-span-3 border-t border-slate-200 pt-5 mt-2 transition-all">
+                <div className="md:col-span-2 transition-all">
                   <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Direct Employee Allocation</label>
                   <EmployeeSearchDropdown
                     employees={employees}
@@ -450,7 +666,7 @@ export default function AddAsset() {
             </div>
           </div>
           
-          {/* IPAM Information */}
+          {/* IPAM Information with strict format validation */}
           <div className="bg-slate-50/70 dark:bg-[#080d18] p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800/80">
             <h2 className="text-lg font-bold text-slate-800 dark:text-white mb-5 flex items-center gap-2">
               <div className="w-2 h-6 bg-purple-500 rounded-full"></div> IPAM & Network Identity
@@ -458,41 +674,74 @@ export default function AddAsset() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">MAC Address</label>
-                <input type="text" value={formData.macAddress} onChange={e => handleChange('macAddress', e.target.value)} className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-purple-500 font-mono text-sm uppercase placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="e.g. 00:1B:44:11:3A:B7" />
+                <input 
+                  type="text" 
+                  value={formData.macAddress} 
+                  onChange={e => handleChange('macAddress', e.target.value)} 
+                  className={`w-full bg-white dark:bg-[#0c1322] border ${formData.macAddress && !isValidMacAddress(formData.macAddress) ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 dark:border-slate-700 focus:ring-purple-500'} text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 font-mono text-sm uppercase placeholder:text-slate-400 dark:placeholder:text-slate-500`} 
+                  placeholder="e.g. 00:1B:44:11:3A:B7" 
+                />
+                {formData.macAddress && !isValidMacAddress(formData.macAddress) ? (
+                  <p className="text-xs text-red-500 mt-1 font-medium">Invalid MAC format. Standard format: XX:XX:XX:XX:XX:XX or XX-XX-XX-XX-XX-XX</p>
+                ) : (
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Optional. Standard format: 00:1B:44:11:3A:B7</p>
+                )}
               </div>
+
               <div>
                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Static IP Address</label>
-                <input type="text" value={formData.ipAddress} onChange={e => handleChange('ipAddress', e.target.value)} className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-purple-500 font-mono text-sm placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="e.g. 192.168.1.50" />
+                <input 
+                  type="text" 
+                  value={formData.ipAddress} 
+                  onChange={e => handleChange('ipAddress', e.target.value)} 
+                  className={`w-full bg-white dark:bg-[#0c1322] border ${formData.ipAddress && !isValidIpv4(formData.ipAddress) ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 dark:border-slate-700 focus:ring-purple-500'} text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 font-mono text-sm placeholder:text-slate-400 dark:placeholder:text-slate-500`} 
+                  placeholder="e.g. 192.168.1.50" 
+                />
+                {formData.ipAddress && !isValidIpv4(formData.ipAddress) ? (
+                  <p className="text-xs text-red-500 mt-1 font-medium">Invalid IPv4 address format (e.g. 192.168.1.50)</p>
+                ) : (
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Optional. Standard IPv4 format: 0.0.0.0 to 255.255.255.255</p>
+                )}
               </div>
             </div>
           </div>
 
+          {/* Warranty Information */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-6">
              <div>
-                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Warranty Term Validity</label>
-                <DynamicSelect value={formData.warrantyStatus} onChange={v => handleChange('warrantyStatus', v)} optionsKey="warrantyStatuses" defaultOptions={['Active', 'Expired', 'None', 'Extended']} placeholder="Status..." />
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Warranty Term Validity *</label>
+                <select
+                  required
+                  value={formData.warrantyStatus}
+                  onChange={e => handleChange('warrantyStatus', e.target.value)}
+                  className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-slate-500 font-sans text-sm cursor-pointer"
+                >
+                  {STANDARD_WARRANTY_STATUSES.map(ws => (
+                    <option key={ws} value={ws}>{ws}</option>
+                  ))}
+                </select>
              </div>
+
              <div>
                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Warranty End Date</label>
-                <input type="date" value={formData.warrantyExpiryDate} onChange={e => handleChange('warrantyExpiryDate', e.target.value)} className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-slate-500" />
+                <input 
+                  type="date" 
+                  value={formData.warrantyExpiryDate} 
+                  onChange={e => handleChange('warrantyExpiryDate', e.target.value)} 
+                  className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-slate-500 font-sans text-sm" 
+                />
              </div>
           </div>
 
-          <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6 border-t border-slate-100 mt-8">
-            <Link to="/assets" className="px-6 py-2.5 border border-slate-200 text-slate-700 rounded-xl font-medium hover:bg-slate-50 transition-colors text-center shadow-sm">
-              Dashboard
+          {/* Form Actions */}
+          <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6 border-t border-slate-100 dark:border-slate-800 mt-8">
+            <Link to="/assets" className="px-6 py-2.5 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-center shadow-sm">
+              Cancel
             </Link>
-            
-            {savedAssetCode && (
-               <Link to={`/qr-code`} state={{ presetCode: savedAssetCode }} className="px-6 py-2.5 bg-green-50 text-green-700 border border-green-200 rounded-xl font-medium hover:bg-green-100 transition-colors flex items-center justify-center gap-2">
-                 <QrCode className="w-4 h-4" />
-                 View / Print QR Profile
-               </Link>
-            )}
 
             <button type="submit" className="px-8 py-2.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 shadow-sm shadow-blue-600/20">
               <Save className="w-4 h-4" />
-              {id ? 'Update Setup' : 'Save & Register Asset'}
+              {id ? 'Update Hardware Registry' : 'Save & Register Asset'}
             </button>
           </div>
         </form>

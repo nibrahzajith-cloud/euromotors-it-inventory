@@ -8,6 +8,11 @@ const { authenticate, authorize, requirePermission } = require('../middleware/au
 const { logAudit, logAssetTimeline } = require('../utils/logger');
 const { generateAssetCode, generateEmployeeCode } = require('../utils/codeGenerator');
 
+const MAC_REGEX = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/;
+const IPV4_REGEX = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+const VALID_CONDITIONS = ['NEW', 'GOOD', 'FAIR', 'POOR', 'DAMAGED'];
+const VALID_WARRANTY_STATUSES = ['ACTIVE', 'EXPIRED', 'NONE', 'EXTENDED'];
+
 router.get('/template/download', (req, res) => {
   try {
     const templatePath = path.join(__dirname, '../../templates/Bulk Upload Templates.xlsx');
@@ -97,6 +102,31 @@ router.post('/', requirePermission('CREATE_ASSETS'), async (req, res) => {
     const REQUIRES_MODEL = ['Laptop', 'Desktop', 'Tablet', 'Phone', 'Server', 'Router', 'Switch', 'Printer', 'Photocopier'];
     if (REQUIRES_MODEL.includes(payload.deviceType) && !payload.model) {
       return res.status(400).json({ error: `Model is mandatory for device type: ${payload.deviceType}` });
+    }
+
+    if (payload.macAddress && typeof payload.macAddress === 'string' && payload.macAddress.trim()) {
+      payload.macAddress = payload.macAddress.trim();
+      if (!MAC_REGEX.test(payload.macAddress)) {
+        return res.status(400).json({ error: 'Invalid MAC Address format. Example: 00:1B:44:11:3A:B7 or 00-1B-44-11-3A-B7' });
+      }
+    }
+    if (payload.ipAddress && typeof payload.ipAddress === 'string' && payload.ipAddress.trim()) {
+      payload.ipAddress = payload.ipAddress.trim();
+      if (!IPV4_REGEX.test(payload.ipAddress)) {
+        return res.status(400).json({ error: 'Invalid IP Address format. Example: 192.168.1.50' });
+      }
+    }
+    if (payload.condition && typeof payload.condition === 'string' && payload.condition.trim()) {
+      const condUpper = payload.condition.trim().toUpperCase();
+      if (!VALID_CONDITIONS.includes(condUpper)) {
+        return res.status(400).json({ error: `Invalid Condition. Allowed values: ${VALID_CONDITIONS.join(', ')}` });
+      }
+    }
+    if (payload.warrantyStatus && typeof payload.warrantyStatus === 'string' && payload.warrantyStatus.trim()) {
+      const wsUpper = payload.warrantyStatus.trim().toUpperCase();
+      if (!VALID_WARRANTY_STATUSES.includes(wsUpper)) {
+        return res.status(400).json({ error: `Invalid Warranty Status. Allowed values: ${VALID_WARRANTY_STATUSES.join(', ')}` });
+      }
     }
     
     // AssignmentType Validation
@@ -697,6 +727,31 @@ router.put('/:id', requirePermission('EDIT_ASSETS'), async (req, res) => {
       const finalModel = payload.model !== undefined ? payload.model : oldRecord.model;
       if (!finalModel) {
         return res.status(400).json({ error: `Model is mandatory for device type: ${dType}` });
+      }
+    }
+
+    if (payload.macAddress !== undefined && payload.macAddress !== null && typeof payload.macAddress === 'string' && payload.macAddress.trim()) {
+      payload.macAddress = payload.macAddress.trim();
+      if (!MAC_REGEX.test(payload.macAddress)) {
+        return res.status(400).json({ error: 'Invalid MAC Address format. Example: 00:1B:44:11:3A:B7 or 00-1B-44-11-3A-B7' });
+      }
+    }
+    if (payload.ipAddress !== undefined && payload.ipAddress !== null && typeof payload.ipAddress === 'string' && payload.ipAddress.trim()) {
+      payload.ipAddress = payload.ipAddress.trim();
+      if (!IPV4_REGEX.test(payload.ipAddress)) {
+        return res.status(400).json({ error: 'Invalid IP Address format. Example: 192.168.1.50' });
+      }
+    }
+    if (payload.condition && typeof payload.condition === 'string' && payload.condition.trim()) {
+      const condUpper = payload.condition.trim().toUpperCase();
+      if (!VALID_CONDITIONS.includes(condUpper)) {
+        return res.status(400).json({ error: `Invalid Condition. Allowed values: ${VALID_CONDITIONS.join(', ')}` });
+      }
+    }
+    if (payload.warrantyStatus && typeof payload.warrantyStatus === 'string' && payload.warrantyStatus.trim()) {
+      const wsUpper = payload.warrantyStatus.trim().toUpperCase();
+      if (!VALID_WARRANTY_STATUSES.includes(wsUpper)) {
+        return res.status(400).json({ error: `Invalid Warranty Status. Allowed values: ${VALID_WARRANTY_STATUSES.join(', ')}` });
       }
     }
 

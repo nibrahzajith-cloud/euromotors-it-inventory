@@ -38,3 +38,4 @@ export function purgeBulkyCaches() {
     localStorage.removeItem('assignmentsCache');
   } catch (_) {}
 }
+
