@@ -124,24 +124,48 @@ export default function Assets() {
       if (!token) throw new Error("Authentication required");
       const headers = { 'Authorization': `Bearer ${token}` };
 
-      const [astRes, empRes, deptRes, locRes] = await Promise.all([
+      const [astRes, empRes, deptRes, locRes, asgRes] = await Promise.all([
         fetch(`${API_URL}/assets`, { headers }),
         fetch(`${API_URL}/employees`, { headers }),
         fetch(`${API_URL}/departments`, { headers }),
-        fetch(`${API_URL}/locations`, { headers })
+        fetch(`${API_URL}/locations`, { headers }),
+        fetch(`${API_URL}/assignments`, { headers }).catch(() => ({ ok: false }))
       ]);
 
       if (!astRes.ok || !empRes.ok || !deptRes.ok || !locRes.ok) throw new Error("Failed to fetch relational collections");
 
-      const [astData, empData, deptData, locData] = await Promise.all([
-        astRes.json(), empRes.json(), deptRes.json(), locRes.json()
+      const [astData, empData, deptData, locData, asgData] = await Promise.all([
+        astRes.json(), 
+        empRes.json(), 
+        deptRes.json(), 
+        locRes.json(),
+        asgRes && asgRes.ok ? asgRes.json().catch(() => []) : []
       ]);
 
-      setAssets(astData);
+      // Index assignments by assetId for resilient fallback
+      const assignmentsByAsset = {};
+      if (Array.isArray(asgData)) {
+        asgData.forEach(asg => {
+          if (asg && asg.assetId) {
+            if (!assignmentsByAsset[asg.assetId]) assignmentsByAsset[asg.assetId] = [];
+            assignmentsByAsset[asg.assetId].push(asg);
+          }
+        });
+      }
+
+      const mergedAssets = astData.map(a => {
+        const hasExisting = Array.isArray(a.assignments) && a.assignments.length > 0;
+        return {
+          ...a,
+          assignments: hasExisting ? a.assignments : (assignmentsByAsset[a.id] || [])
+        };
+      });
+
+      setAssets(mergedAssets);
       setEmployees(empData);
       setDepartments(deptData);
       setLocations(locData);
-      localStorage.setItem('assetsCache', JSON.stringify(astData));
+      localStorage.setItem('assetsCache', JSON.stringify(mergedAssets));
       localStorage.setItem('employeesCache', JSON.stringify(empData));
       localStorage.setItem('departmentsCache', JSON.stringify(deptData));
       localStorage.setItem('locationsCache', JSON.stringify(locData));
