@@ -12,6 +12,7 @@ import { useConfirm } from '../context/ConfirmContext';
 import { exportToCSV, exportToPDF } from '../utils/exportUtils';
 import CopyButton from '../components/CopyButton';
 import AssetUsageHistoryModal from '../components/AssetUsageHistoryModal';
+import { safeSetItem, safeGetItem, purgeBulkyCaches } from '../utils/storage';
 import { AnimatePresence, motion } from 'framer-motion';
 
 const _rawApi = import.meta.env.VITE_API_URL || '/api';
@@ -37,14 +38,33 @@ export function getDeviceCategoryKey(deviceType = '') {
   return 'NETWORK_OTHER';
 }
 
-export function getAssetUsageHistory(asset) {
+export function getAssetUsageHistory(asset, employees = []) {
+  if (!asset) return { hasHistory: false, previousAssignment: null, allAssignments: [], totalAssignments: 0 };
   const allAssignments = Array.isArray(asset?.assignments) ? [...asset.assignments] : [];
-  const employeeAssignments = allAssignments.filter(a => a && a.employee);
+  
+  const employeeAssignments = allAssignments
+    .map(a => {
+      if (!a) return null;
+      let emp = a.employee || null;
+      if (!emp && a.employeeId && Array.isArray(employees)) {
+        emp = employees.find(e => e.id === a.employeeId) || null;
+      }
+      if (!emp && (a.employeeName || a.assignedTo)) {
+        emp = { fullName: a.employeeName || a.assignedTo, employeeCode: a.employeeCode || '' };
+      }
+      return {
+        ...a,
+        employee: emp
+      };
+    })
+    .filter(a => a && a.employee && a.employee.fullName);
+
   employeeAssignments.sort((a, b) => {
     const dateA = new Date(a.returnedDate || a.assignedDate || 0).getTime();
     const dateB = new Date(b.returnedDate || b.assignedDate || 0).getTime();
     return dateB - dateA;
   });
+
   const hasHistory = employeeAssignments.length > 0;
   const previousAssignment = hasHistory ? employeeAssignments[0] : null;
   return {
@@ -62,40 +82,17 @@ export default function Assets() {
   const { showToast } = useToast();
   const { confirm } = useConfirm();
 
-  const [assets, setAssets] = useState(() => {
-    try {
-      const cached = localStorage.getItem('assetsCache');
-      return cached ? JSON.parse(cached) : [];
-    } catch (e) {
-      return [];
-    }
-  });
-  const [employees, setEmployees] = useState(() => {
-    try {
-      const cached = localStorage.getItem('employeesCache');
-      return cached ? JSON.parse(cached) : [];
-    } catch (e) {
-      return [];
-    }
-  });
-  const [departments, setDepartments] = useState(() => {
-    try {
-      const cached = localStorage.getItem('departmentsCache');
-      return cached ? JSON.parse(cached) : [];
-    } catch (e) {
-      return [];
-    }
-  });
-  const [locations, setLocations] = useState(() => {
-    try {
-      const cached = localStorage.getItem('locationsCache');
-      return cached ? JSON.parse(cached) : [];
-    } catch (e) {
-      return [];
-    }
-  });
+  // Purge any bloated legacy cache on initial load to prevent quota exhaustion
+  try {
+    purgeBulkyCaches();
+  } catch (_) {}
 
-  const [loading, setLoading] = useState(assets.length === 0);
+  const [assets, setAssets] = useState([]);
+  const [employees, setEmployees] = useState(() => safeGetItem('employeesCache', []));
+  const [departments, setDepartments] = useState(() => safeGetItem('departmentsCache', []));
+  const [locations, setLocations] = useState(() => safeGetItem('locationsCache', []));
+
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   // Filtering States
@@ -142,22 +139,49 @@ export default function Assets() {
         asgRes && asgRes.ok ? asgRes.json().catch(() => []) : []
       ]);
 
-      // Index assignments by assetId for resilient fallback
-      const assignmentsByAsset = {};
+      // Index assignments by assetId and assetCode for resilient mapping
+      const assignmentsByAssetId = {};
+      const assignmentsByAssetCode = {};
+
       if (Array.isArray(asgData)) {
         asgData.forEach(asg => {
-          if (asg && asg.assetId) {
-            if (!assignmentsByAsset[asg.assetId]) assignmentsByAsset[asg.assetId] = [];
-            assignmentsByAsset[asg.assetId].push(asg);
+          if (!asg) return;
+          // Hydrate employee reference if missing
+          if (!asg.employee && asg.employeeId && Array.isArray(empData)) {
+            asg.employee = empData.find(e => e.id === asg.employeeId) || null;
+          }
+
+          const aId = asg.assetId || asg.asset?.id;
+          const aCode = asg.asset?.assetCode;
+
+          if (aId) {
+            if (!assignmentsByAssetId[aId]) assignmentsByAssetId[aId] = [];
+            assignmentsByAssetId[aId].push(asg);
+          }
+          if (aCode) {
+            if (!assignmentsByAssetCode[aCode]) assignmentsByAssetCode[aCode] = [];
+            assignmentsByAssetCode[aCode].push(asg);
           }
         });
       }
 
       const mergedAssets = astData.map(a => {
-        const hasExisting = Array.isArray(a.assignments) && a.assignments.length > 0;
+        const existing = Array.isArray(a.assignments) && a.assignments.length > 0 ? a.assignments : [];
+        const fromId = assignmentsByAssetId[a.id] || [];
+        const fromCode = a.assetCode ? (assignmentsByAssetCode[a.assetCode] || []) : [];
+
+        // Deduplicate assignments by ID or composite key
+        const map = new Map();
+        [...existing, ...fromId, ...fromCode].forEach(item => {
+          if (item) {
+            const key = item.id || `${item.employeeId}_${item.assignedDate}`;
+            map.set(key, item);
+          }
+        });
+
         return {
           ...a,
-          assignments: hasExisting ? a.assignments : (assignmentsByAsset[a.id] || [])
+          assignments: Array.from(map.values())
         };
       });
 
@@ -165,11 +189,12 @@ export default function Assets() {
       setEmployees(empData);
       setDepartments(deptData);
       setLocations(locData);
-      localStorage.setItem('assetsCache', JSON.stringify(mergedAssets));
-      localStorage.setItem('employeesCache', JSON.stringify(empData));
-      localStorage.setItem('departmentsCache', JSON.stringify(deptData));
-      localStorage.setItem('locationsCache', JSON.stringify(locData));
       setError('');
+
+      // Safe, isolated cache writes for lightweight lookups only (never write mergedAssets to localStorage)
+      safeSetItem('employeesCache', empData);
+      safeSetItem('departmentsCache', deptData);
+      safeSetItem('locationsCache', locData);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -337,7 +362,7 @@ export default function Assets() {
 
   const prepareExportData = () => {
     return filteredAssets.map(a => {
-      const { previousAssignment } = getAssetUsageHistory(a);
+      const { previousAssignment } = getAssetUsageHistory(a, employees);
       const prevUserText = a.status === 'AVAILABLE' 
         ? (previousAssignment?.employee ? `${previousAssignment.employee.fullName} (${previousAssignment.employee.employeeCode || 'EMP'})` : 'No Previous Assignment')
         : (employees.find(e => e.id === a.assignedEmployeeId)?.fullName || 'None');
@@ -685,7 +710,7 @@ export default function Assets() {
                 const isSelected = selectedIds.has(asset.id);
                 const isExpanded = expandedRowIds.has(asset.id);
 
-                const { hasHistory, previousAssignment, allAssignments } = getAssetUsageHistory(asset);
+                const { hasHistory, previousAssignment, allAssignments } = getAssetUsageHistory(asset, employees);
 
                 return (
                   <React.Fragment key={asset.id}>

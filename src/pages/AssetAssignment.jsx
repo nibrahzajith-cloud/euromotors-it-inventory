@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
 import CopyButton from '../components/CopyButton';
+import { safeSetItem } from '../utils/storage';
 import { DndContext, useDraggable, useDroppable, PointerSensor, useSensor, useSensors, DragOverlay, closestCenter } from '@dnd-kit/core';
 
 const _rawApi = import.meta.env.VITE_API_URL || '/api';
@@ -138,10 +139,9 @@ export default function AssetAssignment() {
 
       setAssets(astData); setEmployees(empData); setAssignments(asgData);
       setDepartments(deptData); setLocations(locData);
-      localStorage.setItem('assetsCache', JSON.stringify(astData));
-      localStorage.setItem('employeesCache', JSON.stringify(empData));
-      localStorage.setItem('assignmentsCache', JSON.stringify(asgData));
       setError('');
+      safeSetItem('employeesCache', empData);
+      safeSetItem('assignmentsCache', asgData);
     } catch (err) { setError(err.message); } finally { setLoading(false); }
   };
 

@@ -8,6 +8,7 @@ import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
 import CopyButton from '../components/CopyButton';
 import { returnAssetToStore } from '../utils/assetReturn';
+import { safeSetItem } from '../utils/storage';
 
 const _rawApi = import.meta.env.VITE_API_URL || '/api';
 const API_URL = _rawApi.endsWith('/api') ? _rawApi : `${_rawApi.replace(/\/$/, '')}/api`;
@@ -149,10 +150,9 @@ export default function Employees({ defaultOpenAdd = false }) {
       setDepartments(deptsData);
       setLocations(locsData);
       setAssets(assetsData);
-      localStorage.setItem('employeesCache', JSON.stringify(empsData));
-      localStorage.setItem('departmentsCache', JSON.stringify(deptsData));
-      localStorage.setItem('locationsCache', JSON.stringify(locsData));
-      localStorage.setItem('assetsCache', JSON.stringify(assetsData));
+      safeSetItem('employeesCache', empsData);
+      safeSetItem('departmentsCache', deptsData);
+      safeSetItem('locationsCache', locsData);
       setError('');
     } catch (err) {
       setError(err.message);
