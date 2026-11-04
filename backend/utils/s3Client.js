@@ -132,20 +132,70 @@ async function getPresignedUrl(key, expiresIn = 300, downloadName) {
   }
 }
 
+function getLocalDirectoryStats() {
+  const dirs = [
+    LOCAL_DIR,
+    path.join(__dirname, '..', 'uploads', 'images'),
+    path.join(__dirname, '..', 'uploads', 'documents'),
+  ];
+
+  let totalBytes = 0;
+  let totalCount = 0;
+  const breakdown = {
+    images: { count: 0, bytes: 0 },
+    thumbnails: { count: 0, bytes: 0 },
+    documents: { count: 0, bytes: 0 },
+    other: { count: 0, bytes: 0 },
+  };
+
+  const seenFiles = new Set();
+
+  for (const dir of dirs) {
+    if (!fs.existsSync(dir)) continue;
+    try {
+      const files = fs.readdirSync(dir);
+      for (const f of files) {
+        const fullPath = path.join(dir, f);
+        try {
+          const stat = fs.statSync(fullPath);
+          if (stat.isFile() && !seenFiles.has(f)) {
+            seenFiles.add(f);
+            totalCount++;
+            totalBytes += stat.size;
+            const lower = f.toLowerCase();
+            if (lower.includes('thumb')) {
+              breakdown.thumbnails.count++;
+              breakdown.thumbnails.bytes += stat.size;
+            } else if (lower.endsWith('.webp') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png')) {
+              breakdown.images.count++;
+              breakdown.images.bytes += stat.size;
+            } else if (lower.endsWith('.pdf') || lower.endsWith('.xlsx') || lower.endsWith('.docx') || lower.endsWith('.doc')) {
+              breakdown.documents.count++;
+              breakdown.documents.bytes += stat.size;
+            } else {
+              breakdown.other.count++;
+              breakdown.other.bytes += stat.size;
+            }
+          }
+        } catch (_) {}
+      }
+    } catch (_) {}
+  }
+
+  return {
+    isConfigured: true,
+    storageType: 'LOCAL_PERSISTENT',
+    totalBytes,
+    totalCount,
+    breakdown,
+    referenceLimitBytes: 10 * 1024 * 1024 * 1024,
+    cachedAt: new Date().toISOString()
+  };
+}
+
 async function getR2StorageStats(forceRefresh = false) {
   if (!isR2Configured()) {
-    return {
-      isConfigured: false,
-      totalBytes: 0,
-      totalCount: 0,
-      breakdown: {
-        images: { count: 0, bytes: 0 },
-        thumbnails: { count: 0, bytes: 0 },
-        documents: { count: 0, bytes: 0 },
-        other: { count: 0, bytes: 0 },
-      },
-      referenceLimitBytes: 10 * 1024 * 1024 * 1024,
-    };
+    return getLocalDirectoryStats();
   }
 
   const now = Date.now();

@@ -63,6 +63,8 @@ const uploadsRoutes = require('./routes/uploads.routes');
 const warmupRoutes = require('./routes/warmup.routes');
 const permissionsRoutes = require('./routes/permissions.routes');
 const reportsRoutes = require('./routes/reports.routes');
+const dropdownOptionsRoutes = require('./routes/dropdownOptions.routes');
+const applyMigrations = require('./utils/migrations');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRoutes);
@@ -76,11 +78,16 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/audit-logs', auditLogsRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/uploads', uploadsRoutes);
+// Static assets for uploaded media
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/local_uploads', express.static(path.join(__dirname, 'local_uploads')));
+
 app.use('/api/tickets', ticketsRoutes);
 app.use('/api/database', databaseRoutes);
 app.use('/api/warmup', warmupRoutes);
 app.use('/api/permissions', permissionsRoutes);
 app.use('/api/reports', reportsRoutes);
+app.use('/api/dropdown-options', dropdownOptionsRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -128,6 +135,7 @@ prisma.$connect()
           ADD COLUMN IF NOT EXISTS "imageUploadedBy" TEXT,
           ADD COLUMN IF NOT EXISTS "thumbnailUrl" TEXT;
       `);
+          await applyMigrations();
     } catch (_) {}
   })
   .catch((err) => {

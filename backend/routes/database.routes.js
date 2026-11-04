@@ -6,6 +6,69 @@ const { logAudit } = require('../utils/logger');
 
 router.use(authenticate);
 
+// GET /api/database/counts — Returns actual record counts per table
+router.get('/counts', authorize(['ADMIN']), async (req, res) => {
+  try {
+    const [
+      assets, employees, departments, locations,
+      assignments, maintenanceLogs, auditLogs, tickets,
+      documents, timelines, users
+    ] = await Promise.all([
+      prisma.asset.count(),
+      prisma.employee.count(),
+      prisma.department.count(),
+      prisma.location.count(),
+      prisma.assetAssignment.count(),
+      prisma.maintenanceLog.count(),
+      prisma.auditLog.count(),
+      prisma.supportTicket.count(),
+      prisma.assetDocument.count(),
+      prisma.assetTimeline.count(),
+      prisma.user.count(),
+    ]);
+
+    // Breakdown counts
+    const [
+      assetsAssigned, assetsAvailable, assetsUnderRepair, assetsRetired,
+      assetsWithImages, employeesActive
+    ] = await Promise.all([
+      prisma.asset.count({ where: { status: 'ASSIGNED' } }),
+      prisma.asset.count({ where: { status: 'AVAILABLE' } }),
+      prisma.asset.count({ where: { status: 'UNDER_REPAIR' } }),
+      prisma.asset.count({ where: { status: 'RETIRED' } }),
+      prisma.asset.count({ where: { imageStorageKey: { not: null } } }),
+      prisma.employee.count({ where: { status: 'ACTIVE' } }),
+    ]);
+
+    res.json({
+      tables: {
+        assets,
+        employees,
+        departments,
+        locations,
+        assignments,
+        maintenanceLogs,
+        auditLogs,
+        tickets,
+        documents,
+        timelines,
+        users,
+      },
+      breakdown: {
+        assetsAssigned,
+        assetsAvailable,
+        assetsUnderRepair,
+        assetsRetired,
+        assetsWithImages,
+        employeesActive,
+      }
+    });
+  } catch (err) {
+    console.error('DB Counts Error:', err);
+    res.status(500).json({ error: 'Failed to retrieve record counts' });
+  }
+});
+
 // DELETE /api/database/reset-all
 router.delete('/reset-all', authorize(['ADMIN']), async (req, res) => {
   try {

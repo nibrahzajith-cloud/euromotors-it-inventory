@@ -254,6 +254,7 @@ export default function Database() {
             remainingMB,
             status,
             tables: stats.database.tables || [],
+            recordCounts: stats.database.recordCounts || {},
         };
     }, [stats]);
 
@@ -356,6 +357,28 @@ export default function Database() {
                         </button>
                     </div>
                 </div>
+            </div>
+
+            {/* Live Database Record Telemetry HUD */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
+                {[
+                    { label: 'Total Assets', count: dbMetrics?.recordCounts?.Asset, icon: HardDrive, color: 'text-blue-400' },
+                    { label: 'Employees', count: dbMetrics?.recordCounts?.Employee, icon: Server, color: 'text-emerald-400' },
+                    { label: 'Active Assignments', count: dbMetrics?.recordCounts?.AssetAssignment, icon: Layers, color: 'text-indigo-400' },
+                    { label: 'Audit Logs', count: dbMetrics?.recordCounts?.AuditLog, icon: History, color: 'text-amber-400' },
+                    { label: 'Departments', count: dbMetrics?.recordCounts?.Department, icon: Cpu, color: 'text-cyan-400' },
+                    { label: 'Locations', count: dbMetrics?.recordCounts?.Location, icon: DatabaseIcon, color: 'text-purple-400' },
+                ].map((item, idx) => (
+                    <div key={idx} className="bg-slate-900/80 border border-slate-800/90 rounded-2xl p-4 flex flex-col justify-between shadow-lg">
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">{item.label}</span>
+                            <item.icon className={`w-3.5 h-3.5 ${item.color}`} />
+                        </div>
+                        <span className="text-xl sm:text-2xl font-black text-white font-mono tracking-tight">
+                            {loading ? '...' : (item.count !== undefined ? Number(item.count).toLocaleString() : '0')}
+                        </span>
+                    </div>
+                ))}
             </div>
 
             {/* Top Telemetry HUD: Neon PostgreSQL & Cloudflare R2 */}
@@ -596,6 +619,7 @@ export default function Database() {
                         <thead className="bg-slate-800/80 text-slate-400 font-bold uppercase tracking-wider text-[10px] border-b border-slate-800">
                             <tr>
                                 <th className="py-3 px-4">Database Table</th>
+                                <th className="py-3 px-4 text-right">Record Count</th>
                                 <th className="py-3 px-4 text-right">Table Data</th>
                                 <th className="py-3 px-4 text-right">Indexes Size</th>
                                 <th className="py-3 px-4 text-right">Total Size</th>
@@ -605,7 +629,7 @@ export default function Database() {
                         <tbody className="divide-y divide-slate-800/60 font-medium">
                             {filteredTables.length === 0 ? (
                                 <tr>
-                                    <td colSpan={5} className="py-8 text-center text-slate-500">
+                                    <td colSpan={6} className="py-8 text-center text-slate-500">
                                         No database tables matching search criteria.
                                     </td>
                                 </tr>
@@ -620,6 +644,11 @@ export default function Database() {
                                             <td className="py-3.5 px-4">
                                                 <span className="font-mono text-slate-200 font-bold group-hover:text-blue-400 transition-colors">
                                                     {tbl.tableName}
+                                                </span>
+                                            </td>
+                                            <td className="py-3.5 px-4 text-right">
+                                                <span className="px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-slate-800 text-slate-200 border border-slate-700/60 font-mono inline-block">
+                                                    {(tbl.rowCount ?? 0).toLocaleString()}
                                                 </span>
                                             </td>
                                             <td className="py-3.5 px-4 text-right text-slate-400">

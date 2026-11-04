@@ -23,12 +23,13 @@ import {
   Zap,
   Eye,
   EyeOff,
-  Command
+  Command,
+  LogOut
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Sidebar() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -476,6 +477,23 @@ export default function Sidebar() {
             );
           })}
         </nav>
+
+        {/* Sidebar Logout Action */}
+        <div className="px-2 pt-2 pb-1 shrink-0 border-t border-slate-100 dark:border-slate-800/60">
+          <button
+            onClick={() => {
+              logout();
+              navigate('/login');
+            }}
+            title={!isExpanded ? 'Sign Out' : undefined}
+            className={`w-full flex items-center py-2 px-2.5 rounded-xl text-xs font-semibold text-slate-500 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors cursor-pointer ${
+              isExpanded ? 'gap-3 justify-start' : 'justify-center'
+            }`}
+          >
+            <LogOut className="w-4 h-4 text-red-500/80 shrink-0" />
+            {isExpanded && <span>Sign Out</span>}
+          </button>
+        </div>
 
         {/* Automotive Styling & Status at Bottom of Sidebar */}
         <div className="relative mt-auto w-full pt-3 pointer-events-none select-none overflow-hidden shrink-0 border-t border-slate-100 dark:border-slate-800/60">

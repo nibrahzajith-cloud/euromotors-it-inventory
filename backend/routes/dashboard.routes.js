@@ -3,8 +3,18 @@ const router = express.Router();
 const prisma = require('../prismaClient');
 const { authenticate } = require('../middleware/auth.middleware');
 
+// Short in-memory cache to make dashboard instant and avoid hammering DB
+let dashboardCache = null;
+let dashboardCacheTime = 0;
+const DASHBOARD_CACHE_TTL = 8000; // 8 seconds
+
+
 router.get('/summary', authenticate, async (req, res) => {
   try {
+    const nowMs = Date.now();
+    if (dashboardCache && (nowMs - dashboardCacheTime) < DASHBOARD_CACHE_TTL && req.query.refresh !== 'true') {
+      return res.json(dashboardCache);
+    }
     const now = new Date();
     const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
     const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -23,7 +33,6 @@ router.get('/summary', authenticate, async (req, res) => {
       distributionDept,
       distributionLoc,
       repairingAssets,
-      warrantyAssets,
       recentEmployees,
       recentDepartments,
       recentLocations,
@@ -41,7 +50,6 @@ router.get('/summary', authenticate, async (req, res) => {
       prisma.department.findMany({ include: { _count: { select: { assets: true, employees: true } } } }),
       prisma.location.findMany({ include: { _count: { select: { assets: true } } } }),
       prisma.maintenanceLog.findMany({ where: { status: 'OPEN' }, include: { asset: true }, take: 5 }),
-      prisma.asset.findMany({ where: { warrantyExpiryDate: { lte: thirtyDaysFromNow, gt: now } }, take: 5 }),
       prisma.employee.findMany({ orderBy: { createdAt: 'desc' }, take: 5, select: { fullName: true, designation: true, status: true } }),
       prisma.department.findMany({ orderBy: { createdAt: 'desc' }, take: 5, select: { name: true, status: true } }),
       prisma.location.findMany({ orderBy: { createdAt: 'desc' }, take: 5, select: { name: true, status: true } }),
@@ -51,7 +59,7 @@ router.get('/summary', authenticate, async (req, res) => {
     // All counts in a single parallel batch — zero serial round-trips
     const [
       assignedCount, availableCount, repairCount, warrantyCount,
-      departmentAssets, locationAssets, sharedAssets, inStoreAssets
+      departmentAssets, locationAssets, sharedAssets
     ] = await Promise.all([
       prisma.asset.count({ where: { status: 'ASSIGNED', assignmentType: 'EMPLOYEE' } }),
       prisma.asset.count({ where: { status: 'AVAILABLE' } }),
@@ -60,10 +68,10 @@ router.get('/summary', authenticate, async (req, res) => {
       prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'DEPARTMENT' } }),
       prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'LOCATION' } }),
       prisma.asset.count({ where: { status: { not: 'UNDER_REPAIR' }, assignmentType: 'SHARED' } }),
-      prisma.asset.count({ where: { status: 'AVAILABLE' } })
     ]);
+    const inStoreAssets = availableCount;
 
-    res.json({
+    const responseData = {
       counts: {   // The system develop come 
         totalAssets,
         assigned: assignedCount,
@@ -90,7 +98,7 @@ router.get('/summary', authenticate, async (req, res) => {
       },
       attentionRequired: {
         unassigned: assignedCount > 0 ? availableCount : 0, // Just use availableCount
-        expiringWarranty: warrantyAssets.length,
+        expiringWarranty: expiringSoon.length,
         underRepair: repairingAssets.length,
         missingDocuments: recentActivity // we stored the count here
       },
@@ -99,8 +107,12 @@ router.get('/summary', authenticate, async (req, res) => {
         locations: distributionLoc.map(l => ({ name: l.name, id: l.id, count: l._count.assets }))
       },
       maintenance: repairingAssets,
-      warrantyAlerts: warrantyAssets
-    });
+      warrantyAlerts: expiringSoon
+    };
+
+    dashboardCache = responseData;
+    dashboardCacheTime = Date.now();
+    res.json(responseData);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

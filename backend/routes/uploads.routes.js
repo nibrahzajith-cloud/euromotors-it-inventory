@@ -30,10 +30,19 @@ const LOCAL_DIR = path.join(__dirname, '..', 'local_uploads');
 
 router.get('/local/:key', (req, res) => {
     const key = req.params.key;
-    const filePath = path.join(LOCAL_DIR, key);
+    let filePath = path.join(LOCAL_DIR, key);
     if (!fs.existsSync(filePath)) {
-        return res.status(404).json({ error: 'File not found' });
+        const alt1 = path.join(__dirname, '..', 'uploads', 'images', key);
+        const alt2 = path.join(__dirname, '..', 'uploads', 'documents', key);
+        const alt3 = path.join(LOCAL_DIR, key.replace(/\//g, '_'));
+        if (fs.existsSync(alt1)) filePath = alt1;
+        else if (fs.existsSync(alt2)) filePath = alt2;
+        else if (fs.existsSync(alt3)) filePath = alt3;
+        else {
+            return res.status(404).json({ error: 'File not found' });
+        }
     }
+    res.setHeader('Cache-Control', 'public, max-age=86400');
     if (req.query.download) {
         res.download(filePath, req.query.download);
     } else {
@@ -141,6 +150,45 @@ router.get('/storage/stats', authenticate, requirePermission('VIEW_STORAGE_STATS
             console.error('Database Size Query Error:', dbErr.message);
         }
 
+        // Fetch exact actual row counts across all application tables
+        let rowCounts = {};
+        try {
+            const [
+                assetCount, employeeCount, departmentCount, locationCount,
+                assignmentCount, maintenanceCount, ticketCount, docCount,
+                auditCount, timelineCount, userCount, settingsCount
+            ] = await Promise.all([
+                prisma.asset.count(),
+                prisma.employee.count(),
+                prisma.department.count(),
+                prisma.location.count(),
+                prisma.assetAssignment.count(),
+                prisma.maintenanceLog.count(),
+                prisma.supportTicket.count(),
+                prisma.assetDocument.count(),
+                prisma.auditLog.count(),
+                prisma.assetTimeline.count(),
+                prisma.user.count(),
+                prisma.systemSettings.count()
+            ]);
+            rowCounts = {
+                Asset: assetCount,
+                Employee: employeeCount,
+                Department: departmentCount,
+                Location: locationCount,
+                AssetAssignment: assignmentCount,
+                MaintenanceLog: maintenanceCount,
+                SupportTicket: ticketCount,
+                AssetDocument: docCount,
+                AuditLog: auditCount,
+                AssetTimeline: timelineCount,
+                User: userCount,
+                SystemSettings: settingsCount
+            };
+        } catch (cntErr) {
+            console.error('Exact Row Count Query Error:', cntErr.message);
+        }
+
         try {
             const tableSizes = await prisma.$queryRawUnsafe(`
                 SELECT 
@@ -159,6 +207,7 @@ router.get('/storage/stats', authenticate, requirePermission('VIEW_STORAGE_STATS
                     tableBytes: Number(t.table_bytes) || 0,
                     indexBytes: Number(t.index_bytes) || 0,
                     prettyTotalSize: t.pretty_total_size,
+                    rowCount: rowCounts[t.table_name] ?? 0,
                 }));
             }
         } catch (tblErr) {
@@ -201,6 +250,7 @@ router.get('/storage/stats', authenticate, requirePermission('VIEW_STORAGE_STATS
                 prettySize: dbPrettySize,
                 tables: formattedTables,
                 configuredReferenceLimitMB: configuredReferenceLimitMB,
+                recordCounts: rowCounts,
             },
         });
     } catch (error) {
@@ -432,22 +482,31 @@ router.get('/image/:assetId/:type', authenticate, async (req, res) => {
         }
         const asset = await prisma.asset.findUnique({ where: { id: assetId } });
         
-        if (!asset || !asset.imageStorageKey) {
+        if (!asset || (!asset.imageStorageKey && !asset.imageUrl)) {
             return res.status(404).json({ error: 'Image not found' });
         }
 
-        let key = asset.imageStorageKey;
+        let key = asset.imageStorageKey || asset.imageUrl;
+        // If image is a direct URL
+        if (key.startsWith('http://') || key.startsWith('https://')) {
+            return res.json({ url: key, expiresIn: 3600 });
+        }
+        if (key.startsWith('/uploads/') || key.startsWith('uploads/')) {
+            const normalized = key.startsWith('/') ? key : `/${key}`;
+            return res.json({ url: normalized, expiresIn: 3600 });
+        }
+
         if (type === 'thumb') {
             key = key.replace('assets/images/', 'assets/thumbnails/');
         }
 
         const url = await getPresignedUrl(
             key,
-            300,
+            3600,
             type === 'download' ? (asset.imageFileName || `${asset.assetCode}.webp`) : undefined
         );
         
-        return res.json({ url, expiresIn: 300 });
+        return res.json({ url, expiresIn: 3600 });
     } catch (error) {
         console.error('Presigned URL Error:', error);
         return storageErrorResponse(res, error, 'Failed to generate secure URL');
@@ -645,11 +704,11 @@ router.get('/document/:docId/:type', authenticate, requirePermission('DOWNLOAD_A
 
         const url = await getPresignedUrl(
             document.storageKey,
-            300,
+            3600,
             type === 'download' ? document.documentName : undefined
         );
         
-        return res.json({ url, expiresIn: 300 });
+        return res.json({ url, expiresIn: 3600 });
     } catch (error) {
         console.error('Presigned URL Error:', error);
         return storageErrorResponse(res, error, 'Failed to generate secure URL');

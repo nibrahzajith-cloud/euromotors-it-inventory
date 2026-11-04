@@ -12,10 +12,10 @@ export default defineConfig({
       registerType: 'autoUpdate',
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
-        maximumFileSizeToCacheInBytes: 10 * 1024 * 1024 // 10MB
+        maximumFileSizeToCacheInBytes: 10 * 1024 * 1024
       },
       devOptions: {
-        enabled: true // Allows testing PWA in development mode
+        enabled: true
       },
       manifest: {
         name: 'Euro Motors IT DB',
@@ -39,11 +39,49 @@ export default defineConfig({
       }
     })
   ],
+  build: {
+    target: 'es2022',
+    chunkSizeWarningLimit: 1200,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/xlsx') || id.includes('node_modules/exceljs')) {
+            return 'vendor-excel';
+          }
+          if (id.includes('node_modules/jspdf') || id.includes('node_modules/pdf-lib') || id.includes('node_modules/html2canvas')) {
+            return 'vendor-pdf';
+          }
+          if (id.includes('node_modules/recharts')) {
+            return 'vendor-charts';
+          }
+          if (id.includes('node_modules/html5-qrcode') || id.includes('node_modules/qrcode.react')) {
+            return 'vendor-qr';
+          }
+          if (id.includes('node_modules/react') || id.includes('node_modules/react-dom') || id.includes('node_modules/react-router-dom')) {
+            return 'vendor-react';
+          }
+          if (id.includes('node_modules/lucide-react') || id.includes('node_modules/framer-motion')) {
+            return 'vendor-ui';
+          }
+        }
+      }
+    }
+  },
   server: {
     host: true,
     port: 5173,
     proxy: {
       '/api': {
+        target: 'http://127.0.0.1:5000',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/uploads': {
+        target: 'http://127.0.0.1:5000',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/local_uploads': {
         target: 'http://127.0.0.1:5000',
         changeOrigin: true,
         secure: false,

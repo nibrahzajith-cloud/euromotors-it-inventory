@@ -75,6 +75,31 @@ export function getAssetUsageHistory(asset, employees = []) {
   };
 }
 
+function AssetRowThumb({ asset }) {
+  const [failed, setFailed] = useState(false);
+  const src = asset.thumbnailUrl || (asset.imageUrl ? `/api/uploads/image/${asset.id}/thumb` : null);
+
+  if (!src || failed) {
+    return (
+      <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800/80 flex items-center justify-center shrink-0 text-blue-600 dark:text-blue-400" title="Asset Photo Attached">
+        <ImageIcon className="w-4 h-4" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-9 h-9 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 shrink-0 bg-slate-100 dark:bg-slate-800">
+      <img
+        src={src}
+        alt={asset.assetCode}
+        loading="lazy"
+        onError={() => setFailed(true)}
+        className="w-full h-full object-cover"
+      />
+    </div>
+  );
+}
+
 export default function Assets() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -94,6 +119,10 @@ export default function Assets() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  // Pagination States
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   // Filtering States
   const [searchTerm, setSearchTerm] = useState('');
@@ -703,7 +732,7 @@ export default function Assets() {
                     </div>
                   </td>
                 </tr>
-              ) : filteredAssets.map((asset) => {
+              ) : paginatedAssets.map((asset) => {
                 const locName = locations.find(l => l.id === asset.locationId)?.name || 'Unmapped';
                 const deptName = departments.find(d => d.id === asset.departmentId)?.name || 'Not Scoped';
                 const empName = employees.find(e => e.id === asset.assignedEmployeeId)?.fullName || 'System Stock';
@@ -741,9 +770,7 @@ export default function Assets() {
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
                           {Boolean(asset.imageUrl || asset.imageStorageKey) ? (
-                            <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800/80 flex items-center justify-center shrink-0 text-blue-600 dark:text-blue-400" title="Asset Photo Attached">
-                              <ImageIcon className="w-4 h-4" />
-                            </div>
+                            <AssetRowThumb asset={asset} />
                           ) : null}
                           <div className="flex flex-col">
                             <div className="flex items-center gap-1.5">
@@ -1020,6 +1047,68 @@ export default function Assets() {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Bar */}
+        {filteredAssets.length > 0 && (
+          <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50/50 dark:bg-slate-900/40">
+            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+              <span>Showing</span>
+              <span className="font-bold text-slate-800 dark:text-slate-200">
+                {pageSize === 0 ? 1 : Math.min((currentPage - 1) * pageSize + 1, filteredAssets.length)}
+              </span>
+              <span>to</span>
+              <span className="font-bold text-slate-800 dark:text-slate-200">
+                {pageSize === 0 ? filteredAssets.length : Math.min(currentPage * pageSize, filteredAssets.length)}
+              </span>
+              <span>of</span>
+              <span className="font-bold text-slate-800 dark:text-slate-200">{filteredAssets.length}</span>
+              <span>assets</span>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                <span>Per page:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="px-2 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-300 outline-none cursor-pointer"
+                >
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={0}>All ({filteredAssets.length})</option>
+                </select>
+              </div>
+
+              {totalPages > 1 && (
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    disabled={currentPage <= 1}
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  >
+                    Previous
+                  </button>
+                  <span className="px-2 text-xs font-bold text-slate-600 dark:text-slate-300">
+                    {currentPage} / {totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Floating Bulk Action Bar */}

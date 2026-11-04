@@ -93,6 +93,38 @@ router.get('/code/:code', async (req, res) => {
   }
 });
 
+
+// GET /assets/:id — Fetch single asset by UUID (performance optimization for edit form)
+router.get('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    // Basic UUID format check to avoid conflicts with named routes
+    if (!/^[0-9a-f-]{36}$/i.test(id)) {
+      return res.status(400).json({ error: 'Invalid asset ID format' });
+    }
+    const record = await prisma.asset.findUnique({
+      where: { id },
+      include: {
+        location: true,
+        department: true,
+        assignedEmployee: true,
+        assignments: {
+          include: {
+            employee: {
+              include: { department: true, location: true }
+            }
+          },
+          orderBy: { assignedDate: 'desc' }
+        }
+      }
+    });
+    if (!record) return res.status(404).json({ error: 'Asset not found' });
+    res.json(record);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/', requirePermission('CREATE_ASSETS'), async (req, res) => {
   try {
     const payload = req.body;

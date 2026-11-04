@@ -18,46 +18,47 @@ const loadUserFromStorage = () => {
 };
 
 export function AuthProvider({ children }) {
-  // Hydrate user state immediately from localStorage — no network call needed.
-  // This makes the app render instantly on reload instead of showing a blank
-  // screen while waiting for /auth/me.
-  const [user, setUser] = useState(() => loadUserFromStorage());
-  const [loading, setLoading] = useState(true);
+  // Hydrate user state immediately from localStorage.
+  // If user is cached, render immediately (loading = false) so UI is instant.
+  const cachedUser = loadUserFromStorage();
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+
+  const [user, setUser] = useState(cachedUser);
+  const [loading, setLoading] = useState(() => !cachedUser && !!token);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const currentToken = localStorage.getItem('token');
 
-    // Pre-warm the Render server + Neon DB connection as soon as the app loads.
-    // This runs in the background and does not block the UI or login flow.
-    // By the time the user types their credentials, the connection is already warm.
+    // Pre-warm the backend connection asynchronously in the background.
     fetch(`${API_URL}/warmup`).catch(() => {});
 
-    if (!token) {
+    if (!currentToken) {
       setLoading(false);
       return;
     }
 
-    // Validate token in the background. We already have the user from localStorage,
-    // so the UI is visible. If the token is invalid, we silently log out.
+    // Validate token in the background without freezing the UI.
     fetch(`${API_URL}/auth/me`, {
-      headers: { 'Authorization': `Bearer ${token}` }
+      headers: { 'Authorization': `Bearer ${currentToken}` }
     })
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error('Token expired or invalid');
+        return res.json();
+      })
       .then(data => {
         if (data && data.id) {
           const freshUser = { ...data, full_name: data.fullName, name: data.fullName };
           setUser(freshUser);
           saveUserToStorage(freshUser);
         } else {
-          // Token invalid — clear everything
+          // Token invalid — clear session
           setUser(null);
           localStorage.removeItem('token');
           localStorage.removeItem(STORAGE_USER_KEY);
         }
       })
       .catch(() => {
-        // Network error — keep the cached user so the UI doesn't break
-        // The user will get a proper auth error if they try a protected API call
+        // Network failure / offline: retain optimistic user session
       })
       .finally(() => setLoading(false));
   }, []);
@@ -85,7 +86,6 @@ export function AuthProvider({ children }) {
       const authUser = data.user;
       const userState = { ...authUser, full_name: authUser.fullName, name: authUser.fullName };
       
-      // Store immediately — navigate happens right after this returns
       localStorage.setItem('token', data.token);
       saveUserToStorage(userState);
       setUser(userState);
@@ -120,4 +120,3 @@ export const useAuth = () => {
   }
   return context;
 };
-

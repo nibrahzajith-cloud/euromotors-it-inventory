@@ -1,3 +1,4 @@
+import CreatableSelect from '../components/CreatableSelect';
 import { useEffect, useState, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
@@ -268,6 +269,22 @@ export default function AssetProfile() {
 
     const inputClass = "w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all";
 
+    if (type === 'creatable') {
+      return (
+        <div>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">{label}</p>
+          <CreatableSelect
+            field={field}
+            defaults={options || []}
+            value={editData[field] || ''}
+            onChange={(val) => handleFieldChange(field, val)}
+            triggerClassName="!px-3 !py-1.5 !rounded-lg !text-xs !bg-slate-50 dark:!bg-slate-700 !border-slate-200 dark:!border-slate-600"
+            placeholder={`Select or add ${label.toLowerCase()}...`}
+          />
+        </div>
+      );
+    }
+
     if (type === 'select' && options) {
       const currentVal = editData[field];
       const optValues = options.map(opt => typeof opt === 'object' ? opt.value : opt);
@@ -504,14 +521,14 @@ export default function AssetProfile() {
                   Hardware Specifications
                 </h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
-                  {renderEditableField("Device Type", "deviceType", "select", STANDARD_DEVICE_TYPES)}
-                  {renderEditableField("Brand", "brand", "select", STANDARD_BRANDS)}
-                  {renderEditableField("Model", "model")}
+                  {renderEditableField("Device Type", "deviceType", "creatable", STANDARD_DEVICE_TYPES)}
+                  {renderEditableField("Brand", "brand", "creatable", STANDARD_BRANDS)}
+                  {renderEditableField("Model", "model", "creatable", ["Latitude 5420", "Latitude 5520", "ThinkPad T14", "ThinkPad X1 Carbon", "EliteBook 840", "ProBook 450", "MacBook Pro 14", "MacBook Air M2", "OptiPlex 7090", "Vivobook X1504VA", "Standard / Optical", "N/A"])}
                   {renderEditableField("Serial Number", "serialNumber")}
-                  {renderEditableField("Processor", "processor", "select", STANDARD_PROCESSORS)}
-                  {renderEditableField("Memory (RAM)", "ram", "select", STANDARD_RAM_OPTIONS)}
-                  {renderEditableField("Storage", "storage", "select", STANDARD_STORAGE_OPTIONS)}
-                  {renderEditableField("Operating System", "operatingSystem", "select", STANDARD_OS_OPTIONS)}
+                  {renderEditableField("Processor", "processor", "creatable", STANDARD_PROCESSORS)}
+                  {renderEditableField("Memory (RAM)", "ram", "creatable", STANDARD_RAM_OPTIONS)}
+                  {renderEditableField("Storage", "storage", "creatable", STANDARD_STORAGE_OPTIONS)}
+                  {renderEditableField("Operating System", "operatingSystem", "creatable", STANDARD_OS_OPTIONS)}
                   {renderEditableField("Vendor", "vendor")}
                   {renderEditableField("MAC Address", "macAddress")}
                   {renderEditableField("IP Address", "ipAddress")}

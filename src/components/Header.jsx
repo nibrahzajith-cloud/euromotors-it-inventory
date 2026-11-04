@@ -5,13 +5,13 @@ import {
   LayoutDashboard, MonitorSmartphone, PlusCircle, Users,
   UserPlus, Building2, MapPin, ArrowRightLeft, QrCode,
   Wrench, FileText, Settings, ShieldCheck, History,
-  Camera, Ticket, Database, KeyRound
+  Camera, Ticket, Database, KeyRound, LogOut
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 
 export default function Header() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { toggleTheme, isDark } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
@@ -209,6 +209,22 @@ export default function Header() {
             </span>
           </div>
         </div>
+
+        {/* Vertical divider */}
+        <div className="h-6 w-[1px] bg-slate-200 dark:bg-slate-800/80 mx-0.5" />
+
+        {/* Logout Option */}
+        <button
+          onClick={() => {
+            logout();
+            navigate('/login');
+          }}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-slate-500 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 border border-transparent hover:border-red-200 dark:hover:border-red-500/20 transition-all text-xs font-medium cursor-pointer"
+          title="Log Out of System"
+        >
+          <LogOut className="w-4 h-4 text-red-500/80 group-hover:text-red-600 shrink-0" />
+          <span className="hidden md:inline font-semibold">Sign Out</span>
+        </button>
 
       </div>
     </header>

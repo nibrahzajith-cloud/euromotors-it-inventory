@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
+import CreatableSelect from '../components/CreatableSelect';
 import {
   STANDARD_DEVICE_TYPES,
   STANDARD_BRANDS,
@@ -159,14 +160,14 @@ export default function AddAsset() {
         const headers = { 'Authorization': `Bearer ${token}` };
 
         const fetchPromises = [
-          fetch(`${API_URL}/employees`, { headers }).then(r => r.json()),
+          fetch(`${API_URL}/employees?status=ACTIVE`, { headers }).then(r => r.json()),
           fetch(`${API_URL}/departments`, { headers }).then(r => r.json()),
           fetch(`${API_URL}/locations`, { headers }).then(r => r.json())
         ];
 
-        // If editing, pull specific asset data
+        // If editing, pull specific asset data directly by ID (much faster than fetching all)
         if (id) {
-          fetchPromises.push(fetch(`${API_URL}/assets`, { headers }).then(r => r.json()));
+          fetchPromises.push(fetch(`${API_URL}/assets/${id}`, { headers }).then(r => r.json()));
         }
 
         const results = await Promise.all(fetchPromises);
@@ -176,7 +177,8 @@ export default function AddAsset() {
 
         if (id) {
           const assets = results[3];
-          const target = Array.isArray(assets) ? assets.find(a => a.id === id) : null;
+          // When fetching by /assets/:id, response is a single asset object
+          const target = Array.isArray(assets) ? assets.find(a => a.id === id) : assets;
           if (target) {
             setFormData({
               assetCode: target.assetCode || '',
@@ -414,61 +416,30 @@ export default function AddAsset() {
                 />
               </div>
 
-              {/* Standardized Device Type */}
+              {/* Standardized Device Type / Category */}
               <div>
-                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Device Type *</label>
-                <select
-                  required
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Device Type / Category *</label>
+                <CreatableSelect
+                  field="deviceType"
+                  defaults={STANDARD_DEVICE_TYPES}
                   value={formData.deviceType}
-                  onChange={e => handleChange('deviceType', e.target.value)}
-                  className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 font-sans text-sm cursor-pointer"
-                >
-                  <option value="">Select standard category...</option>
-                  {formData.deviceType && !STANDARD_DEVICE_TYPES.includes(formData.deviceType) && (
-                    <option value={formData.deviceType}>{formData.deviceType} (Custom)</option>
-                  )}
-                  {STANDARD_DEVICE_TYPES.map(type => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
-                </select>
+                  onChange={(val) => handleChange('deviceType', val)}
+                  placeholder="Select or add device category..."
+                  required
+                />
               </div>
 
-              {/* Standardized Brand with Other fallback */}
+              {/* Standardized Brand / Manufacturer */}
               <div>
-                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Brand / Vendor *</label>
-                <select
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Brand / Manufacturer *</label>
+                <CreatableSelect
+                  field="brand"
+                  defaults={STANDARD_BRANDS}
+                  value={formData.brand}
+                  onChange={(val) => handleChange('brand', val)}
+                  placeholder="Select or add brand..."
                   required
-                  value={STANDARD_BRANDS.includes(formData.brand) ? formData.brand : (formData.brand ? 'Other' : '')}
-                  onChange={e => {
-                    const val = e.target.value;
-                    if (val === 'Other') {
-                      setShowCustomBrand(true);
-                      if (STANDARD_BRANDS.includes(formData.brand) && formData.brand !== 'Other') {
-                        handleChange('brand', '');
-                      }
-                    } else {
-                      setShowCustomBrand(false);
-                      handleChange('brand', val);
-                    }
-                  }}
-                  className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 font-sans text-sm cursor-pointer"
-                >
-                  <option value="">Select brand...</option>
-                  {STANDARD_BRANDS.map(brand => (
-                    <option key={brand} value={brand}>{brand}</option>
-                  ))}
-                </select>
-                {(showCustomBrand || (!STANDARD_BRANDS.includes(formData.brand) && formData.brand)) && (
-                  <div className="mt-2">
-                    <input
-                      type="text"
-                      placeholder="Specify other brand..."
-                      value={formData.brand === 'Other' ? '' : formData.brand}
-                      onChange={e => handleChange('brand', e.target.value)}
-                      className="w-full bg-white dark:bg-[#0c1322] border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-xl px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400"
-                    />
-                  </div>
-                )}
+                />
               </div>
 
               {/* Hardware Model */}
@@ -476,13 +447,27 @@ export default function AddAsset() {
                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Hardware Model {REQUIRES_MODEL_TYPES.includes(formData.deviceType) ? '*' : '(Optional)'}
                 </label>
-                <input 
-                  type="text" 
+                <CreatableSelect
+                  field="model"
+                  defaults={[
+                    'Latitude 5420',
+                    'Latitude 5520',
+                    'ThinkPad T14 Gen 3',
+                    'ThinkPad X1 Carbon',
+                    'EliteBook 840 G8',
+                    'ProBook 450 G9',
+                    'MacBook Pro 14"',
+                    'MacBook Air M2',
+                    'OptiPlex 7090',
+                    'Vivobook X1504VA',
+                    'LaserJet Pro M404n',
+                    'Standard / Optical',
+                    'N/A'
+                  ]}
+                  value={formData.model}
+                  onChange={(val) => handleChange('model', val)}
+                  placeholder={REQUIRES_MODEL_TYPES.includes(formData.deviceType) ? "Select or add model (e.g. Latitude 5420)..." : "Select or add model..."}
                   required={REQUIRES_MODEL_TYPES.includes(formData.deviceType)}
-                  value={formData.model} 
-                  onChange={e => handleChange('model', e.target.value)} 
-                  className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400 dark:placeholder:text-slate-500 font-sans text-sm" 
-                  placeholder={REQUIRES_MODEL_TYPES.includes(formData.deviceType) ? "e.g. Latitude 5420 / Vivobook X1504VA" : "e.g. Standard / Optical"} 
                 />
               </div>
 
@@ -520,74 +505,50 @@ export default function AddAsset() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <div>
                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Processor (CPU)</label>
-                <select
-                  disabled={isPeripheral}
+                <CreatableSelect
+                  field="processor"
+                  defaults={STANDARD_PROCESSORS}
                   value={formData.processor || (isPeripheral ? 'N/A' : '')}
-                  onChange={e => handleChange('processor', e.target.value)}
-                  className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 font-sans text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                >
-                  <option value="">Select CPU...</option>
-                  {formData.processor && !STANDARD_PROCESSORS.includes(formData.processor) && (
-                    <option value={formData.processor}>{formData.processor} (Custom)</option>
-                  )}
-                  {STANDARD_PROCESSORS.map(p => (
-                    <option key={p} value={p}>{p}</option>
-                  ))}
-                </select>
+                  onChange={(val) => handleChange('processor', val)}
+                  placeholder="Select or add CPU..."
+                  disabled={isPeripheral}
+                />
               </div>
 
               <div>
                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">System Memory (RAM)</label>
-                <select
-                  disabled={isPeripheral}
+                <CreatableSelect
+                  field="ram"
+                  defaults={STANDARD_RAM_OPTIONS}
                   value={formData.ram || (isPeripheral ? 'N/A' : '')}
-                  onChange={e => handleChange('ram', e.target.value)}
-                  className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 font-sans text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                >
-                  <option value="">Select RAM...</option>
-                  {formData.ram && !STANDARD_RAM_OPTIONS.includes(formData.ram) && (
-                    <option value={formData.ram}>{formData.ram} (Custom)</option>
-                  )}
-                  {STANDARD_RAM_OPTIONS.map(r => (
-                    <option key={r} value={r}>{r}</option>
-                  ))}
-                </select>
+                  onChange={(val) => handleChange('ram', val)}
+                  placeholder="Select or add RAM..."
+                  disabled={isPeripheral}
+                />
               </div>
 
               <div>
                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Storage Array</label>
-                <select
-                  disabled={isPeripheral}
+                <CreatableSelect
+                  field="storage"
+                  defaults={STANDARD_STORAGE_OPTIONS}
                   value={formData.storage || (isPeripheral ? 'N/A' : '')}
-                  onChange={e => handleChange('storage', e.target.value)}
-                  className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 font-sans text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                >
-                  <option value="">Select Storage...</option>
-                  {formData.storage && !STANDARD_STORAGE_OPTIONS.includes(formData.storage) && (
-                    <option value={formData.storage}>{formData.storage} (Custom)</option>
-                  )}
-                  {STANDARD_STORAGE_OPTIONS.map(s => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
+                  onChange={(val) => handleChange('storage', val)}
+                  placeholder="Select or add Storage..."
+                  disabled={isPeripheral}
+                />
               </div>
 
               <div>
                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Operating OS</label>
-                <select
-                  disabled={isPeripheral}
+                <CreatableSelect
+                  field="operatingSystem"
+                  defaults={STANDARD_OS_OPTIONS}
                   value={formData.operatingSystem || (isPeripheral ? 'N/A' : '')}
-                  onChange={e => handleChange('operatingSystem', e.target.value)}
-                  className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500 font-sans text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                >
-                  <option value="">Select OS...</option>
-                  {formData.operatingSystem && !STANDARD_OS_OPTIONS.includes(formData.operatingSystem) && (
-                    <option value={formData.operatingSystem}>{formData.operatingSystem} (Custom)</option>
-                  )}
-                  {STANDARD_OS_OPTIONS.map(o => (
-                    <option key={o} value={o}>{o}</option>
-                  ))}
-                </select>
+                  onChange={(val) => handleChange('operatingSystem', val)}
+                  placeholder="Select or add OS..."
+                  disabled={isPeripheral}
+                />
               </div>
             </div>
           </div>
