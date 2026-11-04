@@ -1,10 +1,43 @@
-import { lazy, Suspense } from 'react';
+import React, { lazy, Suspense, Component } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
 import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider } from './context/ToastContext';
 import { ConfirmProvider } from './context/ConfirmContext';
+
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error('ErrorBoundary caught an error:', error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-[#070b13] text-white flex flex-col items-center justify-center p-6 text-center">
+          <div className="w-12 h-12 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400 mb-4 text-xl font-bold">
+            !
+          </div>
+          <h2 className="text-lg font-bold text-slate-100 mb-1">Something went wrong</h2>
+          <p className="text-xs text-slate-400 max-w-md mb-4">{this.state.error?.message || 'An unexpected rendering error occurred.'}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-xl text-xs font-semibold text-white transition-colors cursor-pointer"
+          >
+            Reload Page
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // Performance Optimization: Route-based Code Splitting via React.lazy
 const Assets = lazy(() => import('./pages/Assets'));
@@ -120,7 +153,9 @@ export default function App() {
         <ConfirmProvider>
           <AuthProvider>
             <Router>
-              <AppRoutes />
+              <ErrorBoundary>
+                <AppRoutes />
+              </ErrorBoundary>
             </Router>
           </AuthProvider>
         </ConfirmProvider>

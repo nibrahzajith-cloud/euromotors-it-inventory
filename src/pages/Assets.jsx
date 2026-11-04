@@ -363,6 +363,19 @@ export default function Assets() {
     return textMatch && statusMatch && categoryMatch && locationMatch && departmentMatch && employeeMatch && assignmentTypeMatch;
   });
 
+  // Pagination calculation
+  const totalPages = pageSize === 0 ? 1 : Math.ceil(filteredAssets.length / pageSize) || 1;
+  const paginatedAssets = useMemo(() => {
+    if (pageSize === 0) return filteredAssets;
+    const start = (currentPage - 1) * pageSize;
+    return filteredAssets.slice(start, start + pageSize);
+  }, [filteredAssets, currentPage, pageSize]);
+
+  // Reset to page 1 whenever filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, categoryFilter, locationFilter, departmentFilter, employeeFilter, assignmentTypeFilter]);
+
   const toggleSelection = (id) => {
     setSelectedIds(prev => {
       const next = new Set(prev);
