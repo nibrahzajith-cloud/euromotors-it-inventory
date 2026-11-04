@@ -204,7 +204,8 @@ router.post('/', requirePermission('CREATE_ASSETS'), async (req, res) => {
                   assetId: newRecord.id,
                   employeeId: payload.assignedEmployeeId,
                   status: 'ACTIVE',
-                  remarks: 'Assigned during asset creation'
+                  remarks: 'Assigned during asset creation',
+                  accessories: payload.accessories || []
               }
           });
       }
@@ -947,9 +948,16 @@ router.post('/:id/return', requirePermission('ASSIGN_ASSETS'), async (req, res) 
 
     // Mark all active assignments as RETURNED
     const now = new Date();
+    const returnAccessories = req.body?.returnAccessories || null;
+    const returnRemarks = req.body?.remarks || null;
     await prisma.assetAssignment.updateMany({
       where: { assetId: asset.id, status: 'ACTIVE' },
-      data: { status: 'RETURNED', returnedDate: now }
+      data: { 
+        status: 'RETURNED', 
+        returnedDate: now,
+        ...(returnAccessories ? { returnAccessories } : {}),
+        ...(returnRemarks ? { remarks: returnRemarks } : {})
+      }
     });
 
     const emp = asset.assignedEmployee || asset.assignments?.[0]?.employee || null;

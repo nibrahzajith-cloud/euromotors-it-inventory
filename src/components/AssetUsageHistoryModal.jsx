@@ -248,6 +248,29 @@ export default function AssetUsageHistoryModal({ asset, isOpen, onClose }) {
                     </div>
                   </div>
 
+                  {/* Accessories Return Verification */}
+                  {Array.isArray(latestAssignment.returnAccessories) && latestAssignment.returnAccessories.length > 0 && (
+                    <div className="bg-white/80 dark:bg-slate-900/60 p-3 rounded-xl border border-slate-200/60 dark:border-slate-800/60 space-y-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                        Accessories Return Verification
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {latestAssignment.returnAccessories.map((acc, i) => {
+                          const isRet = acc.status === 'Returned';
+                          return (
+                            <span key={i} className={`text-xs px-2 py-0.5 rounded font-semibold ${
+                              isRet
+                                ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                                : 'bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'
+                            }`}>
+                              {acc.name}: {acc.status} {acc.notes ? `(${acc.notes})` : ''}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Return Remarks / Handover Notes */}
                   <div className="bg-white/80 dark:bg-slate-900/60 p-3 rounded-xl border border-amber-200/50 dark:border-amber-900/30 space-y-1">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">

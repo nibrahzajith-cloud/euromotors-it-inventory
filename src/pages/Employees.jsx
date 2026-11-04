@@ -947,6 +947,15 @@ export default function Employees({ defaultOpenAdd = false }) {
                         <ExternalLink className="w-3 h-3 text-slate-400 group-hover:text-blue-500" />
                       </div>
                       <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{asset.deviceType} · {asset.model}</p>
+                      {Array.isArray(asset.accessories) && asset.accessories.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {asset.accessories.map((acc, i) => (
+                            <span key={i} className="text-[9px] font-semibold px-1.5 py-0.5 bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 rounded border border-blue-200/50 dark:border-blue-800/50">
+                              {typeof acc === 'string' ? acc : acc.name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
 

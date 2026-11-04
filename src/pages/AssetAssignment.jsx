@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
-import { ArrowRightLeft, Search, Loader2, AlertCircle, Trash2, Undo2, MousePointer2, GripVertical, Building2, MapPin, X } from 'lucide-react';
+import { ArrowRightLeft, Search, Loader2, AlertCircle, Trash2, Undo2, MousePointer2, GripVertical, Building2, MapPin, X, Printer, PackageCheck, Layers, Check } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
 import CopyButton from '../components/CopyButton';
+import HandoverPrintModal from '../components/HandoverPrintModal';
+import AssetReturnVerificationModal from '../components/AssetReturnVerificationModal';
 import { safeSetItem } from '../utils/storage';
 import { DndContext, useDraggable, useDroppable, PointerSensor, useSensor, useSensors, DragOverlay, closestCenter } from '@dnd-kit/core';
 
@@ -28,6 +30,22 @@ function DraggableAsset({ asset }) {
         <p className="font-extrabold text-sm text-slate-900 dark:text-white">{asset.assetCode}</p>
         <p className="text-xs text-slate-500 dark:text-slate-400">{asset.model}</p>
       </div>
+      {/* Handover Printable Document Modal */}
+      {handoverDocAssignment && (
+        <HandoverPrintModal
+          assignment={handoverDocAssignment}
+          onClose={() => setHandoverDocAssignment(null)}
+        />
+      )}
+
+      {/* Asset Return & Accessories Verification Modal */}
+      {returnVerificationAssignment && (
+        <AssetReturnVerificationModal
+          assignment={returnVerificationAssignment}
+          onClose={() => setReturnVerificationAssignment(null)}
+          onConfirm={handleConfirmReturn}
+        />
+      )}
     </div>
   );
 }
@@ -110,6 +128,33 @@ export default function AssetAssignment() {
   
   // Post-Drop details panel state
   const [pendingAssignment, setPendingAssignment] = useState(null);
+  const [handoverDocAssignment, setHandoverDocAssignment] = useState(null);
+  const [returnVerificationAssignment, setReturnVerificationAssignment] = useState(null);
+  const [manualAccessories, setManualAccessories] = useState([]);
+
+  // Auto-populate accessories when selecting an asset in manual assign
+  useEffect(() => {
+    if (!assetId) {
+      setManualAccessories([]);
+      return;
+    }
+    const selected = assets.find(a => a.id === assetId);
+    if (selected && Array.isArray(selected.accessories) && selected.accessories.length > 0) {
+      setManualAccessories(selected.accessories.map(acc => ({
+        name: typeof acc === 'string' ? acc : acc.name,
+        selected: true,
+        serialNumber: acc.serialNumber || '',
+        notes: acc.notes || ''
+      })));
+    } else {
+      setManualAccessories([
+        { name: 'Charger', selected: true },
+        { name: 'Laptop Backpack / Bag', selected: true },
+        { name: 'Mouse', selected: false },
+        { name: 'Adapter', selected: false }
+      ]);
+    }
+  }, [assetId, assets]);
 
   const canCreateEdit = user?.role === 'ADMIN' || user?.role === 'IT_OFFICER';
   const canDelete = user?.role === 'ADMIN';
@@ -183,7 +228,8 @@ export default function AssetAssignment() {
       locationId: assignmentType !== 'EMPLOYEE' ? locationId : undefined,
       assignedDate: new Date(assignedDate).toISOString(),
       status: 'ACTIVE',
-      remarks
+      remarks,
+      accessories: manualAccessories.filter(a => a.selected)
     };
 
     if (await performAssignment(payload)) {
@@ -203,12 +249,22 @@ export default function AssetAssignment() {
     const asset = active.data.current;
     const target = over.data.current;
     
+    const defaultAcc = (Array.isArray(asset.accessories) && asset.accessories.length > 0)
+      ? asset.accessories.map(a => ({ name: typeof a === 'string' ? a : a.name, selected: true }))
+      : [
+          { name: 'Charger', selected: true },
+          { name: 'Laptop Backpack / Bag', selected: true },
+          { name: 'Mouse', selected: false },
+          { name: 'Adapter', selected: false }
+        ];
+
     setPendingAssignment({
       asset,
       target,
       assignmentType: target.type, // 'EMPLOYEE', 'DEPARTMENT', 'LOCATION'
       assignedDate: new Date().toISOString().split('T')[0],
-      remarks: ''
+      remarks: '',
+      accessories: defaultAcc
     });
   };
 
@@ -222,11 +278,50 @@ export default function AssetAssignment() {
       locationId: pendingAssignment.assignmentType === 'LOCATION' ? pendingAssignment.target.id : undefined,
       assignedDate: new Date(pendingAssignment.assignedDate).toISOString(),
       status: 'ACTIVE',
-      remarks: pendingAssignment.remarks || 'Assigned via Drag & Drop Studio'
+      remarks: pendingAssignment.remarks || 'Assigned via Drag & Drop Studio',
+      accessories: (pendingAssignment.accessories || []).filter(a => a.selected)
     };
     
     if (await performAssignment(payload)) {
       setPendingAssignment(null);
+    }
+  };
+
+  const handleConfirmReturn = async ({ assignmentId, assetId, returnAccessories, condition, remarks }) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/assignments/${assignmentId}`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'RETURNED',
+          returnedDate: new Date().toISOString(),
+          returnAccessories,
+          remarks
+        })
+      });
+      if (!res.ok) throw new Error('Return failed.');
+
+      // Update physical condition if specified
+      if (condition && assetId) {
+        try {
+          await fetch(`${API_URL}/assets/${assetId}`, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ condition })
+          });
+        } catch (_) {}
+      }
+
+      showToast('Asset returned & accessories verified.', 'success');
+      setReturnVerificationAssignment(null);
+      localStorage.removeItem('analyticsDashboardCache');
+      localStorage.removeItem('assetsCache');
+      localStorage.removeItem('assignmentsCache');
+      localStorage.removeItem('employeesCache');
+      await fetchData();
+    } catch(err) {
+      showToast(err.message, 'error');
     }
   };
 
@@ -376,6 +471,31 @@ export default function AssetAssignment() {
                 <ArrowRightLeft className="w-4 h-4 text-slate-400 shrink-0" />
                 <div className="flex-1 truncate"><strong>Target:</strong> {pendingAssignment.target.fullName || pendingAssignment.target.name} ({pendingAssignment.assignmentType})</div>
               </div>
+              {pendingAssignment.accessories && pendingAssignment.accessories.length > 0 && (
+                <div className="mb-3 p-3 bg-white dark:bg-slate-800 rounded-lg border border-blue-100 dark:border-blue-800/40 space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Accessories Handed Over ({pendingAssignment.accessories.filter(a => a.selected).length} selected):
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {pendingAssignment.accessories.map((acc, idx) => (
+                      <label key={idx} className="flex items-center gap-2 p-1.5 rounded border text-xs cursor-pointer select-none bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={acc.selected}
+                          onChange={e => {
+                            const copy = [...pendingAssignment.accessories];
+                            copy[idx] = { ...copy[idx], selected: e.target.checked };
+                            setPendingAssignment({ ...pendingAssignment, accessories: copy });
+                          }}
+                          className="rounded text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                        />
+                        <span className="truncate font-medium">{acc.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">Assignment Date</label>
@@ -429,6 +549,28 @@ export default function AssetAssignment() {
                       {log.asset?.assetCode && <CopyButton text={log.asset.assetCode} label="Asset Code" iconSize="w-2.5 h-2.5" className="p-0.5" />}
                     </div>
                     <p className="text-xs">{log.asset?.model}</p>
+                    {Array.isArray(log.accessories) && log.accessories.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {log.accessories.map((acc, i) => (
+                          <span key={i} className="text-[9px] font-semibold px-1.5 py-0.5 bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 rounded border border-blue-200/50 dark:border-blue-800/50">
+                            {typeof acc === 'string' ? acc : acc.name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {log.status === 'RETURNED' && Array.isArray(log.returnAccessories) && log.returnAccessories.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {log.returnAccessories.map((acc, i) => (
+                          <span key={i} className={`text-[9px] font-semibold px-1.5 py-0.5 rounded border ${
+                            acc.status === 'Returned'
+                              ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border-emerald-200/60 dark:border-emerald-800/60'
+                              : 'bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 border-red-200/60 dark:border-red-800/60'
+                          }`}>
+                            {acc.name}: {acc.status}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <p className="font-semibold text-slate-700 dark:text-slate-300">
@@ -456,12 +598,26 @@ export default function AssetAssignment() {
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-right space-x-2">
+                  <td className="px-4 py-3 text-right space-x-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setHandoverDocAssignment(log)}
+                      title="Print Official Handover Document"
+                      className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer inline-block"
+                    >
+                      <Printer className="w-3.5 h-3.5 inline" />
+                    </button>
                     {canCreateEdit && log.status === 'ACTIVE' && (
-                      <button onClick={() => handleReturn(log.id)} className="text-blue-600 hover:text-blue-800 text-xs font-semibold bg-blue-50 px-2 py-1 rounded">Return</button>
+                      <button
+                        type="button"
+                        onClick={() => setReturnVerificationAssignment(log)}
+                        className="text-blue-600 hover:text-blue-800 text-xs font-semibold bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded cursor-pointer"
+                      >
+                        Return
+                      </button>
                     )}
                     {canDelete && (
-                      <button onClick={() => handleDelete(log.id)} className="text-red-500 hover:text-red-700 p-1"><Trash2 className="w-4 h-4 inline"/></button>
+                      <button type="button" onClick={() => handleDelete(log.id)} className="text-red-500 hover:text-red-700 p-1 cursor-pointer"><Trash2 className="w-4 h-4 inline"/></button>
                     )}
                   </td>
                 </tr>
@@ -544,6 +700,31 @@ export default function AssetAssignment() {
                     </div>
                   </>
                 )}
+                {manualAccessories.length > 0 && (
+                  <div className="col-span-2 p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Accessories Issued at Handover ({manualAccessories.filter(a => a.selected).length} selected)
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {manualAccessories.map((acc, idx) => (
+                        <label key={idx} className="flex items-center gap-2 p-2 rounded-lg border text-xs cursor-pointer select-none bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={acc.selected}
+                            onChange={e => {
+                              const copy = [...manualAccessories];
+                              copy[idx] = { ...copy[idx], selected: e.target.checked };
+                              setManualAccessories(copy);
+                            }}
+                            className="rounded text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                          />
+                          <span className="truncate font-medium">{acc.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div>
                   <label className="block font-semibold mb-1">Date</label>
                   <input type="date" value={assignedDate} onChange={e => setAssignedDate(e.target.value)} className="w-full border rounded-lg p-2 outline-none" />

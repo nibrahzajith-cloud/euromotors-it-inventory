@@ -58,7 +58,8 @@ router.post('/', requirePermission('ASSIGN_ASSETS'), async (req, res) => {
           employeeId: req.body.employeeId,
           assignedDate: req.body.assignedDate ? new Date(req.body.assignedDate) : new Date(),
           status: 'ACTIVE',
-          remarks: req.body.remarks || null
+          remarks: req.body.remarks || null,
+          accessories: req.body.accessories || null
         },
         include: { asset: true, employee: true }
       });
@@ -153,6 +154,12 @@ router.put('/:id', requirePermission('ASSIGN_ASSETS'), async (req, res) => {
     }
     if (updateData.assignedDate) {
       updateData.assignedDate = new Date(updateData.assignedDate);
+    }
+    if (updateData.returnAccessories !== undefined) {
+      updateData.returnAccessories = updateData.returnAccessories;
+    }
+    if (updateData.accessories !== undefined) {
+      updateData.accessories = updateData.accessories;
     }
 
     const record = await prisma.assetAssignment.update({ 

@@ -1,4 +1,5 @@
 import CreatableSelect from '../components/CreatableSelect';
+import AccessoriesSection from '../components/AccessoriesSection';
 import { useEffect, useState, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
@@ -7,7 +8,7 @@ import {
   ArrowLeft, Printer, Download, MonitorSmartphone, Wrench, UserCheck,
   CheckCircle2, Loader2, AlertCircle, History, Calendar, User, ArrowRight,
   Pencil, Save, X, QrCode, Image as ImageIcon, Maximize2, Sparkles,
-  ShieldCheck, Tag, Globe, Activity
+  ShieldCheck, Tag, Globe, Activity, Layers, Check
 } from 'lucide-react';
 import QRCard from '../components/QRCard';
 import { downloadQRCard } from '../utils/qrUtils';
@@ -534,6 +535,49 @@ export default function AssetProfile() {
                   {renderEditableField("IP Address", "ipAddress")}
                 </div>
               </div>
+
+              {/* Accessories & Other Assets */}
+              {isEditing ? (
+                <AccessoriesSection
+                  accessories={editData.accessories || []}
+                  onChange={(newAcc) => handleFieldChange('accessories', newAcc)}
+                />
+              ) : (
+                <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-3">
+                    <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+                      <Layers className="w-5 h-5 text-blue-600" />
+                      Accessories & Other Assets
+                    </h3>
+                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+                      {(asset.accessories || []).length} Linked
+                    </span>
+                  </div>
+                  {(asset.accessories && asset.accessories.length > 0) ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                      {asset.accessories.map((acc, idx) => {
+                        const name = typeof acc === 'string' ? acc : acc.name;
+                        const sn = typeof acc === 'object' ? acc.serialNumber : '';
+                        const notes = typeof acc === 'object' ? acc.notes : '';
+                        return (
+                          <div key={idx} className="p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200/60 dark:border-slate-700/60 flex items-start gap-2.5">
+                            <div className="w-4 h-4 rounded-md bg-blue-600 text-white flex items-center justify-center shrink-0 mt-0.5">
+                              <Check className="w-3 h-3 stroke-[3]" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">{name}</p>
+                              {sn && <p className="text-[11px] font-mono text-blue-600 dark:text-blue-400 truncate">S/N: {sn}</p>}
+                              {notes && <p className="text-[11px] text-slate-500 dark:text-slate-400 italic truncate">{notes}</p>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-500 dark:text-slate-400">No accessories currently linked to this asset.</p>
+                  )}
+                </div>
+              )}
 
               <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6">
                 <h3 className="font-semibold text-slate-800 dark:text-white border-b border-slate-100 dark:border-slate-700 pb-3 mb-4">Lifecycle & Tracking</h3>

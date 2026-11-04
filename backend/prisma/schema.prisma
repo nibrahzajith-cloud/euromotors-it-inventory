@@ -144,6 +144,7 @@ model Asset {
   imageUploadedBy String?
   thumbnailUrl    String?
   remarks         String?
+  accessories     Json?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -167,6 +168,8 @@ model AssetAssignment {
   returnedDate DateTime?
   status       AssignmentStatus @default(ACTIVE)
   remarks      String?
+  accessories  Json?
+  returnAccessories Json?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

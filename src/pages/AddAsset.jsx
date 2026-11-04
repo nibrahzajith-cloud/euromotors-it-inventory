@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
 import CreatableSelect from '../components/CreatableSelect';
+import AccessoriesSection from '../components/AccessoriesSection';
 import {
   STANDARD_DEVICE_TYPES,
   STANDARD_BRANDS,
@@ -150,7 +151,8 @@ export default function AddAsset() {
     assignmentType: 'EMPLOYEE',
     remarks: '',
     macAddress: '',
-    ipAddress: ''
+    ipAddress: '',
+    accessories: []
   });
 
   useEffect(() => {
@@ -201,7 +203,8 @@ export default function AddAsset() {
               assignedEmployeeId: target.assignedEmployeeId || '',
               remarks: target.remarks || '',
               macAddress: target.macAddress || '',
-              ipAddress: target.ipAddress || ''
+              ipAddress: target.ipAddress || '',
+              accessories: Array.isArray(target.accessories) ? target.accessories : []
             });
 
             if (target.brand && !STANDARD_BRANDS.includes(target.brand)) {
@@ -552,6 +555,12 @@ export default function AddAsset() {
               </div>
             </div>
           </div>
+
+          {/* Accessories & Other Assets Section */}
+          <AccessoriesSection
+            accessories={formData.accessories}
+            onChange={(newAccessories) => handleChange('accessories', newAccessories)}
+          />
 
           {/* Allocation Bindings */}
           <div className="bg-slate-50/70 dark:bg-[#080d18] p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800/80">

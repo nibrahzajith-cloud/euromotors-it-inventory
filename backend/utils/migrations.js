@@ -34,7 +34,28 @@ async function applyMigrations() {
     console.warn('[MIGRATION] AssetDocument columns notice:', err.message);
   }
 
-  // 3. High-performance enterprise indexes
+  try {
+    // 3. Add accessories column to Asset
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE "Asset" 
+      ADD COLUMN IF NOT EXISTS "accessories" JSONB DEFAULT '[]'::jsonb;
+    `);
+  } catch (err) {
+    console.warn('[MIGRATION] Asset accessories column notice:', err.message);
+  }
+
+  try {
+    // 4. Add accessories and returnAccessories columns to AssetAssignment
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE "AssetAssignment" 
+      ADD COLUMN IF NOT EXISTS "accessories" JSONB DEFAULT '[]'::jsonb,
+      ADD COLUMN IF NOT EXISTS "returnAccessories" JSONB DEFAULT '[]'::jsonb;
+    `);
+  } catch (err) {
+    console.warn('[MIGRATION] AssetAssignment accessories columns notice:', err.message);
+  }
+
+  // 5. High-performance enterprise indexes
   const indexQueries = [
     'CREATE INDEX IF NOT EXISTS idx_asset_status ON "Asset"("status")',
     'CREATE INDEX IF NOT EXISTS idx_asset_device_type ON "Asset"("deviceType")',
