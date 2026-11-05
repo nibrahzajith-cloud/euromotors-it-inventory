@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { Lock, Mail, AlertCircle, Eye, EyeOff, Shield, ArrowRight, Loader2, CheckCircle2 } from 'lucide-react';
+import { Lock, Mail, AlertCircle, Eye, EyeOff, Shield, ArrowRight, Loader2, CheckCircle2, Clock } from 'lucide-react';
 
 export default function Login() {
+  const [searchParams] = useSearchParams();
+  const isExpired = searchParams.get('expired') === '1';
   const [email, setEmail] = useState(localStorage.getItem('rememberedEmail') || '');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(localStorage.getItem('rememberedEmail') ? true : false);
@@ -113,6 +115,17 @@ export default function Login() {
           </div>
 
           <form className="space-y-5" onSubmit={handleSubmit}>
+            {/* Session Expired Notice */}
+            {isExpired && !error && (
+              <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 text-amber-800 dark:text-amber-300">
+                <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider">Session Expired</p>
+                  <p className="text-xs mt-0.5 text-amber-700 dark:text-amber-300/90">Your previous login session has timed out. Please sign in again to continue.</p>
+                </div>
+              </div>
+            )}
+
             {/* Error Alert */}
             {error && (
               <div className="flex items-start gap-3 p-4 rounded-lg bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20">

@@ -124,27 +124,34 @@ export default function Employees({ defaultOpenAdd = false }) {
   const fetchData = async () => {
     try {
       const token = localStorage.getItem('token');
-      if (!token) throw new Error("Authentication required");
+      if (!token) {
+        window.dispatchEvent(new CustomEvent('auth:expired'));
+        return;
+      }
       
       const headers = { 'Authorization': `Bearer ${token}` };
 
       const [empsRes, deptsRes, locsRes, assetsRes] = await Promise.all([
         fetch(`${API_URL}/employees`, { headers }),
-        fetch(`${API_URL}/departments`, { headers }),
-        fetch(`${API_URL}/locations`, { headers }),
-        fetch(`${API_URL}/assets`, { headers })
+        fetch(`${API_URL}/departments`, { headers }).catch(() => ({ ok: false })),
+        fetch(`${API_URL}/locations`, { headers }).catch(() => ({ ok: false })),
+        fetch(`${API_URL}/assets`, { headers }).catch(() => ({ ok: false }))
       ]);
 
-      if (!empsRes.ok || !deptsRes.ok || !locsRes.ok || !assetsRes.ok) {
+      // Check if session has expired
+      if ([empsRes, deptsRes, locsRes, assetsRes].some(r => r && (r.status === 401 || r.status === 403))) {
+        window.dispatchEvent(new CustomEvent('auth:expired'));
+        return;
+      }
+
+      if (!empsRes.ok) {
         throw new Error('Failed to load employee directory components');
       }
 
-      const [empsData, deptsData, locsData, assetsData] = await Promise.all([
-        empsRes.json(),
-        deptsRes.json(),
-        locsRes.json(),
-        assetsRes.json()
-      ]);
+      const empsData = await empsRes.json();
+      const deptsData = deptsRes && deptsRes.ok ? await deptsRes.json().catch(() => departments) : departments;
+      const locsData = locsRes && locsRes.ok ? await locsRes.json().catch(() => locations) : locations;
+      const assetsData = assetsRes && assetsRes.ok ? await assetsRes.json().catch(() => assets) : assets;
 
       setEmployees(empsData);
       setDepartments(deptsData);
@@ -474,13 +481,28 @@ export default function Employees({ defaultOpenAdd = false }) {
 
   if (error) {
     return (
-      <div className="flex flex-col h-[50vh] items-center justify-center p-8 bg-red-50 border border-red-100 rounded-3xl">
-        <AlertCircle className="h-14 w-14 text-red-500 mb-4" />
-        <h2 className="text-xl font-bold text-red-600">Error Loading Data</h2>
-        <p className="text-red-500 text-center mt-2 max-w-md">{error}</p>
-        <button onClick={fetchData} className="mt-6 px-6 py-2 bg-red-600 text-white rounded-xl shadow-sm hover:bg-red-700 transition">
-          Retry Connection
-        </button>
+      <div className="flex flex-col h-[50vh] items-center justify-center p-8 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-3xl text-center">
+        <AlertCircle className="h-14 w-14 text-red-500 dark:text-red-400 mb-4" />
+        <h2 className="text-xl font-bold text-red-600 dark:text-red-400">Error Loading Data</h2>
+        <p className="text-red-600/90 dark:text-red-300 text-center mt-2 max-w-md text-sm">{error}</p>
+        <div className="flex items-center gap-3 mt-6">
+          <button 
+            onClick={fetchData} 
+            className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl shadow-sm text-sm font-semibold transition cursor-pointer"
+          >
+            Retry Connection
+          </button>
+          <button 
+            onClick={() => {
+              localStorage.removeItem('token');
+              localStorage.removeItem('authUser');
+              window.location.href = '/login';
+            }} 
+            className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-sm font-semibold transition cursor-pointer"
+          >
+            Sign In Again
+          </button>
+        </div>
       </div>
     );
   }

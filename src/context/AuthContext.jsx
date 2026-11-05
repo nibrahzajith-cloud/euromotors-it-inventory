@@ -26,6 +26,21 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(cachedUser);
   const [loading, setLoading] = useState(() => !cachedUser && !!token);
 
+  const handleSessionExpired = () => {
+    setUser(null);
+    localStorage.removeItem('token');
+    localStorage.removeItem(STORAGE_USER_KEY);
+    if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+      window.location.href = '/login?expired=1';
+    }
+  };
+
+  useEffect(() => {
+    const onAuthExpired = () => handleSessionExpired();
+    window.addEventListener('auth:expired', onAuthExpired);
+    return () => window.removeEventListener('auth:expired', onAuthExpired);
+  }, []);
+
   useEffect(() => {
     const currentToken = localStorage.getItem('token');
 
@@ -42,23 +57,25 @@ export function AuthProvider({ children }) {
       headers: { 'Authorization': `Bearer ${currentToken}` }
     })
       .then(res => {
-        if (!res.ok) throw new Error('Token expired or invalid');
+        if (res.status === 401 || res.status === 403) {
+          handleSessionExpired();
+          return null;
+        }
+        if (!res.ok) throw new Error('Token verification failed');
         return res.json();
       })
       .then(data => {
+        if (!data) return;
         if (data && data.id) {
           const freshUser = { ...data, full_name: data.fullName, name: data.fullName };
           setUser(freshUser);
           saveUserToStorage(freshUser);
         } else {
-          // Token invalid — clear session
-          setUser(null);
-          localStorage.removeItem('token');
-          localStorage.removeItem(STORAGE_USER_KEY);
+          handleSessionExpired();
         }
       })
       .catch(() => {
-        // Network failure / offline: retain optimistic user session
+        // Network failure / server waking up: retain optimistic cached user session
       })
       .finally(() => setLoading(false));
   }, []);

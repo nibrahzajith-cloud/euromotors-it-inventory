@@ -166,15 +166,24 @@ export default function AssetAssignment() {
   const fetchData = async () => {
     try {
       const token = localStorage.getItem('token');
-      if (!token) throw new Error("Authentication required");
+      if (!token) {
+        window.dispatchEvent(new CustomEvent('auth:expired'));
+        return;
+      }
       const headers = { 'Authorization': `Bearer ${token}` };
       const [astRes, empRes, asgRes, deptRes, locRes] = await Promise.all([
         fetch(`${API_URL}/assets`, { headers }),
         fetch(`${API_URL}/employees`, { headers }),
         fetch(`${API_URL}/assignments`, { headers }),
-        fetch(`${API_URL}/departments`, { headers }),
-        fetch(`${API_URL}/locations`, { headers })
+        fetch(`${API_URL}/departments`, { headers }).catch(() => ({ ok: false })),
+        fetch(`${API_URL}/locations`, { headers }).catch(() => ({ ok: false }))
       ]);
+
+      if ([astRes, empRes, asgRes, deptRes, locRes].some(r => r && (r.status === 401 || r.status === 403))) {
+        window.dispatchEvent(new CustomEvent('auth:expired'));
+        return;
+      }
+
       if (!astRes.ok || !empRes.ok || !asgRes.ok) throw new Error('Failed to synchronize deployment endpoints');
       
       const [astData, empData, asgData, deptData, locData] = await Promise.all([
