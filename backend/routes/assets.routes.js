@@ -536,8 +536,8 @@ router.post('/bulk', requirePermission('BULK_IMPORT_ASSETS'), async (req, res) =
                          email: a.email || null,
                          phone: a.phone || null,
                          designation: a.designation || null,
-                         departmentId,
-                         locationId,
+                         ...(departmentId ? { department: { connect: { id: departmentId } } } : {}),
+                         ...(locationId ? { location: { connect: { id: locationId } } } : {}),
                          status: a.employeeStatus ? a.employeeStatus.toUpperCase() : 'ACTIVE'
                      }
                  });

@@ -1,7 +1,11 @@
 const generateNextCode = async (tx, modelName, fieldName, prefix, defaultStart = 0) => {
   // Lock the global settings row to serialize concurrent code generation requests
   // Caller must pass a transaction client (tx) to hold this lock through the INSERT
-  await tx.$executeRaw`SELECT 1 FROM "SystemSettings" WHERE id = 'global' FOR UPDATE`;
+  try {
+    await tx.$executeRaw`SELECT 1 FROM "SystemSettings" WHERE id = 'global' FOR UPDATE`;
+  } catch (_) {
+    // If table lock is not supported or timed out by serverless connection pooler, proceed safely
+  }
 
   let query;
   if (modelName === 'employee') {

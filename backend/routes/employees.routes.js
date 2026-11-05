@@ -58,6 +58,19 @@ router.post('/', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
     const locId = rawPayload.locationId && String(rawPayload.locationId).trim() !== '' ? String(rawPayload.locationId).trim() : null;
     const avatarUrl = rawPayload.avatarUrl && String(rawPayload.avatarUrl).trim() !== '' ? String(rawPayload.avatarUrl).trim() : null;
 
+    // Verify deptId and locId exist to ensure clean relation linking
+    let validDeptConnect = null;
+    if (deptId) {
+      const dept = await prisma.department.findUnique({ where: { id: deptId }, select: { id: true } });
+      if (dept) validDeptConnect = { connect: { id: dept.id } };
+    }
+
+    let validLocConnect = null;
+    if (locId) {
+      const loc = await prisma.location.findUnique({ where: { id: locId }, select: { id: true } });
+      if (loc) validLocConnect = { connect: { id: loc.id } };
+    }
+
     // Build canonical relation-connected data object
     const dataToCreate = {
       fullName: rawPayload.fullName ? String(rawPayload.fullName).trim() : '',
@@ -66,8 +79,8 @@ router.post('/', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
       phone: rawPayload.phone && String(rawPayload.phone).trim() !== '' ? String(rawPayload.phone).trim() : null,
       status: rawPayload.status || 'ACTIVE',
       ...(avatarUrl ? { avatarUrl } : {}),
-      ...(deptId ? { department: { connect: { id: deptId } } } : {}),
-      ...(locId ? { location: { connect: { id: locId } } } : {})
+      ...(validDeptConnect ? { department: validDeptConnect } : {}),
+      ...(validLocConnect ? { location: validLocConnect } : {})
     };
 
     let record;
@@ -91,8 +104,7 @@ router.post('/', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
         });
       }, {
         maxWait: 5000,
-        timeout: 10000,
-        isolationLevel: 'ReadCommitted'
+        timeout: 10000
       });
     } catch (createErr) {
       console.warn('Prisma create standard invocation failed, attempting resilient fallback:', createErr.message);
@@ -104,41 +116,9 @@ router.post('/', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
       try {
         record = await prisma.employee.create({
           data: {
-            employeeCode,
-            fullName: dataToCreate.fullName,
-            email: dataToCreate.email,
-            designation: dataToCreate.designation,
-            phone: dataToCreate.phone,
-            status: dataToCreate.status,
-            departmentId: deptId,
-            locationId: locId,
-            ...(avatarUrl ? { avatarUrl } : {})
+            ...dataToCreate,
+            employeeCode
           },
-          include: {
-            department: true,
-            location: true
-          }
-        });
-      } catch (fallbackErr) {
-        // Ultimate fallback: direct PostgreSQL insert via Prisma raw SQL
-        const empId = crypto.randomUUID();
-        await prisma.$executeRawUnsafe(
-          `INSERT INTO "Employee" ("id", "employeeCode", "fullName", "email", "designation", "phone", "departmentId", "locationId", "status", "avatarUrl", "createdAt", "updatedAt")
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::"GeneralStatus", $10, NOW(), NOW())`,
-          empId,
-          employeeCode,
-          dataToCreate.fullName,
-          dataToCreate.email,
-          dataToCreate.designation,
-          dataToCreate.phone,
-          deptId,
-          locId,
-          dataToCreate.status,
-          avatarUrl
-        );
-
-        record = await prisma.employee.findUnique({
-          where: { id: empId },
           include: {
             department: true,
             location: true,
@@ -146,6 +126,9 @@ router.post('/', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
             assignments: { where: { status: 'ACTIVE' } }
           }
         });
+      } catch (fallbackErr) {
+        console.error('All standard Prisma create attempts failed:', fallbackErr);
+        throw fallbackErr;
       }
     }
 
@@ -163,7 +146,14 @@ router.post('/', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
 
     res.status(201).json(record);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Error creating employee:', err);
+    let userMsg = err.message || 'Failed to create employee';
+    if (userMsg.includes('Unique constraint failed') && userMsg.includes('employeeCode')) {
+      userMsg = 'Employee code collision detected. Please try saving again.';
+    } else if (userMsg.includes('Unique constraint failed') && userMsg.includes('email')) {
+      userMsg = 'An employee with this email address already exists in the system.';
+    }
+    res.status(500).json({ error: userMsg });
   }
 });
 
@@ -217,13 +207,11 @@ router.put('/:id', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
       console.warn('Prisma employee update relation syntax threw, using resilient fallback:', prismaErr.message);
 
       try {
-        // Fallback 1: try scalar IDs
+        // Fallback 1: try fields with safe relation linking
         record = await prisma.employee.update({ 
           where: { id: req.params.id }, 
           data: {
             ...dataToUpdate,
-            ...(hasDept ? { departmentId: deptId } : {}),
-            ...(hasLoc ? { locationId: locId } : {}),
             ...(hasAvatar ? { avatarUrl: cleanAvatar } : {})
           },
           include: {
@@ -233,6 +221,20 @@ router.put('/:id', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
             assignments: { where: { status: 'ACTIVE' } }
           }
         });
+        if (hasDept) {
+          if (deptId) {
+            record = await prisma.employee.update({ where: { id: req.params.id }, data: { department: { connect: { id: deptId } } } });
+          } else {
+            record = await prisma.employee.update({ where: { id: req.params.id }, data: { department: { disconnect: true } } });
+          }
+        }
+        if (hasLoc) {
+          if (locId) {
+            record = await prisma.employee.update({ where: { id: req.params.id }, data: { location: { connect: { id: locId } } } });
+          } else {
+            record = await prisma.employee.update({ where: { id: req.params.id }, data: { location: { disconnect: true } } });
+          }
+        }
       } catch (scalarErr) {
         // Fallback 2: Direct raw SQL update
         await prisma.$executeRawUnsafe(
