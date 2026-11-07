@@ -299,6 +299,11 @@ export default function AddAsset() {
         if (payload[k] === '') payload[k] = null;
       });
       
+      // Never submit placeholder text as asset code
+      if (!id || !payload.assetCode || (typeof payload.assetCode === 'string' && payload.assetCode.toLowerCase().includes('auto-generated'))) {
+        payload.assetCode = null;
+      }
+
       // Enforce date mapping structure for Prisma
       if (payload.warrantyExpiryDate) {
         payload.warrantyExpiryDate = new Date(payload.warrantyExpiryDate).toISOString();
@@ -329,13 +334,7 @@ export default function AddAsset() {
         navigate(`/assets/code/${data.assetCode || formData.assetCode}`);
       }
     } catch (err) {
-      if (err.message.includes('assetCode')) {
-        setSubmitError('The Asset Code provided already exists in the system. Use a unique identifier.');
-      } else if (err.message.includes('serialNumber')) {
-        setSubmitError('The Serial Number provided overlaps with an existing secure asset. Hardware serial maps must be unique.');
-      } else {
-        setSubmitError(err.message);
-      }
+      setSubmitError(err.message || 'Failed to save asset. Please review the form and try again.');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };

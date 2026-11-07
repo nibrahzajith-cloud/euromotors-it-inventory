@@ -127,8 +127,11 @@ router.get('/:id', async (req, res) => {
 
 router.post('/', requirePermission('CREATE_ASSETS'), async (req, res) => {
   try {
-    const payload = req.body;
-    if (payload.serialNumber) payload.serialNumber = payload.serialNumber.trim();
+    const payload = { ...req.body };
+    if (payload.serialNumber && typeof payload.serialNumber === 'string') {
+      payload.serialNumber = payload.serialNumber.trim();
+      if (payload.serialNumber === '') payload.serialNumber = null;
+    }
 
     if (!payload.deviceType) return res.status(400).json({ error: 'Device Type is mandatory.' });
     const REQUIRES_MODEL = ['Laptop', 'Desktop', 'Tablet', 'Phone', 'Server', 'Router', 'Switch', 'Printer', 'Photocopier'];
@@ -183,38 +186,185 @@ router.post('/', requirePermission('CREATE_ASSETS'), async (req, res) => {
     
     // Auto-set status if assigned
     if (payload.assignedEmployeeId || (aType !== 'STORE' && (payload.departmentId || payload.locationId))) {
-        if (!payload.status || payload.status === 'AVAILABLE') {
-            payload.status = 'ASSIGNED';
-        }
+      if (!payload.status || payload.status === 'AVAILABLE') {
+        payload.status = 'ASSIGNED';
+      }
     }
-    
-    const record = await prisma.$transaction(async (tx) => {
-      if (payload.assetCode) {
-        payload.assetCode = payload.assetCode.trim();
-      } else {
-        payload.assetCode = await generateAssetCode(tx);
-      }
-      
-      const newRecord = await tx.asset.create({ data: payload });
 
-      // Create assignment history if assigned to employee during creation
-      if (payload.assignedEmployeeId) {
-          await tx.assetAssignment.create({
-              data: {
-                  assetId: newRecord.id,
-                  employeeId: payload.assignedEmployeeId,
-                  status: 'ACTIVE',
-                  remarks: 'Assigned during asset creation',
-                  accessories: payload.accessories || []
-              }
-          });
+    // Sanitize relational IDs
+    payload.departmentId = (payload.departmentId && String(payload.departmentId).trim() !== '') ? String(payload.departmentId).trim() : null;
+    payload.locationId = (payload.locationId && String(payload.locationId).trim() !== '') ? String(payload.locationId).trim() : null;
+    payload.assignedEmployeeId = (payload.assignedEmployeeId && String(payload.assignedEmployeeId).trim() !== '') ? String(payload.assignedEmployeeId).trim() : null;
+
+    // Enforce required field defaults
+    payload.warrantyStatus = (payload.warrantyStatus && typeof payload.warrantyStatus === 'string' && payload.warrantyStatus.trim())
+      ? payload.warrantyStatus.trim()
+      : 'Active';
+    payload.condition = (payload.condition && typeof payload.condition === 'string' && payload.condition.trim())
+      ? payload.condition.trim()
+      : 'New';
+    payload.status = payload.status || 'AVAILABLE';
+
+    // Pre-check Serial Number uniqueness
+    if (payload.serialNumber) {
+      const existingSerial = await prisma.asset.findUnique({
+        where: { serialNumber: payload.serialNumber },
+        select: { id: true, assetCode: true }
+      });
+      if (existingSerial) {
+        return res.status(409).json({
+          error: `The Serial Number "${payload.serialNumber}" already exists in the system (assigned to ${existingSerial.assetCode}). Use a unique serial number.`,
+          field: 'serialNumber'
+        });
       }
-      return newRecord;
-    }, {
-      maxWait: 5000,
-      timeout: 10000,
-      isolationLevel: 'ReadCommitted'
-    });
+    }
+
+    // Inspect Asset Code: differentiate user-specified code vs auto-generation
+    const rawAssetCode = payload.assetCode;
+    const isAutoGenerate = 
+      !rawAssetCode || 
+      typeof rawAssetCode !== 'string' || 
+      rawAssetCode.trim() === '' || 
+      /^auto-generated/i.test(rawAssetCode.trim()) ||
+      rawAssetCode.trim().toLowerCase() === 'n/a' ||
+      rawAssetCode.trim().toLowerCase() === 'null';
+
+    let explicitUserCode = null;
+    if (!isAutoGenerate) {
+      explicitUserCode = rawAssetCode.trim();
+      const existingCode = await prisma.asset.findUnique({
+        where: { assetCode: explicitUserCode },
+        select: { id: true }
+      });
+      if (existingCode) {
+        return res.status(409).json({
+          error: `The Asset Code "${explicitUserCode}" already exists in the system. Use a unique identifier.`,
+          field: 'assetCode'
+        });
+      }
+    }
+
+    // Collision-Safe Asset Creation Loop
+    let record = null;
+    const MAX_RETRIES = 10;
+    let attempt = 0;
+    let lastError = null;
+
+    while (attempt < MAX_RETRIES) {
+      attempt++;
+      try {
+        record = await prisma.$transaction(async (tx) => {
+          let codeToAssign = explicitUserCode;
+
+          if (isAutoGenerate || !codeToAssign) {
+            codeToAssign = await generateAssetCode(tx);
+
+            // Verify uniqueness in current transaction
+            let exists = await tx.asset.findUnique({
+              where: { assetCode: codeToAssign },
+              select: { id: true }
+            });
+
+            // If collision found, increment sequence safely
+            let counter = 0;
+            while (exists && counter < 100) {
+              counter++;
+              const match = codeToAssign.match(/^([A-Za-z0-9_-]+?)-(\d+)$/);
+              if (match) {
+                const pfx = match[1];
+                const nextNum = parseInt(match[2], 10) + 1;
+                const padLen = match[2].length;
+                codeToAssign = `${pfx}-${nextNum.toString().padStart(padLen, '0')}`;
+              } else {
+                codeToAssign = `${codeToAssign}-${counter}`;
+              }
+              exists = await tx.asset.findUnique({
+                where: { assetCode: codeToAssign },
+                select: { id: true }
+              });
+            }
+          }
+
+          const assetData = {
+            ...payload,
+            assetCode: codeToAssign
+          };
+
+          const newRecord = await tx.asset.create({ data: assetData });
+
+          // Create assignment history if assigned to employee during creation
+          if (payload.assignedEmployeeId) {
+            await tx.assetAssignment.create({
+              data: {
+                assetId: newRecord.id,
+                employeeId: payload.assignedEmployeeId,
+                status: 'ACTIVE',
+                remarks: 'Assigned during asset creation',
+                accessories: payload.accessories || []
+              }
+            });
+          }
+
+          return newRecord;
+        }, {
+          maxWait: 5000,
+          timeout: 10000
+        });
+
+        // Succeeded! Break loop
+        break;
+      } catch (err) {
+        lastError = err;
+        const msg = err.message || '';
+        const target = err.meta?.target;
+
+        const isSerialCollision = 
+          (Array.isArray(target) && target.includes('serialNumber')) ||
+          (typeof target === 'string' && target.includes('serialNumber')) ||
+          msg.includes('serialNumber') || 
+          msg.includes('Asset_serialNumber_key');
+
+        if (isSerialCollision) {
+          return res.status(409).json({
+            error: `The Serial Number "${payload.serialNumber}" already exists in the system. Hardware serial numbers must be unique.`,
+            field: 'serialNumber'
+          });
+        }
+
+        const isAssetCodeCollision = 
+          (Array.isArray(target) && target.includes('assetCode')) ||
+          (typeof target === 'string' && target.includes('assetCode')) ||
+          msg.includes('assetCode') || 
+          msg.includes('Asset_assetCode_key');
+
+        if (isAssetCodeCollision) {
+          if (explicitUserCode) {
+            return res.status(409).json({
+              error: `The Asset Code "${explicitUserCode}" already exists in the system. Use a unique identifier.`,
+              field: 'assetCode'
+            });
+          }
+          // Concurrent collision on auto-generated code — jitter and retry
+          console.warn(`[Asset Creation] Race condition: Asset code collision on attempt ${attempt}. Retrying with next sequence code...`);
+          await new Promise(r => setTimeout(r, 40 * attempt + Math.floor(Math.random() * 40)));
+          continue;
+        }
+
+        // For non-collision errors, break immediately
+        break;
+      }
+    }
+
+    if (!record) {
+      console.error('Asset creation failed after retries:', lastError);
+      let clientMsg = 'Failed to create asset.';
+      if (lastError?.message?.includes('Foreign key constraint failed')) {
+        clientMsg = 'Invalid location, department, or employee reference selected.';
+      } else if (lastError?.message) {
+        clientMsg = lastError.message;
+      }
+      return res.status(500).json({ error: clientMsg });
+    }
 
     // Log Audit
     await logAudit({
@@ -242,7 +392,8 @@ router.post('/', requirePermission('CREATE_ASSETS'), async (req, res) => {
 
     res.status(201).json(record);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Asset creation route exception:', err);
+    res.status(500).json({ error: err.message || 'Server error creating asset.' });
   }
 });
 

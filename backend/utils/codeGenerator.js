@@ -16,7 +16,7 @@ const generateNextCode = async (tx, modelName, fieldName, prefix, defaultStart =
   
   const records = await query;
   let max = defaultStart;
-  const regex = new RegExp(`^${prefix}-(\\d{9})$`);
+  const regex = new RegExp(`^${prefix}-(\\d+)$`);
   
   for (const record of records) {
     if (record.code) {
