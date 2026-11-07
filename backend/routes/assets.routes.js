@@ -13,6 +13,60 @@ const IPV4_REGEX = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]
 const VALID_CONDITIONS = ['NEW', 'GOOD', 'FAIR', 'POOR', 'DAMAGED'];
 const VALID_WARRANTY_STATUSES = ['ACTIVE', 'EXPIRED', 'NONE', 'EXTENDED'];
 
+/**
+ * Format asset payload to use canonical Prisma relation syntax (connect / disconnect)
+ * and strip raw foreign key scalar IDs (locationId, departmentId, assignedEmployeeId)
+ * to avoid Prisma "Unknown argument locationId / departmentId / assignedEmployeeId" errors.
+ */
+function formatAssetPrismaData(rawPayload, isUpdate = false) {
+  const data = { ...rawPayload };
+
+  // Remove relation objects if passed from form/queries
+  delete data.location;
+  delete data.department;
+  delete data.assignedEmployee;
+  delete data.assignments;
+  delete data.maintenanceLogs;
+  delete data.documents;
+  delete data.supportTickets;
+
+  // Extract relational foreign keys
+  const locationId = data.locationId !== undefined ? (data.locationId && String(data.locationId).trim() !== '' ? String(data.locationId).trim() : null) : undefined;
+  const departmentId = data.departmentId !== undefined ? (data.departmentId && String(data.departmentId).trim() !== '' ? String(data.departmentId).trim() : null) : undefined;
+  const assignedEmployeeId = data.assignedEmployeeId !== undefined ? (data.assignedEmployeeId && String(data.assignedEmployeeId).trim() !== '' ? String(data.assignedEmployeeId).trim() : null) : undefined;
+
+  // Delete scalar IDs so Prisma does not reject with "Unknown argument locationId / departmentId / assignedEmployeeId"
+  delete data.locationId;
+  delete data.departmentId;
+  delete data.assignedEmployeeId;
+
+  if (locationId !== undefined) {
+    if (locationId) {
+      data.location = { connect: { id: locationId } };
+    } else if (isUpdate) {
+      data.location = { disconnect: true };
+    }
+  }
+
+  if (departmentId !== undefined) {
+    if (departmentId) {
+      data.department = { connect: { id: departmentId } };
+    } else if (isUpdate) {
+      data.department = { disconnect: true };
+    }
+  }
+
+  if (assignedEmployeeId !== undefined) {
+    if (assignedEmployeeId) {
+      data.assignedEmployee = { connect: { id: assignedEmployeeId } };
+    } else if (isUpdate) {
+      data.assignedEmployee = { disconnect: true };
+    }
+  }
+
+  return data;
+}
+
 router.get('/template/download', (req, res) => {
   try {
     const templatePath = path.join(__dirname, '../../templates/Bulk Upload Templates.xlsx');
@@ -196,6 +250,26 @@ router.post('/', requirePermission('CREATE_ASSETS'), async (req, res) => {
     payload.locationId = (payload.locationId && String(payload.locationId).trim() !== '') ? String(payload.locationId).trim() : null;
     payload.assignedEmployeeId = (payload.assignedEmployeeId && String(payload.assignedEmployeeId).trim() !== '') ? String(payload.assignedEmployeeId).trim() : null;
 
+    // Verify referenced relational entities exist to avoid cryptic foreign key errors
+    if (payload.locationId) {
+      const loc = await prisma.location.findUnique({ where: { id: payload.locationId }, select: { id: true } });
+      if (!loc) {
+        return res.status(400).json({ error: 'The selected Location was not found in the database.', field: 'locationId' });
+      }
+    }
+    if (payload.departmentId) {
+      const dept = await prisma.department.findUnique({ where: { id: payload.departmentId }, select: { id: true } });
+      if (!dept) {
+        return res.status(400).json({ error: 'The selected Department was not found in the database.', field: 'departmentId' });
+      }
+    }
+    if (payload.assignedEmployeeId) {
+      const emp = await prisma.employee.findUnique({ where: { id: payload.assignedEmployeeId }, select: { id: true } });
+      if (!emp) {
+        return res.status(400).json({ error: 'The selected Employee was not found in the database.', field: 'assignedEmployeeId' });
+      }
+    }
+
     // Enforce required field defaults
     payload.warrantyStatus = (payload.warrantyStatus && typeof payload.warrantyStatus === 'string' && payload.warrantyStatus.trim())
       ? payload.warrantyStatus.trim()
@@ -285,24 +359,61 @@ router.post('/', requirePermission('CREATE_ASSETS'), async (req, res) => {
             }
           }
 
-          const assetData = {
+          const rawWithCode = {
             ...payload,
             assetCode: codeToAssign
           };
+          const formattedAssetData = formatAssetPrismaData(rawWithCode, false);
 
-          const newRecord = await tx.asset.create({ data: assetData });
+          let newRecord;
+          try {
+            newRecord = await tx.asset.create({ 
+              data: formattedAssetData,
+              include: {
+                location: true,
+                department: true,
+                assignedEmployee: true
+              }
+            });
+          } catch (createErr) {
+            // Resilient fallback: if runtime expects scalar IDs instead of relation connects
+            if (createErr.message?.includes('Unknown argument') || createErr.message?.includes('location') || createErr.message?.includes('department') || createErr.message?.includes('assignedEmployee')) {
+              newRecord = await tx.asset.create({
+                data: rawWithCode,
+                include: {
+                  location: true,
+                  department: true,
+                  assignedEmployee: true
+                }
+              });
+            } else {
+              throw createErr;
+            }
+          }
 
           // Create assignment history if assigned to employee during creation
           if (payload.assignedEmployeeId) {
-            await tx.assetAssignment.create({
-              data: {
-                assetId: newRecord.id,
-                employeeId: payload.assignedEmployeeId,
-                status: 'ACTIVE',
-                remarks: 'Assigned during asset creation',
-                accessories: payload.accessories || []
-              }
-            });
+            try {
+              await tx.assetAssignment.create({
+                data: {
+                  asset: { connect: { id: newRecord.id } },
+                  employee: { connect: { id: payload.assignedEmployeeId } },
+                  status: 'ACTIVE',
+                  remarks: 'Assigned during asset creation',
+                  accessories: payload.accessories || []
+                }
+              });
+            } catch (assignErr) {
+              await tx.assetAssignment.create({
+                data: {
+                  assetId: newRecord.id,
+                  employeeId: payload.assignedEmployeeId,
+                  status: 'ACTIVE',
+                  remarks: 'Assigned during asset creation',
+                  accessories: payload.accessories || []
+                }
+              });
+            }
           }
 
           return newRecord;
@@ -317,6 +428,12 @@ router.post('/', requirePermission('CREATE_ASSETS'), async (req, res) => {
         lastError = err;
         const msg = err.message || '';
         const target = err.meta?.target;
+
+        if (err.code === 'P2025' || msg.includes('records that were required but not found') || msg.includes('nested connect')) {
+          return res.status(400).json({
+            error: 'Selected Location, Department, or Employee was not found in the system. Please verify selections and try again.'
+          });
+        }
 
         const isSerialCollision = 
           (Array.isArray(target) && target.includes('serialNumber')) ||
@@ -358,7 +475,9 @@ router.post('/', requirePermission('CREATE_ASSETS'), async (req, res) => {
     if (!record) {
       console.error('Asset creation failed after retries:', lastError);
       let clientMsg = 'Failed to create asset.';
-      if (lastError?.message?.includes('Foreign key constraint failed')) {
+      if (lastError?.code === 'P2025' || lastError?.message?.includes('records that were required but not found')) {
+        clientMsg = 'Selected Location, Department, or Employee was not found in the system.';
+      } else if (lastError?.message?.includes('Foreign key constraint failed')) {
         clientMsg = 'Invalid location, department, or employee reference selected.';
       } else if (lastError?.message) {
         clientMsg = lastError.message;
@@ -817,12 +936,22 @@ router.post('/bulk', requirePermission('BULK_IMPORT_ASSETS'), async (req, res) =
              assignmentType: aType === 'IN STORE' ? 'STORE' : aType
           };
 
+          const formattedBulkData = formatAssetPrismaData(assetPayload, !!existingAsset);
+
           if (existingAsset) {
               // UPDATE EXISTING ASSET
-              const updated = await prisma.asset.update({
-                  where: { id: existingAsset.id },
-                  data: assetPayload
-              });
+              let updated;
+              try {
+                updated = await prisma.asset.update({
+                    where: { id: existingAsset.id },
+                    data: formattedBulkData
+                });
+              } catch (upErr) {
+                updated = await prisma.asset.update({
+                    where: { id: existingAsset.id },
+                    data: assetPayload
+                });
+              }
               
               results.updated++;
               results.updatedAssets++;
@@ -839,7 +968,12 @@ router.post('/bulk', requirePermission('BULK_IMPORT_ASSETS'), async (req, res) =
               });
           } else {
               // INSERT NEW ASSET
-              const newAsset = await prisma.asset.create({ data: assetPayload });
+              let newAsset;
+              try {
+                newAsset = await prisma.asset.create({ data: formattedBulkData });
+              } catch (crErr) {
+                newAsset = await prisma.asset.create({ data: assetPayload });
+              }
               results.imported++;
               results.createdAssets++;
 
@@ -958,7 +1092,33 @@ router.put('/:id', requirePermission('EDIT_ASSETS'), async (req, res) => {
       payload.assignedEmployeeId = null;
     }
     
-    const record = await prisma.asset.update({ where: { id: req.params.id }, data: payload });
+    const updateData = formatAssetPrismaData(payload, true);
+    let record;
+    try {
+      record = await prisma.asset.update({ 
+        where: { id: req.params.id }, 
+        data: updateData,
+        include: {
+          location: true,
+          department: true,
+          assignedEmployee: true
+        }
+      });
+    } catch (updateErr) {
+      if (updateErr.message?.includes('Unknown argument') || updateErr.message?.includes('location') || updateErr.message?.includes('department') || updateErr.message?.includes('assignedEmployee')) {
+        record = await prisma.asset.update({
+          where: { id: req.params.id },
+          data: payload,
+          include: {
+            location: true,
+            department: true,
+            assignedEmployee: true
+          }
+        });
+      } else {
+        throw updateErr;
+      }
+    }
 
     // If status was changed to AVAILABLE or STORE, close active assignments
     if ((record.status === 'AVAILABLE' || record.assignmentType === 'STORE') && oldRecord.status !== 'AVAILABLE') {
