@@ -3,11 +3,16 @@ const router = express.Router();
 const prisma = require('../prismaClient');
 const { authenticate, authorize, requirePermission } = require('../middleware/auth.middleware');
 const { logAudit, logAssetTimeline } = require('../utils/logger');
+const memoryCache = require('../utils/cache');
 
 router.use(authenticate);
 
 router.get('/', async (req, res) => {
   try {
+    if (req.query.refresh !== 'true') {
+      const cached = memoryCache.get('assignments:all');
+      if (cached) return res.json(cached);
+    }
     const records = await prisma.assetAssignment.findMany({ 
       include: { 
         asset: {
@@ -19,6 +24,7 @@ router.get('/', async (req, res) => {
       },
       orderBy: { assignedDate: 'desc' }
     });
+    memoryCache.set('assignments:all', records, 20);
     res.json(records);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -131,6 +137,9 @@ router.post('/', requirePermission('ASSIGN_ASSETS'), async (req, res) => {
       performedByName: req.user.fullName
     });
 
+    memoryCache.delPrefix('assignments');
+    memoryCache.delPrefix('assets');
+    memoryCache.delPrefix('dashboard');
     res.status(201).json(record || { message: 'Asset assigned successfully.' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -236,6 +245,9 @@ router.put('/:id', requirePermission('ASSIGN_ASSETS'), async (req, res) => {
        });
     }
 
+    memoryCache.delPrefix('assignments');
+    memoryCache.delPrefix('assets');
+    memoryCache.delPrefix('dashboard');
     res.json(record);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -278,6 +290,9 @@ router.delete('/:id', requirePermission('ASSIGN_ASSETS'), async (req, res) => {
       description: `Assignment record deleted for asset ${record.asset?.assetCode || 'Unknown'}`
     });
 
+    memoryCache.delPrefix('assignments');
+    memoryCache.delPrefix('assets');
+    memoryCache.delPrefix('dashboard');
     res.json({ message: 'Deleted historical assignment record.' });
   } catch (err) {
     res.status(500).json({ error: err.message });

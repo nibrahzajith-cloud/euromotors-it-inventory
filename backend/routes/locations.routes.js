@@ -3,11 +3,16 @@ const router = express.Router();
 const prisma = require('../prismaClient');
 const { authenticate, requirePermission } = require('../middleware/auth.middleware');
 const { logAudit } = require('../utils/logger');
+const memoryCache = require('../utils/cache');
 
 router.use(authenticate);
 
 router.get('/', async (req, res) => {
   try {
+    if (req.query.refresh !== 'true') {
+      const cached = memoryCache.get('locations:all');
+      if (cached) return res.json(cached);
+    }
     const records = await prisma.location.findMany({
       include: {
         _count: {
@@ -37,6 +42,7 @@ router.get('/', async (req, res) => {
         }
       }
     });
+    memoryCache.set('locations:all', records, 60);
     res.json(records);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -46,6 +52,8 @@ router.get('/', async (req, res) => {
 router.post('/', requirePermission('MANAGE_LOCATIONS'), async (req, res) => {
   try {
     const record = await prisma.location.create({ data: req.body });
+    memoryCache.delPrefix('locations');
+    memoryCache.delPrefix('dashboard');
     await logAudit({
       req,
       action: 'CREATE',
@@ -65,6 +73,8 @@ router.put('/:id', requirePermission('MANAGE_LOCATIONS'), async (req, res) => {
   try {
     const oldRecord = await prisma.location.findUnique({ where: { id: req.params.id } });
     const record = await prisma.location.update({ where: { id: req.params.id }, data: req.body });
+    memoryCache.delPrefix('locations');
+    memoryCache.delPrefix('dashboard');
     await logAudit({
       req,
       action: 'UPDATE',
@@ -84,6 +94,8 @@ router.put('/:id', requirePermission('MANAGE_LOCATIONS'), async (req, res) => {
 router.delete('/:id', requirePermission('MANAGE_LOCATIONS'), async (req, res) => {
   try {
     await prisma.location.delete({ where: { id: req.params.id } });
+    memoryCache.delPrefix('locations');
+    memoryCache.delPrefix('dashboard');
     res.json({ message: 'Deleted' });
   } catch (err) {
     res.status(500).json({ error: err.message });

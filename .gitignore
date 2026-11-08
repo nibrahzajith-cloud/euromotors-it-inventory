@@ -17,6 +17,7 @@ backend.rar
 backend/.env
 
 # Editor directories and files
+scratch/
 .vscode/*
 !.vscode/extensions.json
 .idea

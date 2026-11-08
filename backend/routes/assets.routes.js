@@ -7,6 +7,7 @@ const prisma = require('../prismaClient');
 const { authenticate, authorize, requirePermission } = require('../middleware/auth.middleware');
 const { logAudit, logAssetTimeline } = require('../utils/logger');
 const { generateAssetCode, generateEmployeeCode } = require('../utils/codeGenerator');
+const memoryCache = require('../utils/cache');
 
 const MAC_REGEX = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/;
 const IPV4_REGEX = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
@@ -95,10 +96,16 @@ router.use(authenticate);
 
 router.get('/', async (req, res) => {
   try {
-    const records = await prisma.asset.findMany({ 
-      include: { 
-        location: true, 
-        department: true, 
+    const isFiltered = Object.keys(req.query).length > 0 && req.query.refresh !== 'true';
+    if (!isFiltered && req.query.refresh !== 'true') {
+      const cached = memoryCache.get('assets:all');
+      if (cached) return res.json(cached);
+    }
+    const records = await prisma.asset.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        location: true,
+        department: true,
         assignedEmployee: true,
         assignments: {
           include: {
@@ -108,8 +115,11 @@ router.get('/', async (req, res) => {
           },
           orderBy: { assignedDate: 'desc' }
         }
-      } 
+      }
     });
+    if (!isFiltered) {
+      memoryCache.set('assets:all', records, 20);
+    }
     res.json(records);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -120,15 +130,15 @@ router.get('/code/:code', async (req, res) => {
   try {
     const cleanCode = req.params.code ? req.params.code.trim() : '';
     const record = await prisma.asset.findFirst({
-      where: { 
+      where: {
         assetCode: {
           equals: cleanCode,
           mode: 'insensitive'
         }
       },
-      include: { 
-        location: true, 
-        department: true, 
+      include: {
+        location: true,
+        department: true,
         assignedEmployee: true,
         assignments: {
           include: {
@@ -143,7 +153,7 @@ router.get('/code/:code', async (req, res) => {
     if (!record) return res.status(404).json({ error: 'Asset not found in database.' });
     res.json(record);
   } catch (err) {
-      res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -217,7 +227,7 @@ router.post('/', requirePermission('CREATE_ASSETS'), async (req, res) => {
         return res.status(400).json({ error: `Invalid Warranty Status. Allowed values: ${VALID_WARRANTY_STATUSES.join(', ')}` });
       }
     }
-    
+
     // AssignmentType Validation
     let aType = payload.assignmentType;
     if (!aType) {
@@ -237,7 +247,7 @@ router.post('/', requirePermission('CREATE_ASSETS'), async (req, res) => {
       if (!payload.locationId) return res.status(400).json({ error: 'Location is mandatory for STORE assignment type.' });
       payload.assignedEmployeeId = null;
     }
-    
+
     // Auto-set status if assigned
     if (payload.assignedEmployeeId || (aType !== 'STORE' && (payload.departmentId || payload.locationId))) {
       if (!payload.status || payload.status === 'AVAILABLE') {
@@ -295,10 +305,10 @@ router.post('/', requirePermission('CREATE_ASSETS'), async (req, res) => {
 
     // Inspect Asset Code: differentiate user-specified code vs auto-generation
     const rawAssetCode = payload.assetCode;
-    const isAutoGenerate = 
-      !rawAssetCode || 
-      typeof rawAssetCode !== 'string' || 
-      rawAssetCode.trim() === '' || 
+    const isAutoGenerate =
+      !rawAssetCode ||
+      typeof rawAssetCode !== 'string' ||
+      rawAssetCode.trim() === '' ||
       /^auto-generated/i.test(rawAssetCode.trim()) ||
       rawAssetCode.trim().toLowerCase() === 'n/a' ||
       rawAssetCode.trim().toLowerCase() === 'null';
@@ -367,7 +377,7 @@ router.post('/', requirePermission('CREATE_ASSETS'), async (req, res) => {
 
           let newRecord;
           try {
-            newRecord = await tx.asset.create({ 
+            newRecord = await tx.asset.create({
               data: formattedAssetData,
               include: {
                 location: true,
@@ -435,10 +445,10 @@ router.post('/', requirePermission('CREATE_ASSETS'), async (req, res) => {
           });
         }
 
-        const isSerialCollision = 
+        const isSerialCollision =
           (Array.isArray(target) && target.includes('serialNumber')) ||
           (typeof target === 'string' && target.includes('serialNumber')) ||
-          msg.includes('serialNumber') || 
+          msg.includes('serialNumber') ||
           msg.includes('Asset_serialNumber_key');
 
         if (isSerialCollision) {
@@ -448,10 +458,10 @@ router.post('/', requirePermission('CREATE_ASSETS'), async (req, res) => {
           });
         }
 
-        const isAssetCodeCollision = 
+        const isAssetCodeCollision =
           (Array.isArray(target) && target.includes('assetCode')) ||
           (typeof target === 'string' && target.includes('assetCode')) ||
-          msg.includes('assetCode') || 
+          msg.includes('assetCode') ||
           msg.includes('Asset_assetCode_key');
 
         if (isAssetCodeCollision) {
@@ -509,6 +519,8 @@ router.post('/', requirePermission('CREATE_ASSETS'), async (req, res) => {
       performedByName: req.user.fullName
     });
 
+    memoryCache.delPrefix('assets');
+    memoryCache.delPrefix('dashboard');
     res.status(201).json(record);
   } catch (err) {
     console.error('Asset creation route exception:', err);
@@ -529,7 +541,7 @@ router.get('/export/excel', async (req, res) => {
     await workbook.xlsx.readFile(templatePath);
 
     const ws1 = workbook.getWorksheet('IT Inventory') || workbook.worksheets[0];
-    
+
     // Clear data rows starting at row 2 while keeping headers and formatting
     const totalRows = ws1.rowCount;
     for (let r = totalRows; r >= 2; r--) {
@@ -662,20 +674,20 @@ router.post('/bulk', requirePermission('BULK_IMPORT_ASSETS'), async (req, res) =
     if (!Array.isArray(assets)) return res.status(400).json({ error: 'Payload must contain assets array.' });
 
     let results = {
-       totalRows: assets.length,
-       imported: 0,
-       updated: 0,
-       skipped: 0,
-       failed: 0,
-       createdLocations: 0,
-       createdDepartments: 0,
-       createdEmployees: 0,
-       updatedEmployees: 0,
-       createdAssets: 0,
-       updatedAssets: 0,
-       createdAssignments: 0,
-       skippedRows: 0,
-       errors: []
+      totalRows: assets.length,
+      imported: 0,
+      updated: 0,
+      skipped: 0,
+      failed: 0,
+      createdLocations: 0,
+      createdDepartments: 0,
+      createdEmployees: 0,
+      updatedEmployees: 0,
+      createdAssets: 0,
+      updatedAssets: 0,
+      createdAssignments: 0,
+      skippedRows: 0,
+      errors: []
     };
 
     const locations = await prisma.location.findMany();
@@ -685,7 +697,7 @@ router.post('/bulk', requirePermission('BULK_IMPORT_ASSETS'), async (req, res) =
     const locationMap = new Map(locations.map(l => [l.name.toLowerCase().trim(), l]));
     const departmentMap = new Map(departments.map(d => [d.name.toLowerCase().trim(), d]));
     const employeeMap = new Map(employees.map(e => [e.employeeCode ? e.employeeCode.toUpperCase().trim() : '', e]));
-    
+
     const existingAssetRecords = await prisma.asset.findMany({ select: { id: true, assetCode: true, serialNumber: true } });
     const assetCodeToAsset = new Map(existingAssetRecords.map(a => [a.assetCode.toUpperCase().trim(), a]));
     const serialToAsset = new Map(existingAssetRecords.filter(a => a.serialNumber).map(a => [a.serialNumber.toUpperCase().trim(), a]));
@@ -696,326 +708,326 @@ router.post('/bulk', requirePermission('BULK_IMPORT_ASSETS'), async (req, res) =
     let highestAssetSequence = 550; // default max if no valid sequences
     const assetRegex = new RegExp(`^${assetPrefix}-(\\d{9})$`, 'i');
     existingAssetRecords.forEach(a => {
-        const match = a.assetCode.match(assetRegex);
-        if (match) {
-            const num = parseInt(match[1], 10);
-            if (num > highestAssetSequence) highestAssetSequence = num;
-        }
+      const match = a.assetCode.match(assetRegex);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > highestAssetSequence) highestAssetSequence = num;
+      }
     });
 
     const existingEmployeeCodesArray = employees.map(e => e.employeeCode);
     const existingEmployeeCodes = new Set(existingEmployeeCodesArray.filter(Boolean));
-    
+
     let highestEmployeeSequence = 166; // default max if no valid sequences
     const empRegex = new RegExp(`^EMP-(\\d{9})$`, 'i');
     existingEmployeeCodesArray.forEach(code => {
-        if (!code) return;
-        const match = code.match(empRegex);
-        if (match) {
-            const num = parseInt(match[1], 10);
-            if (num > highestEmployeeSequence) highestEmployeeSequence = num;
-        }
+      if (!code) return;
+      const match = code.match(empRegex);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > highestEmployeeSequence) highestEmployeeSequence = num;
+      }
     });
 
     const seenAssetCodesInBatch = new Set();
     const seenSerialsInBatch = new Set();
 
     for (let i = 0; i < assets.length; i++) {
-       const a = assets[i];
-       const rowNum = rowOffset + i;
+      const a = assets[i];
+      const rowNum = rowOffset + i;
 
-       // Ignore empty/blank separator rows
-       const values = Object.values(a || {});
-       const isBlankRow = values.length === 0 || values.every(v => v === null || v === undefined || v.toString().trim() === '');
-       if (isBlankRow) {
-           results.skipped++;
-           results.skippedRows++;
-           continue;
-       }
-       
-       try {
-          if (!a.deviceType) {
-             const e = new Error("Please provide a valid device type (e.g., Laptop, Router).");
-             e.column = 'deviceType';
-             e.value = a.deviceType || '';
-             throw e;
-          }
+      // Ignore empty/blank separator rows
+      const values = Object.values(a || {});
+      const isBlankRow = values.length === 0 || values.every(v => v === null || v === undefined || v.toString().trim() === '');
+      if (isBlankRow) {
+        results.skipped++;
+        results.skippedRows++;
+        continue;
+      }
 
-          const aType = a.assignmentType ? a.assignmentType.toUpperCase() : 'EMPLOYEE';
-          if (aType === 'EMPLOYEE' && !a.employeeCode) {
-             highestEmployeeSequence++;
-             a.employeeCode = `EMP-${highestEmployeeSequence.toString().padStart(9, '0')}`;
-             existingEmployeeCodes.add(a.employeeCode);
-          }
-          if (aType === 'DEPARTMENT' && !a.departmentName) {
-             const e = new Error("Department Name is mandatory for DEPARTMENT assignment type.");
-             e.column = 'departmentName';
-             e.value = a.departmentName || '';
-             throw e;
-          }
-          if ((aType === 'LOCATION' || aType === 'STORE' || aType === 'IN STORE') && !a.locationName) {
-             const e = new Error(`Location Name is mandatory for ${aType} assignment type.`);
-             e.column = 'locationName';
-             e.value = a.locationName || '';
-             throw e;
-          }
-          if (aType === 'SHARED' && !a.departmentName && !a.locationName) {
-             const e = new Error("Department or Location is mandatory for SHARED assignment type.");
-             e.column = 'departmentName / locationName';
-             e.value = '';
-             throw e;
-          }
+      try {
+        if (!a.deviceType) {
+          const e = new Error("Please provide a valid device type (e.g., Laptop, Router).");
+          e.column = 'deviceType';
+          e.value = a.deviceType || '';
+          throw e;
+        }
 
-          // Location Resolution
-          let locationId = null;
-          if (a.locationName && a.locationName.trim() !== '') {
-             const locKey = a.locationName.toLowerCase().trim();
-             let loc = locationMap.get(locKey);
-             if (!loc) {
-                 loc = await prisma.location.create({ data: { name: a.locationName.trim(), status: 'ACTIVE' } });
-                 locationMap.set(locKey, loc);
-                 results.createdLocations++;
-             }
-             locationId = loc.id;
+        const aType = a.assignmentType ? a.assignmentType.toUpperCase() : 'EMPLOYEE';
+        if (aType === 'EMPLOYEE' && !a.employeeCode) {
+          highestEmployeeSequence++;
+          a.employeeCode = `EMP-${highestEmployeeSequence.toString().padStart(9, '0')}`;
+          existingEmployeeCodes.add(a.employeeCode);
+        }
+        if (aType === 'DEPARTMENT' && !a.departmentName) {
+          const e = new Error("Department Name is mandatory for DEPARTMENT assignment type.");
+          e.column = 'departmentName';
+          e.value = a.departmentName || '';
+          throw e;
+        }
+        if ((aType === 'LOCATION' || aType === 'STORE' || aType === 'IN STORE') && !a.locationName) {
+          const e = new Error(`Location Name is mandatory for ${aType} assignment type.`);
+          e.column = 'locationName';
+          e.value = a.locationName || '';
+          throw e;
+        }
+        if (aType === 'SHARED' && !a.departmentName && !a.locationName) {
+          const e = new Error("Department or Location is mandatory for SHARED assignment type.");
+          e.column = 'departmentName / locationName';
+          e.value = '';
+          throw e;
+        }
+
+        // Location Resolution
+        let locationId = null;
+        if (a.locationName && a.locationName.trim() !== '') {
+          const locKey = a.locationName.toLowerCase().trim();
+          let loc = locationMap.get(locKey);
+          if (!loc) {
+            loc = await prisma.location.create({ data: { name: a.locationName.trim(), status: 'ACTIVE' } });
+            locationMap.set(locKey, loc);
+            results.createdLocations++;
           }
+          locationId = loc.id;
+        }
 
-          // Department Resolution
-          let departmentId = null;
-          if (a.departmentName && a.departmentName.trim() !== '') {
-             const deptKey = a.departmentName.toLowerCase().trim();
-             let dept = departmentMap.get(deptKey);
-             if (!dept) {
-                 dept = await prisma.department.create({ data: { name: a.departmentName.trim(), status: 'ACTIVE' } });
-                 departmentMap.set(deptKey, dept);
-                 results.createdDepartments++;
-             }
-             departmentId = dept.id;
+        // Department Resolution
+        let departmentId = null;
+        if (a.departmentName && a.departmentName.trim() !== '') {
+          const deptKey = a.departmentName.toLowerCase().trim();
+          let dept = departmentMap.get(deptKey);
+          if (!dept) {
+            dept = await prisma.department.create({ data: { name: a.departmentName.trim(), status: 'ACTIVE' } });
+            departmentMap.set(deptKey, dept);
+            results.createdDepartments++;
           }
+          departmentId = dept.id;
+        }
 
-          // Employee Resolution
-          let employeeId = null;
-          if (aType === 'EMPLOYEE' && a.employeeCode) {
-             const empKey = a.employeeCode.toUpperCase().trim();
-             let emp = employeeMap.get(empKey);
-             
-             if (!emp) {
-                 emp = await prisma.employee.create({
-                     data: {
-                         employeeCode: a.employeeCode.trim(),
-                         fullName: a.employeeName || 'Unknown',
-                         email: a.email || null,
-                         phone: a.phone || null,
-                         designation: a.designation || null,
-                         ...(departmentId ? { department: { connect: { id: departmentId } } } : {}),
-                         ...(locationId ? { location: { connect: { id: locationId } } } : {}),
-                         status: a.employeeStatus ? a.employeeStatus.toUpperCase() : 'ACTIVE'
-                     }
-                 });
-                 employeeMap.set(empKey, emp);
-                 results.createdEmployees++;
-             } else {
-                 const updateData = { departmentId, locationId };
-                 if (a.employeeName) updateData.fullName = a.employeeName;
-                 if (a.email) updateData.email = a.email;
-                 if (a.phone) updateData.phone = a.phone;
-                 if (a.designation) updateData.designation = a.designation;
-                 if (a.employeeStatus) updateData.status = a.employeeStatus.toUpperCase();
+        // Employee Resolution
+        let employeeId = null;
+        if (aType === 'EMPLOYEE' && a.employeeCode) {
+          const empKey = a.employeeCode.toUpperCase().trim();
+          let emp = employeeMap.get(empKey);
 
-                 emp = await prisma.employee.update({
-                     where: { id: emp.id },
-                     data: updateData
-                 });
-                 employeeMap.set(empKey, emp);
-                 results.updatedEmployees++;
-             }
-             employeeId = emp.id;
-          }
-
-          // AssetCode Resolution and Check if updating vs inserting
-          let inputCode = a.assetCode ? a.assetCode.toString().trim() : '';
-          let existingAsset = null;
-          if (inputCode) {
-              existingAsset = assetCodeToAsset.get(inputCode.toUpperCase());
-          }
-
-          if (!inputCode && !existingAsset) {
-              highestAssetSequence++;
-              inputCode = `${assetPrefix}-${highestAssetSequence.toString().padStart(9, '0')}`;
-          }
-
-          // Validate duplicate assetCode within batch
-          if (inputCode) {
-              const codeKey = inputCode.toUpperCase();
-              if (seenAssetCodesInBatch.has(codeKey) && !req.body.forceUpload) {
-                  const e = new Error("Duplicate Asset Code in uploaded file.");
-                  e.column = 'assetCode';
-                  e.value = inputCode;
-                  throw e;
+          if (!emp) {
+            emp = await prisma.employee.create({
+              data: {
+                employeeCode: a.employeeCode.trim(),
+                fullName: a.employeeName || 'Unknown',
+                email: a.email || null,
+                phone: a.phone || null,
+                designation: a.designation || null,
+                ...(departmentId ? { department: { connect: { id: departmentId } } } : {}),
+                ...(locationId ? { location: { connect: { id: locationId } } } : {}),
+                status: a.employeeStatus ? a.employeeStatus.toUpperCase() : 'ACTIVE'
               }
-              seenAssetCodesInBatch.add(codeKey);
-          }
-
-          // Serial Number Resolution
-          let finalSerial = null;
-          if (a.serialNumber && a.serialNumber.toString().trim() !== '' && a.serialNumber.toString().trim().toLowerCase() !== 'no serial' && a.serialNumber.toString().trim().toLowerCase() !== 'n/a') {
-              finalSerial = a.serialNumber.toString().trim();
-              const serialKey = finalSerial.toUpperCase();
-              
-              if (seenSerialsInBatch.has(serialKey)) {
-                  if (!req.body.forceUpload) {
-                      const e = new Error("Duplicate Serial Number in uploaded file.");
-                      e.column = 'serialNumber';
-                      e.value = finalSerial;
-                      throw e;
-                  } else {
-                      finalSerial = null;
-                  }
-              }
-              
-              // Check if serial exists in DB on ANOTHER asset
-              if (finalSerial) {
-                  const dbSerialAsset = serialToAsset.get(serialKey);
-                  if (dbSerialAsset && (!existingAsset || dbSerialAsset.id !== existingAsset.id)) {
-                      if (!req.body.forceUpload) {
-                          const e = new Error("This Serial Number already exists in the database.");
-                          e.column = 'serialNumber';
-                          e.value = finalSerial;
-                          throw e;
-                      } else {
-                          finalSerial = null;
-                      }
-                  }
-              }
-              
-              if (finalSerial) {
-                  seenSerialsInBatch.add(serialKey);
-              }
-          }
-
-          // Status determination
-          const rawStatus = (a.status || '').toUpperCase();
-          let finalStatus = 'AVAILABLE';
-          if (rawStatus === 'ASSIGNED' || employeeId || (aType === 'EMPLOYEE' && employeeId)) {
-              finalStatus = 'ASSIGNED';
-          } else if (rawStatus === 'UNDER_REPAIR' || rawStatus === 'UNDER REPAIR') {
-              finalStatus = 'UNDER_REPAIR';
-          } else if (rawStatus === 'RETIRED') {
-              finalStatus = 'RETIRED';
+            });
+            employeeMap.set(empKey, emp);
+            results.createdEmployees++;
           } else {
-              finalStatus = (aType === 'STORE' || aType === 'IN STORE' || (!employeeId && !departmentId && !locationId)) ? 'AVAILABLE' : 'ASSIGNED';
+            const updateData = { departmentId, locationId };
+            if (a.employeeName) updateData.fullName = a.employeeName;
+            if (a.email) updateData.email = a.email;
+            if (a.phone) updateData.phone = a.phone;
+            if (a.designation) updateData.designation = a.designation;
+            if (a.employeeStatus) updateData.status = a.employeeStatus.toUpperCase();
+
+            emp = await prisma.employee.update({
+              where: { id: emp.id },
+              data: updateData
+            });
+            employeeMap.set(empKey, emp);
+            results.updatedEmployees++;
+          }
+          employeeId = emp.id;
+        }
+
+        // AssetCode Resolution and Check if updating vs inserting
+        let inputCode = a.assetCode ? a.assetCode.toString().trim() : '';
+        let existingAsset = null;
+        if (inputCode) {
+          existingAsset = assetCodeToAsset.get(inputCode.toUpperCase());
+        }
+
+        if (!inputCode && !existingAsset) {
+          highestAssetSequence++;
+          inputCode = `${assetPrefix}-${highestAssetSequence.toString().padStart(9, '0')}`;
+        }
+
+        // Validate duplicate assetCode within batch
+        if (inputCode) {
+          const codeKey = inputCode.toUpperCase();
+          if (seenAssetCodesInBatch.has(codeKey) && !req.body.forceUpload) {
+            const e = new Error("Duplicate Asset Code in uploaded file.");
+            e.column = 'assetCode';
+            e.value = inputCode;
+            throw e;
+          }
+          seenAssetCodesInBatch.add(codeKey);
+        }
+
+        // Serial Number Resolution
+        let finalSerial = null;
+        if (a.serialNumber && a.serialNumber.toString().trim() !== '' && a.serialNumber.toString().trim().toLowerCase() !== 'no serial' && a.serialNumber.toString().trim().toLowerCase() !== 'n/a') {
+          finalSerial = a.serialNumber.toString().trim();
+          const serialKey = finalSerial.toUpperCase();
+
+          if (seenSerialsInBatch.has(serialKey)) {
+            if (!req.body.forceUpload) {
+              const e = new Error("Duplicate Serial Number in uploaded file.");
+              e.column = 'serialNumber';
+              e.value = finalSerial;
+              throw e;
+            } else {
+              finalSerial = null;
+            }
           }
 
-          const parseSafeDate = (dt) => {
-             if (!dt) return null;
-             const parsed = new Date(dt);
-             return isNaN(parsed.getTime()) ? null : parsed;
-          };
-
-          const assetPayload = {
-             assetCode: inputCode,
-             deviceType: a.deviceType,
-             model: a.model || null,
-             serialNumber: finalSerial,
-             status: finalStatus,
-             condition: a.condition || 'GOOD',
-             brand: a.brand || null,
-             processor: a.processor || null,
-             ram: a.ram || null,
-             storage: a.storage || null,
-             operatingSystem: a.operatingSystem || null,
-             vendor: a.vendor || null,
-             purchaseDate: parseSafeDate(a.purchaseDate),
-             warrantyStatus: a.warrantyStatus || 'Active',
-             warrantyExpiryDate: parseSafeDate(a.warrantyExpiryDate),
-             remarks: a.remarks || null,
-             macAddress: a.macAddress || null,
-             ipAddress: a.ipAddress || null,
-             departmentId,
-             locationId,
-             assignedEmployeeId: employeeId,
-             assignmentType: aType === 'IN STORE' ? 'STORE' : aType
-          };
-
-          const formattedBulkData = formatAssetPrismaData(assetPayload, !!existingAsset);
-
-          if (existingAsset) {
-              // UPDATE EXISTING ASSET
-              let updated;
-              try {
-                updated = await prisma.asset.update({
-                    where: { id: existingAsset.id },
-                    data: formattedBulkData
-                });
-              } catch (upErr) {
-                updated = await prisma.asset.update({
-                    where: { id: existingAsset.id },
-                    data: assetPayload
-                });
+          // Check if serial exists in DB on ANOTHER asset
+          if (finalSerial) {
+            const dbSerialAsset = serialToAsset.get(serialKey);
+            if (dbSerialAsset && (!existingAsset || dbSerialAsset.id !== existingAsset.id)) {
+              if (!req.body.forceUpload) {
+                const e = new Error("This Serial Number already exists in the database.");
+                e.column = 'serialNumber';
+                e.value = finalSerial;
+                throw e;
+              } else {
+                finalSerial = null;
               }
-              
-              results.updated++;
-              results.updatedAssets++;
-
-              await logAssetTimeline({
-                assetId: updated.id,
-                assetCode: updated.assetCode,
-                eventType: 'UPDATED',
-                title: 'Asset Updated (Bulk)',
-                description: `Asset updated via standard Excel ingestion.`,
-                newStatus: finalStatus,
-                performedById: req.user.id,
-                performedByName: req.user.fullName
-              });
-          } else {
-              // INSERT NEW ASSET
-              let newAsset;
-              try {
-                newAsset = await prisma.asset.create({ data: formattedBulkData });
-              } catch (crErr) {
-                newAsset = await prisma.asset.create({ data: assetPayload });
-              }
-              results.imported++;
-              results.createdAssets++;
-
-              assetCodeToAsset.set(newAsset.assetCode.toUpperCase(), newAsset);
-              if (finalSerial) serialToAsset.set(finalSerial.toUpperCase(), newAsset);
-
-              await logAssetTimeline({
-                assetId: newAsset.id,
-                assetCode: newAsset.assetCode,
-                eventType: 'CREATED',
-                title: 'Asset Created (Bulk)',
-                description: `Asset added via standard Excel ingestion. Initial status: ${finalStatus}`,
-                newStatus: finalStatus,
-                performedById: req.user.id,
-                performedByName: req.user.fullName
-              });
-
-              if (employeeId) {
-                 await prisma.assetAssignment.create({
-                     data: {
-                         assetId: newAsset.id,
-                         employeeId: employeeId,
-                         status: 'ACTIVE',
-                         remarks: 'Automated Direct Organization Ingestion'
-                     }
-                 });
-                 results.createdAssignments++;
-              }
+            }
           }
-          
-       } catch (err) {
-          results.failed++;
-          results.skippedRows++;
-          results.errors.push({
-             row: rowNum,
-             assetCode: a.assetCode || 'N/A',
-             column: err.column || 'System',
-             value: err.value || '-',
-             fix: err.message,
-             originalData: a
+
+          if (finalSerial) {
+            seenSerialsInBatch.add(serialKey);
+          }
+        }
+
+        // Status determination
+        const rawStatus = (a.status || '').toUpperCase();
+        let finalStatus = 'AVAILABLE';
+        if (rawStatus === 'ASSIGNED' || employeeId || (aType === 'EMPLOYEE' && employeeId)) {
+          finalStatus = 'ASSIGNED';
+        } else if (rawStatus === 'UNDER_REPAIR' || rawStatus === 'UNDER REPAIR') {
+          finalStatus = 'UNDER_REPAIR';
+        } else if (rawStatus === 'RETIRED') {
+          finalStatus = 'RETIRED';
+        } else {
+          finalStatus = (aType === 'STORE' || aType === 'IN STORE' || (!employeeId && !departmentId && !locationId)) ? 'AVAILABLE' : 'ASSIGNED';
+        }
+
+        const parseSafeDate = (dt) => {
+          if (!dt) return null;
+          const parsed = new Date(dt);
+          return isNaN(parsed.getTime()) ? null : parsed;
+        };
+
+        const assetPayload = {
+          assetCode: inputCode,
+          deviceType: a.deviceType,
+          model: a.model || null,
+          serialNumber: finalSerial,
+          status: finalStatus,
+          condition: a.condition || 'GOOD',
+          brand: a.brand || null,
+          processor: a.processor || null,
+          ram: a.ram || null,
+          storage: a.storage || null,
+          operatingSystem: a.operatingSystem || null,
+          vendor: a.vendor || null,
+          purchaseDate: parseSafeDate(a.purchaseDate),
+          warrantyStatus: a.warrantyStatus || 'Active',
+          warrantyExpiryDate: parseSafeDate(a.warrantyExpiryDate),
+          remarks: a.remarks || null,
+          macAddress: a.macAddress || null,
+          ipAddress: a.ipAddress || null,
+          departmentId,
+          locationId,
+          assignedEmployeeId: employeeId,
+          assignmentType: aType === 'IN STORE' ? 'STORE' : aType
+        };
+
+        const formattedBulkData = formatAssetPrismaData(assetPayload, !!existingAsset);
+
+        if (existingAsset) {
+          // UPDATE EXISTING ASSET
+          let updated;
+          try {
+            updated = await prisma.asset.update({
+              where: { id: existingAsset.id },
+              data: formattedBulkData
+            });
+          } catch (upErr) {
+            updated = await prisma.asset.update({
+              where: { id: existingAsset.id },
+              data: assetPayload
+            });
+          }
+
+          results.updated++;
+          results.updatedAssets++;
+
+          await logAssetTimeline({
+            assetId: updated.id,
+            assetCode: updated.assetCode,
+            eventType: 'UPDATED',
+            title: 'Asset Updated (Bulk)',
+            description: `Asset updated via standard Excel ingestion.`,
+            newStatus: finalStatus,
+            performedById: req.user.id,
+            performedByName: req.user.fullName
           });
-       }
+        } else {
+          // INSERT NEW ASSET
+          let newAsset;
+          try {
+            newAsset = await prisma.asset.create({ data: formattedBulkData });
+          } catch (crErr) {
+            newAsset = await prisma.asset.create({ data: assetPayload });
+          }
+          results.imported++;
+          results.createdAssets++;
+
+          assetCodeToAsset.set(newAsset.assetCode.toUpperCase(), newAsset);
+          if (finalSerial) serialToAsset.set(finalSerial.toUpperCase(), newAsset);
+
+          await logAssetTimeline({
+            assetId: newAsset.id,
+            assetCode: newAsset.assetCode,
+            eventType: 'CREATED',
+            title: 'Asset Created (Bulk)',
+            description: `Asset added via standard Excel ingestion. Initial status: ${finalStatus}`,
+            newStatus: finalStatus,
+            performedById: req.user.id,
+            performedByName: req.user.fullName
+          });
+
+          if (employeeId) {
+            await prisma.assetAssignment.create({
+              data: {
+                assetId: newAsset.id,
+                employeeId: employeeId,
+                status: 'ACTIVE',
+                remarks: 'Automated Direct Organization Ingestion'
+              }
+            });
+            results.createdAssignments++;
+          }
+        }
+
+      } catch (err) {
+        results.failed++;
+        results.skippedRows++;
+        results.errors.push({
+          row: rowNum,
+          assetCode: a.assetCode || 'N/A',
+          column: err.column || 'System',
+          value: err.value || '-',
+          fix: err.message,
+          originalData: a
+        });
+      }
     }
 
     // Final Bulk Audit
@@ -1077,7 +1089,7 @@ router.put('/:id', requirePermission('EDIT_ASSETS'), async (req, res) => {
       payload.assignmentType = 'STORE';
     }
     const aType = payload.assignmentType || oldRecord.assignmentType;
-    
+
     if (aType === 'DEPARTMENT') {
       if (!payload.departmentId && !oldRecord.departmentId) return res.status(400).json({ error: 'Department is mandatory for DEPARTMENT assignment type.' });
       payload.assignedEmployeeId = null;
@@ -1091,12 +1103,12 @@ router.put('/:id', requirePermission('EDIT_ASSETS'), async (req, res) => {
       if (!payload.locationId && !oldRecord.locationId) return res.status(400).json({ error: 'Location is mandatory for STORE assignment type.' });
       payload.assignedEmployeeId = null;
     }
-    
+
     const updateData = formatAssetPrismaData(payload, true);
     let record;
     try {
-      record = await prisma.asset.update({ 
-        where: { id: req.params.id }, 
+      record = await prisma.asset.update({
+        where: { id: req.params.id },
         data: updateData,
         include: {
           location: true,
@@ -1127,7 +1139,7 @@ router.put('/:id', requirePermission('EDIT_ASSETS'), async (req, res) => {
           where: { assetId: record.id, status: 'ACTIVE' },
           data: { status: 'RETURNED', returnedDate: new Date() }
         });
-      } catch (_) {}
+      } catch (_) { }
     }
 
     // Log Audit
@@ -1170,6 +1182,8 @@ router.put('/:id', requirePermission('EDIT_ASSETS'), async (req, res) => {
       });
     }
 
+    memoryCache.delPrefix('assets');
+    memoryCache.delPrefix('dashboard');
     res.json(record);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1206,6 +1220,8 @@ router.delete('/:id', requirePermission('DELETE_ASSETS'), async (req, res) => {
       description: `Asset deleted: ${oldRecord.assetCode}`
     });
 
+    memoryCache.delPrefix('assets');
+    memoryCache.delPrefix('dashboard');
     res.json({ message: 'Deleted' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1263,8 +1279,8 @@ router.post('/:id/return', requirePermission('ASSIGN_ASSETS'), async (req, res) 
     const returnRemarks = req.body?.remarks || null;
     await prisma.assetAssignment.updateMany({
       where: { assetId: asset.id, status: 'ACTIVE' },
-      data: { 
-        status: 'RETURNED', 
+      data: {
+        status: 'RETURNED',
         returnedDate: now,
         ...(returnAccessories ? { returnAccessories } : {}),
         ...(returnRemarks ? { remarks: returnRemarks } : {})
@@ -1283,9 +1299,9 @@ router.post('/:id/return', requirePermission('ASSIGN_ASSETS'), async (req, res) 
         assignedEmployeeId: null,
         assignmentType: 'STORE'
       },
-      include: { 
-        location: true, 
-        department: true, 
+      include: {
+        location: true,
+        department: true,
         assignedEmployee: true,
         assignments: {
           include: {
@@ -1329,6 +1345,8 @@ router.post('/:id/return', requirePermission('ASSIGN_ASSETS'), async (req, res) 
       performedByName: req.user.fullName
     });
 
+    memoryCache.delPrefix('assets');
+    memoryCache.delPrefix('dashboard');
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: err.message });

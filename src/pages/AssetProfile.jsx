@@ -370,9 +370,21 @@ export default function AssetProfile() {
                 </button>
               </>
             ) : (
-              <button onClick={startEditing} className="px-4 py-2 bg-blue-600 text-white rounded-xl font-medium flex items-center gap-2 hover:bg-blue-700 shadow-sm shadow-blue-600/20 transition-all">
-                <Pencil className="w-4 h-4" /> Edit Asset
-              </button>
+              <div className="flex items-center gap-2.5">
+                {asset?.status === 'ASSIGNED' && (
+                  <button 
+                    onClick={handleReturnAsset} 
+                    disabled={returning}
+                    className="px-4 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 rounded-xl font-medium flex items-center gap-2 transition-all cursor-pointer disabled:opacity-60"
+                  >
+                    {returning ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowLeft className="w-4 h-4" />}
+                    <span>{returning ? 'Checking-in...' : 'Return to Store'}</span>
+                  </button>
+                )}
+                <button onClick={startEditing} className="px-4 py-2 bg-blue-600 text-white rounded-xl font-medium flex items-center gap-2 hover:bg-blue-700 shadow-sm shadow-blue-600/20 transition-all cursor-pointer">
+                  <Pencil className="w-4 h-4" /> Edit Asset
+                </button>
+              </div>
             )}
           </div>
         </div>

@@ -4,6 +4,7 @@ const prisma = require('../prismaClient');
 const { authenticate, requirePermission } = require('../middleware/auth.middleware');
 const { generateEmployeeCode } = require('../utils/codeGenerator');
 const { logAudit } = require('../utils/logger');
+const memoryCache = require('../utils/cache');
 const crypto = require('crypto');
 
 router.use(authenticate);
@@ -11,6 +12,10 @@ router.use(authenticate);
 // Everyone can view employees
 router.get('/', async (req, res) => {
   try {
+    if (req.query.refresh !== 'true') {
+      const cached = memoryCache.get('employees:all');
+      if (cached) return res.json(cached);
+    }
     const records = await prisma.employee.findMany({ 
       include: { 
         department: true, 
@@ -19,6 +24,7 @@ router.get('/', async (req, res) => {
         assignments: { where: { status: 'ACTIVE' } }
       } 
     });
+    memoryCache.set('employees:all', records, 30);
     res.json(records);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -144,6 +150,8 @@ router.post('/', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
       description: `Registered employee: ${record.fullName} (${record.employeeCode})`
     });
 
+    memoryCache.delPrefix('employees');
+    memoryCache.delPrefix('dashboard');
     res.status(201).json(record);
   } catch (err) {
     console.error('Error creating employee:', err);
@@ -285,6 +293,8 @@ router.put('/:id', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
       description: `Updated employee profile: ${record.fullName} (${record.employeeCode})`
     });
 
+    memoryCache.delPrefix('employees');
+    memoryCache.delPrefix('dashboard');
     res.json(record);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -320,6 +330,8 @@ router.delete('/:id', requirePermission('MANAGE_EMPLOYEES'), async (req, res) =>
       description: `Deleted employee profile: ${targetEmp.fullName} (${targetEmp.employeeCode})`
     });
 
+    memoryCache.delPrefix('employees');
+    memoryCache.delPrefix('dashboard');
     res.json({ message: 'Deleted' });
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -2,18 +2,13 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../prismaClient');
 const { authenticate } = require('../middleware/auth.middleware');
-
-// Short in-memory cache to make dashboard instant and avoid hammering DB
-let dashboardCache = null;
-let dashboardCacheTime = 0;
-const DASHBOARD_CACHE_TTL = 8000; // 8 seconds
-
+const memoryCache = require('../utils/cache');
 
 router.get('/summary', authenticate, async (req, res) => {
   try {
-    const nowMs = Date.now();
-    if (dashboardCache && (nowMs - dashboardCacheTime) < DASHBOARD_CACHE_TTL && req.query.refresh !== 'true') {
-      return res.json(dashboardCache);
+    if (req.query.refresh !== 'true') {
+      const cached = memoryCache.get('dashboard:summary');
+      if (cached) return res.json(cached);
     }
     const now = new Date();
     const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -110,8 +105,7 @@ router.get('/summary', authenticate, async (req, res) => {
       warrantyAlerts: expiringSoon
     };
 
-    dashboardCache = responseData;
-    dashboardCacheTime = Date.now();
+    memoryCache.set('dashboard:summary', responseData, 20);
     res.json(responseData);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -120,6 +114,10 @@ router.get('/summary', authenticate, async (req, res) => {
 
 router.get('/advanced', authenticate, async (req, res) => {
   try {
+    if (req.query.refresh !== 'true') {
+      const cached = memoryCache.get('dashboard:advanced');
+      if (cached) return res.json(cached);
+    }
     const now = new Date();
     const todayStart = new Date(now.setHours(0, 0, 0, 0));
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
@@ -243,7 +241,7 @@ router.get('/advanced', authenticate, async (req, res) => {
       return locRepairData.filter(r => r.asset.locationId === locId).length;
     };
 
-    res.json({
+    const advancedPayload = {
       summary: {
         totalAssets: { value: totalAssets, trend: addedLastWeek, type: 'up' },
         assigned: { value: assignedAssets, trend: assetsAssignedToday, type: 'up' },
@@ -326,7 +324,10 @@ router.get('/advanced', authenticate, async (req, res) => {
         server: 'Optimal',
         backup: 'Completed 2h ago'
       }
-    });
+    };
+
+    memoryCache.set('dashboard:advanced', advancedPayload, 20);
+    res.json(advancedPayload);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

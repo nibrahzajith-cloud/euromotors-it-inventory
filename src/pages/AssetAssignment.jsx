@@ -30,22 +30,6 @@ function DraggableAsset({ asset }) {
         <p className="font-extrabold text-sm text-slate-900 dark:text-white">{asset.assetCode}</p>
         <p className="text-xs text-slate-500 dark:text-slate-400">{asset.model}</p>
       </div>
-      {/* Handover Printable Document Modal */}
-      {handoverDocAssignment && (
-        <HandoverPrintModal
-          assignment={handoverDocAssignment}
-          onClose={() => setHandoverDocAssignment(null)}
-        />
-      )}
-
-      {/* Asset Return & Accessories Verification Modal */}
-      {returnVerificationAssignment && (
-        <AssetReturnVerificationModal
-          assignment={returnVerificationAssignment}
-          onClose={() => setReturnVerificationAssignment(null)}
-          onConfirm={handleConfirmReturn}
-        />
-      )}
     </div>
   );
 }
@@ -750,6 +734,23 @@ export default function AssetAssignment() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Handover Printable Document Modal */}
+      {handoverDocAssignment && (
+        <HandoverPrintModal
+          assignment={handoverDocAssignment}
+          onClose={() => setHandoverDocAssignment(null)}
+        />
+      )}
+
+      {/* Asset Return & Accessories Verification Modal */}
+      {returnVerificationAssignment && (
+        <AssetReturnVerificationModal
+          assignment={returnVerificationAssignment}
+          onClose={() => setReturnVerificationAssignment(null)}
+          onConfirm={handleConfirmReturn}
+        />
       )}
     </div>
   );

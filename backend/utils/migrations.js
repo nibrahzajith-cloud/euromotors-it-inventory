@@ -70,6 +70,17 @@ async function applyMigrations() {
     'CREATE INDEX IF NOT EXISTS idx_assignment_asset ON "AssetAssignment"("assetId")',
     'CREATE INDEX IF NOT EXISTS idx_assignment_employee ON "AssetAssignment"("employeeId")',
     'CREATE INDEX IF NOT EXISTS idx_assignment_status ON "AssetAssignment"("status")',
+    'CREATE INDEX IF NOT EXISTS idx_assignment_assigned_date ON "AssetAssignment"("assignedDate" DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_assignment_returned_date ON "AssetAssignment"("returnedDate" DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_asset_assignment_type ON "Asset"("assignmentType")',
+    'CREATE INDEX IF NOT EXISTS idx_asset_warranty ON "Asset"("warrantyExpiryDate")',
+    'CREATE INDEX IF NOT EXISTS idx_asset_serial ON "Asset"("serialNumber")',
+    'CREATE INDEX IF NOT EXISTS idx_asset_code ON "Asset"("assetCode")',
+    'CREATE INDEX IF NOT EXISTS idx_maintenance_status ON "MaintenanceLog"("status")',
+    'CREATE INDEX IF NOT EXISTS idx_maintenance_created ON "MaintenanceLog"("createdAt" DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_maintenance_asset ON "MaintenanceLog"("assetId")',
+    'CREATE INDEX IF NOT EXISTS idx_employee_email ON "Employee"("email")',
+    'CREATE INDEX IF NOT EXISTS idx_employee_code ON "Employee"("employeeCode")',
     'CREATE INDEX IF NOT EXISTS idx_document_asset ON "AssetDocument"("assetId")'
   ];
 
