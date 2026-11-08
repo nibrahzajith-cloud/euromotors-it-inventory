@@ -146,6 +146,12 @@ model Asset {
   remarks         String?
   accessories     Json?
 
+  // Valuation in Sri Lankan Rupees (LKR)
+  purchasePrice   Float?
+  estimatedValue  Float?
+  valuationSource String?
+  valuationDate   DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

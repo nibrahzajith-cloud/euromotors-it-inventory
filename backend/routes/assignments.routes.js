@@ -155,94 +155,129 @@ router.put('/:id', requirePermission('ASSIGN_ASSETS'), async (req, res) => {
          employee: { include: { department: true } }
        }
     });
-    if (!oldAssignment) return res.status(404).json({ error: 'Assignment not found' });
-
-    const updateData = { ...req.body };
-    if (updateData.returnedDate) {
-      updateData.returnedDate = new Date(updateData.returnedDate);
-    }
-    if (updateData.assignedDate) {
-      updateData.assignedDate = new Date(updateData.assignedDate);
-    }
-    if (updateData.returnAccessories !== undefined) {
-      updateData.returnAccessories = updateData.returnAccessories;
-    }
-    if (updateData.accessories !== undefined) {
-      updateData.accessories = updateData.accessories;
-    }
-
-    const record = await prisma.assetAssignment.update({ 
-       where: { id: req.params.id }, 
-       data: updateData,
-       include: { 
-         asset: true, 
-         employee: { include: { department: true } }
-       }
-    });
+    if (!oldAssignment) return res.status(404).json({ error: 'Assignment record not found.' });
 
     const isMarkingReturned = String(req.body.status || '').toUpperCase() === 'RETURNED';
 
-    if (isMarkingReturned && oldAssignment.status !== 'RETURNED') {
-       const assetIdToUpdate = oldAssignment.assetId || record.assetId;
-       const ast = record.asset || oldAssignment.asset;
-       const emp = record.employee || oldAssignment.employee;
-       const empName = emp ? emp.fullName : 'Employee';
-       const empCode = emp?.employeeCode || '';
-       const astCode = ast ? ast.assetCode : 'Asset';
+    // Prevent duplicate returns
+    if (isMarkingReturned && oldAssignment.status === 'RETURNED') {
+      const returnDateStr = oldAssignment.returnedDate ? new Date(oldAssignment.returnedDate).toLocaleDateString() : '';
+      return res.status(400).json({ 
+        error: `This asset assignment has already been returned${returnDateStr ? ` on ${returnDateStr}` : ''}. Duplicate returns are not permitted.` 
+      });
+    }
 
-       // 1. Return asset to available stock in store
-       await prisma.asset.update({
-          where: { id: assetIdToUpdate },
-          data: { 
-            status: 'AVAILABLE', 
-            assignedEmployeeId: null, 
-            assignmentType: 'STORE' 
+    // Whitelist and format only valid fields for AssetAssignment
+    const assignmentUpdateData = {};
+    if (req.body.status !== undefined) assignmentUpdateData.status = req.body.status;
+    if (req.body.returnedDate !== undefined) {
+      assignmentUpdateData.returnedDate = req.body.returnedDate ? new Date(req.body.returnedDate) : new Date();
+    } else if (isMarkingReturned) {
+      assignmentUpdateData.returnedDate = new Date();
+    }
+    if (req.body.assignedDate !== undefined) {
+      assignmentUpdateData.assignedDate = new Date(req.body.assignedDate);
+    }
+    if (req.body.remarks !== undefined) assignmentUpdateData.remarks = req.body.remarks;
+    if (req.body.accessories !== undefined) assignmentUpdateData.accessories = req.body.accessories;
+    if (req.body.returnAccessories !== undefined) assignmentUpdateData.returnAccessories = req.body.returnAccessories;
+
+    const returnCondition = req.body.condition ? String(req.body.condition).trim() : null;
+    const assetIdToUpdate = oldAssignment.assetId;
+    const ast = oldAssignment.asset;
+    const emp = oldAssignment.employee;
+    const empName = emp ? emp.fullName : 'Employee';
+    const empCode = emp?.employeeCode || '';
+    const astCode = ast ? ast.assetCode : 'Asset';
+
+    let record;
+
+    if (isMarkingReturned) {
+      // Execute return as an atomic transaction
+      const [updatedAssignment] = await prisma.$transaction([
+        // 1. Update assignment record
+        prisma.assetAssignment.update({
+          where: { id: req.params.id },
+          data: assignmentUpdateData,
+          include: {
+            asset: true,
+            employee: { include: { department: true } }
           }
-       });
+        }),
+        // 2. Return asset to available stock in store and update condition if provided
+        prisma.asset.update({
+          where: { id: assetIdToUpdate },
+          data: {
+            status: 'AVAILABLE',
+            assignedEmployeeId: null,
+            assignmentType: 'STORE',
+            ...(returnCondition ? { condition: returnCondition } : {})
+          }
+        }),
+        // 3. Automatically close any other orphan active assignments for this asset
+        prisma.assetAssignment.updateMany({
+          where: { 
+            assetId: assetIdToUpdate, 
+            id: { not: req.params.id }, 
+            status: 'ACTIVE' 
+          },
+          data: { 
+            status: 'RETURNED', 
+            returnedDate: assignmentUpdateData.returnedDate || new Date() 
+          }
+        })
+      ]);
 
-       // 2. Automatically close any other orphan active assignments for this asset
-       await prisma.assetAssignment.updateMany({
-         where: { 
-           assetId: assetIdToUpdate, 
-           id: { not: record.id }, 
-           status: 'ACTIVE' 
-         },
-         data: { 
-           status: 'RETURNED', 
-           returnedDate: updateData.returnedDate || new Date() 
+      record = updatedAssignment;
+
+      // 4. Central Audit Log
+      await logAudit({
+        req,
+        action: 'RETURN',
+        module: 'ASSIGNMENTS',
+        entityType: 'ASSET',
+        entityId: assetIdToUpdate,
+        entityCode: astCode,
+        employeeOverride: emp ? {
+          id: emp.id,
+          fullName: emp.fullName,
+          departmentName: emp.department?.name || null
+        } : null,
+        oldValue: { status: 'ASSIGNED', condition: ast?.condition },
+        newValue: { 
+          status: 'AVAILABLE', 
+          condition: returnCondition || ast?.condition,
+          returnedDate: assignmentUpdateData.returnedDate,
+          returnAccessories: assignmentUpdateData.returnAccessories,
+          remarks: assignmentUpdateData.remarks
+        },
+        description: `Asset ${astCode} returned by ${empName}${empCode ? ` (${empCode})` : ''} - Checked in to Available store stock`
+      });
+
+      // 5. Asset Timeline Record
+      await logAssetTimeline({
+        assetId: assetIdToUpdate,
+        assetCode: astCode,
+        eventType: 'RETURNED',
+        title: 'Asset Returned',
+        description: `Returned by ${empName}${empCode ? ` (${empCode})` : ''}${assignmentUpdateData.remarks ? ` - Note: ${assignmentUpdateData.remarks}` : ''}`,
+        oldStatus: 'ASSIGNED',
+        newStatus: 'AVAILABLE',
+        employeeId: emp?.id || null,
+        employeeName: empName,
+        performedById: req.user?.id || null,
+        performedByName: req.user?.fullName || 'IT Staff'
+      });
+    } else {
+      // Normal update
+      record = await prisma.assetAssignment.update({ 
+         where: { id: req.params.id }, 
+         data: assignmentUpdateData,
+         include: { 
+           asset: true, 
+           employee: { include: { department: true } }
          }
-       });
-
-       // 3. Central Audit Log
-       await logAudit({
-         req,
-         action: 'RETURN',
-         module: 'ASSIGNMENTS',
-         entityType: 'ASSET',
-         entityId: assetIdToUpdate,
-         entityCode: astCode,
-         employeeOverride: emp ? {
-           id: emp.id,
-           fullName: emp.fullName,
-           departmentName: emp.department?.name || null
-         } : null,
-         description: `Asset ${astCode} returned by ${empName}${empCode ? ` (${empCode})` : ''}`
-       });
-
-       // 4. Asset Timeline Record
-       await logAssetTimeline({
-         assetId: assetIdToUpdate,
-         assetCode: astCode,
-         eventType: 'RETURNED',
-         title: 'Asset Returned',
-         description: `Returned by ${empName}${empCode ? ` (${empCode})` : ''}`,
-         oldStatus: 'ASSIGNED',
-         newStatus: 'AVAILABLE',
-         employeeId: emp?.id || null,
-         employeeName: empName,
-         performedById: req.user.id,
-         performedByName: req.user.fullName
-       });
+      });
     }
 
     memoryCache.delPrefix('assignments');
@@ -250,7 +285,8 @@ router.put('/:id', requirePermission('ASSIGN_ASSETS'), async (req, res) => {
     memoryCache.delPrefix('dashboard');
     res.json(record);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[ASSIGNMENT_RETURN_ERROR]', err);
+    res.status(500).json({ error: err.message || 'Failed to complete asset return transaction.' });
   }
 });
 

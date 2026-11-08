@@ -285,18 +285,6 @@ export default function AssetAssignment() {
   };
 
   const handleConfirmReturn = async ({ assignmentId, assetId, returnAccessories, condition, remarks }) => {
-    // 1. Instant optimistic modal close and UI update
-    setReturnVerificationAssignment(null);
-    const prevAssignments = [...assignments];
-    const prevAssets = [...assets];
-
-    setAssignments(prev => prev.map(a => a.id === assignmentId ? { ...a, status: 'RETURNED' } : a));
-    if (assetId) {
-      setAssets(prev => prev.map(a => a.id === assetId ? { ...a, status: 'AVAILABLE', assignedEmployeeId: null, assignedEmployee: null } : a));
-    }
-    showToast('Asset returned & accessories verified.', 'success');
-
-    // 2. Background persistence
     try {
       const token = localStorage.getItem('token');
       const res = await fetch(`${API_URL}/assignments/${assignmentId}`, {
@@ -306,31 +294,39 @@ export default function AssetAssignment() {
           status: 'RETURNED',
           returnedDate: new Date().toISOString(),
           returnAccessories,
+          condition,
           remarks
         })
       });
-      if (!res.ok) throw new Error('Return failed.');
 
-      // Update physical condition if specified
-      if (condition && assetId) {
-        try {
-          await fetch(`${API_URL}/assets/${assetId}`, {
-            method: 'PUT',
-            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ condition })
-          });
-        } catch (_) {}
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || errJson.message || 'Failed to complete return transaction.');
       }
 
+      const updatedRecord = await res.json();
+
+      // Close modal and update state after verified DB transaction
+      setReturnVerificationAssignment(null);
+      setAssignments(prev => prev.map(a => a.id === assignmentId ? { ...a, ...updatedRecord, status: 'RETURNED' } : a));
+      if (assetId) {
+        setAssets(prev => prev.map(a => a.id === assetId ? { 
+          ...a, 
+          status: 'AVAILABLE', 
+          assignedEmployeeId: null, 
+          assignedEmployee: null, 
+          assignmentType: 'STORE',
+          ...(condition ? { condition } : {})
+        } : a));
+      }
+
+      showToast('Asset returned successfully and inventory stock updated.', 'success');
       localStorage.removeItem('analyticsDashboardCache');
       localStorage.removeItem('assetsCache');
       localStorage.removeItem('assignmentsCache');
       localStorage.removeItem('employeesCache');
       fetchData();
     } catch(err) {
-      // Revert if error
-      setAssignments(prevAssignments);
-      setAssets(prevAssets);
       showToast(err.message || 'Return failed', 'error');
     }
   };
@@ -338,26 +334,37 @@ export default function AssetAssignment() {
   const handleReturn = async (id) => {
     if (!await confirm({ title: 'Confirm Check-in', message: 'Return this hardware asset back to Available Store stock?', confirmText: 'Check-in Asset' })) return;
     
-    // 1. Instant optimistic update
-    const prevAssignments = [...assignments];
-    setAssignments(prev => prev.map(a => a.id === id ? { ...a, status: 'RETURNED' } : a));
-    showToast('Asset returned to available store stock.', 'success');
-
-    // 2. Background sync
     try {
       const res = await fetch(`${API_URL}/assignments/${id}`, {
         method: 'PUT',
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'RETURNED', returnedDate: new Date().toISOString() })
       });
-      if (!res.ok) throw new Error('Return failed.');
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || errJson.message || 'Failed to return asset.');
+      }
+
+      const updatedRecord = await res.json();
+      setAssignments(prev => prev.map(a => a.id === id ? { ...a, ...updatedRecord, status: 'RETURNED' } : a));
+      if (updatedRecord.assetId) {
+        setAssets(prev => prev.map(a => a.id === updatedRecord.assetId ? { 
+          ...a, 
+          status: 'AVAILABLE', 
+          assignedEmployeeId: null, 
+          assignedEmployee: null, 
+          assignmentType: 'STORE' 
+        } : a));
+      }
+
+      showToast('Asset returned to available store stock.', 'success');
       localStorage.removeItem('analyticsDashboardCache');
       localStorage.removeItem('assetsCache');
       localStorage.removeItem('assignmentsCache');
       localStorage.removeItem('employeesCache');
       fetchData();
     } catch(err) {
-      setAssignments(prevAssignments);
       showToast(err.message || 'Return failed', 'error');
     }
   };

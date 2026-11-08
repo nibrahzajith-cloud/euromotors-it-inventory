@@ -6,6 +6,7 @@ const { generateEmployeeCode } = require('../utils/codeGenerator');
 const { logAudit } = require('../utils/logger');
 const memoryCache = require('../utils/cache');
 const crypto = require('crypto');
+const { computeEmployeeValuationSummary } = require('../utils/marketValuation');
 
 router.use(authenticate);
 
@@ -16,16 +17,188 @@ router.get('/', async (req, res) => {
       const cached = memoryCache.get('employees:all');
       if (cached) return res.json(cached);
     }
-    const records = await prisma.employee.findMany({ 
-      include: { 
-        department: true, 
+    const records = await prisma.employee.findMany({
+      include: {
+        department: true,
         location: true,
         assignedAssets: true,
-        assignments: { where: { status: 'ACTIVE' } }
-      } 
+        assignments: {
+          where: { status: 'ACTIVE' },
+          include: { asset: true }
+        }
+      }
     });
-    memoryCache.set('employees:all', records, 30);
-    res.json(records);
+
+    // Compute valuation metrics for each employee based on current assigned hardware
+    const enrichedRecords = records.map(emp => {
+      // Collect all actively assigned assets (deduplicated)
+      const assetMap = new Map();
+      if (Array.isArray(emp.assignedAssets)) {
+        emp.assignedAssets.forEach(ast => {
+          if (ast && (ast.status === 'ASSIGNED' || !ast.status)) {
+            assetMap.set(ast.id, ast);
+          }
+        });
+      }
+      if (Array.isArray(emp.assignments)) {
+        emp.assignments.forEach(asg => {
+          if (asg && asg.asset && asg.status === 'ACTIVE') {
+            assetMap.set(asg.asset.id, asg.asset);
+          }
+        });
+      }
+
+      const activeList = Array.from(assetMap.values());
+      const valSummary = computeEmployeeValuationSummary(activeList);
+
+      return {
+        ...emp,
+        assignedAssetsCount: activeList.length,
+        totalAssetValueLKR: valSummary.totalValueLKR,
+        formattedAssetValue: valSummary.formattedTotalLKR,
+        valuationSummary: valSummary
+      };
+    });
+
+    memoryCache.set('employees:all', enrichedRecords, 30);
+    res.json(enrichedRecords);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/employees/:id/handover — Comprehensive live data for Employee IT Asset Handover Document
+router.get('/:id/handover', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const employee = await prisma.employee.findUnique({
+      where: { id },
+      include: {
+        department: true,
+        location: true
+      }
+    });
+
+    if (!employee) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+
+    // 1. Fetch active assignments for this employee
+    const activeAssignments = await prisma.assetAssignment.findMany({
+      where: {
+        employeeId: id,
+        status: 'ACTIVE'
+      },
+      include: {
+        asset: {
+          include: {
+            department: true,
+            location: true
+          }
+        }
+      },
+      orderBy: { assignedDate: 'desc' }
+    });
+
+    // 2. Fetch directly assigned assets where assignedEmployeeId = employee.id
+    const directlyAssignedAssets = await prisma.asset.findMany({
+      where: {
+        assignedEmployeeId: id,
+        status: { not: 'AVAILABLE' }
+      },
+      include: {
+        department: true,
+        location: true
+      }
+    });
+
+    // 3. Merge and deduplicate assets
+    const assetMap = new Map();
+
+    // Add directly assigned assets first
+    for (const ast of directlyAssignedAssets) {
+      assetMap.set(ast.id, {
+        id: ast.id,
+        assetCode: ast.assetCode,
+        deviceType: ast.deviceType,
+        brand: ast.brand || '',
+        model: ast.model || '',
+        serialNumber: ast.serialNumber || 'N/A',
+        condition: ast.condition || 'Good',
+        status: ast.status,
+        assignedDate: ast.updatedAt || ast.createdAt,
+        remarks: ast.remarks || '',
+        accessories: Array.isArray(ast.accessories) ? ast.accessories : [],
+        assignmentId: null
+      });
+    }
+
+    // Overlay or add assets from active assignments (contains precise assignment date & accessories)
+    for (const asg of activeAssignments) {
+      if (asg.asset && asg.asset.status !== 'AVAILABLE') {
+        const ast = asg.asset;
+        assetMap.set(ast.id, {
+          id: ast.id,
+          assetCode: ast.assetCode,
+          deviceType: ast.deviceType,
+          brand: ast.brand || '',
+          model: ast.model || '',
+          serialNumber: ast.serialNumber || 'N/A',
+          condition: ast.condition || 'Good',
+          status: ast.status,
+          assignedDate: asg.assignedDate || ast.updatedAt,
+          remarks: asg.remarks || ast.remarks || '',
+          accessories: Array.isArray(asg.accessories) && asg.accessories.length > 0
+            ? asg.accessories
+            : (Array.isArray(ast.accessories) ? ast.accessories : []),
+          assignmentId: asg.id
+        });
+      }
+    }
+
+    const assignedAssets = Array.from(assetMap.values()).sort((a, b) =>
+      (a.assetCode || '').localeCompare(b.assetCode || '', undefined, { numeric: true })
+    );
+
+    // Compute comprehensive valuation in Sri Lankan Rupees (LKR)
+    const valuationSummary = computeEmployeeValuationSummary(assignedAssets);
+
+    const now = new Date();
+    const dateCode = now.toISOString().slice(0, 10).replace(/-/g, '');
+    const cleanEmpCode = (employee.employeeCode || 'EMP').replace(/[^A-Za-z0-9]/g, '');
+    const handoverReference = `EM-HO-${cleanEmpCode}-${dateCode}`;
+
+    res.json({
+      employee,
+      assignedAssets: valuationSummary.enrichedAssets,
+      assetCount: valuationSummary.totalAssignedAssets,
+      valuationSummary,
+      handoverReference,
+      generatedAt: now.toISOString()
+    });
+  } catch (err) {
+    console.error('Error fetching employee handover data:', err);
+    res.status(500).json({ error: err.message || 'Failed to fetch employee handover records.' });
+  }
+});
+
+// GET /api/employees/:id
+router.get('/:id', async (req, res) => {
+  try {
+    const record = await prisma.employee.findUnique({
+      where: { id: req.params.id },
+      include: {
+        department: true,
+        location: true,
+        assignedAssets: true,
+        assignments: {
+          where: { status: 'ACTIVE' },
+          include: { asset: true }
+        }
+      }
+    });
+    if (!record) return res.status(404).json({ error: 'Employee not found' });
+    res.json(record);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -48,9 +221,9 @@ router.post('/', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
     const [existing, generatedCode] = await Promise.all([
       (rawPayload.email && typeof rawPayload.email === 'string' && rawPayload.email.trim())
         ? prisma.employee.findFirst({
-            where: { email: rawPayload.email.trim(), status: 'ACTIVE' },
-            select: { id: true, fullName: true }
-          })
+          where: { email: rawPayload.email.trim(), status: 'ACTIVE' },
+          select: { id: true, fullName: true }
+        })
         : Promise.resolve(null),
       (rawPayload.employeeCode && String(rawPayload.employeeCode).trim() !== '')
         ? Promise.resolve(String(rawPayload.employeeCode).trim())
@@ -85,7 +258,7 @@ router.post('/', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
     let record;
     const t4 = Date.now();
     try {
-      record = await prisma.employee.create({ 
+      record = await prisma.employee.create({
         data: {
           ...dataToCreate,
           employeeCode
@@ -100,7 +273,7 @@ router.post('/', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
       // If code collision occurred, retry with freshly incremented code
       if (createErr.code === 'P2002' && (createErr.message?.includes('employeeCode') || createErr.meta?.target?.includes('employeeCode'))) {
         employeeCode = await generateEmployeeCode(prisma);
-        record = await prisma.employee.create({ 
+        record = await prisma.employee.create({
           data: {
             ...dataToCreate,
             employeeCode
@@ -184,8 +357,8 @@ router.put('/:id', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
 
     let record;
     try {
-      record = await prisma.employee.update({ 
-        where: { id: req.params.id }, 
+      record = await prisma.employee.update({
+        where: { id: req.params.id },
         data: relationData,
         include: {
           department: true,
@@ -199,8 +372,8 @@ router.put('/:id', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
 
       try {
         // Fallback 1: try fields with safe relation linking
-        record = await prisma.employee.update({ 
-          where: { id: req.params.id }, 
+        record = await prisma.employee.update({
+          where: { id: req.params.id },
           data: {
             ...dataToUpdate,
             ...(hasAvatar ? { avatarUrl: cleanAvatar } : {})

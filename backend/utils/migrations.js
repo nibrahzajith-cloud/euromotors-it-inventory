@@ -55,7 +55,20 @@ async function applyMigrations() {
     console.warn('[MIGRATION] AssetAssignment accessories columns notice:', err.message);
   }
 
-  // 5. High-performance enterprise indexes
+  try {
+    // 5. Add valuation columns to Asset for Sri Lankan Rupee (LKR) tracking
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE "Asset"
+        ADD COLUMN IF NOT EXISTS "purchasePrice" NUMERIC(12, 2),
+        ADD COLUMN IF NOT EXISTS "estimatedValue" NUMERIC(12, 2),
+        ADD COLUMN IF NOT EXISTS "valuationSource" TEXT,
+        ADD COLUMN IF NOT EXISTS "valuationDate" TIMESTAMP;
+    `);
+  } catch (err) {
+    console.warn('[MIGRATION] Asset valuation columns notice:', err.message);
+  }
+
+  // 6. High-performance enterprise indexes
   const indexQueries = [
     'CREATE INDEX IF NOT EXISTS idx_asset_status ON "Asset"("status")',
     'CREATE INDEX IF NOT EXISTS idx_asset_device_type ON "Asset"("deviceType")',
