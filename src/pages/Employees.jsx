@@ -290,13 +290,62 @@ export default function Employees({ defaultOpenAdd = false }) {
     e.preventDefault();
     if (submitting || uploadingAvatar) return;
 
+    const previousEmployees = [...employees];
+    const isEditing = !!editingEmp;
+    const editingTarget = editingEmp;
+
+    // Build payload
+    const payload = {
+      ...formData,
+      email: formData.email?.trim() === '' ? null : formData.email?.trim(),
+      phone: formData.phone?.trim() === '' ? null : formData.phone?.trim(),
+      departmentId: formData.departmentId && formData.departmentId.trim() !== '' ? formData.departmentId : null,
+      locationId: formData.locationId && formData.locationId.trim() !== '' ? formData.locationId : null,
+      avatarUrl: formData.avatarUrl ? formData.avatarUrl.trim() : null
+    };
+
+    const targetDept = departments.find(d => d.id === payload.departmentId) || null;
+    const targetLoc = locations.find(l => l.id === payload.locationId) || null;
+
+    // Optimistic UI update: Instant modal dismissal and instant success feedback
+    const tempId = isEditing ? editingTarget.id : `temp_${Date.now()}`;
+    const optimisticRecord = {
+      ...(isEditing ? editingTarget : {}),
+      ...payload,
+      id: tempId,
+      employeeCode: isEditing ? editingTarget.employeeCode : 'Generating...',
+      department: targetDept,
+      location: targetLoc,
+      assignedAssets: isEditing ? (editingTarget.assignedAssets || []) : [],
+      assignments: isEditing ? (editingTarget.assignments || []) : [],
+      createdAt: isEditing ? editingTarget.createdAt : new Date().toISOString()
+    };
+
+    if (isEditing) {
+      setEmployees(prev => {
+        const next = prev.map(emp => emp.id === editingTarget.id ? optimisticRecord : emp);
+        try { localStorage.setItem('employeesCache', JSON.stringify(next)); } catch (e) {}
+        return next;
+      });
+      showToast('Employee profile updated!', 'success');
+    } else {
+      setEmployees(prev => {
+        const next = [optimisticRecord, ...prev];
+        try { localStorage.setItem('employeesCache', JSON.stringify(next)); } catch (e) {}
+        return next;
+      });
+      showToast('Employee registered successfully!', 'success');
+    }
+
+    closeModal();
+
     try {
       setSubmitting(true);
       const token = localStorage.getItem('token');
-      const url = editingEmp 
-        ? `${API_URL}/employees/${editingEmp.id}` 
+      const url = isEditing 
+        ? `${API_URL}/employees/${editingTarget.id}` 
         : `${API_URL}/employees`;
-      const method = editingEmp ? 'PUT' : 'POST';
+      const method = isEditing ? 'PUT' : 'POST';
 
       const res = await fetch(url, {
         method,
@@ -304,45 +353,31 @@ export default function Employees({ defaultOpenAdd = false }) {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json' 
         },
-        body: JSON.stringify({
-          ...formData,
-          email: formData.email?.trim() === '' ? null : formData.email?.trim(),
-          phone: formData.phone?.trim() === '' ? null : formData.phone?.trim(),
-          departmentId: formData.departmentId && formData.departmentId.trim() !== '' ? formData.departmentId : null,
-          locationId: formData.locationId && formData.locationId.trim() !== '' ? formData.locationId : null,
-          avatarUrl: formData.avatarUrl ? formData.avatarUrl.trim() : null
-        })
+        body: JSON.stringify(payload)
       });
 
       if (!res.ok) {
-        const errorData = await res.json();
+        const errorData = await res.json().catch(() => ({}));
         throw new Error(errorData.error || 'Failed to save employee');
       }
 
       const savedEmp = await res.json();
 
-      // Immediately update local cache and state with zero lag
-      if (editingEmp) {
-        setEmployees(prev => {
-          const updated = prev.map(emp => emp.id === savedEmp.id ? { ...emp, ...savedEmp } : emp);
-          try { localStorage.setItem('employeesCache', JSON.stringify(updated)); } catch (e) {}
-          return updated;
-        });
-      } else {
-        setEmployees(prev => {
-          const updated = [savedEmp, ...prev];
-          try { localStorage.setItem('employeesCache', JSON.stringify(updated)); } catch (e) {}
-          return updated;
-        });
-      }
+      // Seamlessly merge the final DB record with verified code and relations
+      setEmployees(prev => {
+        const next = prev.map(emp => emp.id === tempId ? { ...optimisticRecord, ...savedEmp } : emp);
+        try { localStorage.setItem('employeesCache', JSON.stringify(next)); } catch (e) {}
+        return next;
+      });
 
-      showToast(editingEmp ? 'Employee profile updated!' : 'Employee registered successfully!', 'success');
-      closeModal();
-
-      // Background sync to ensure fresh relation metrics
+      // Background silent refresh for full metrics
       fetchData();
     } catch (err) {
-      showToast(err.message, 'error');
+      // Revert optimistic state and restore modal if error occurred
+      setEmployees(previousEmployees);
+      try { localStorage.setItem('employeesCache', JSON.stringify(previousEmployees)); } catch (e) {}
+      openModal(editingTarget);
+      showToast(err.message || 'Operation failed', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -364,17 +399,41 @@ export default function Employees({ defaultOpenAdd = false }) {
       if (input !== null) showToast('Deletion cancelled. You must type "DELETE".', 'info');
       return;
     }
+
+    // 1. Instant optimistic UI update & zero-latency message
+    const previousEmployees = [...employees];
+    const previousSelected = new Set(selectedIds);
+
+    setEmployees(prev => {
+      const next = prev.filter(emp => emp.id !== id);
+      try { localStorage.setItem('employeesCache', JSON.stringify(next)); } catch (e) {}
+      return next;
+    });
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    showToast('Employee permanently removed from registry.', 'success');
+
+    // 2. Background server deletion
     try {
       const token = localStorage.getItem('token');
       const res = await fetch(`${API_URL}/employees/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (!res.ok) throw new Error('Failed to delete employee');
-      await fetchData();
-      showToast('Employee permanently removed from registry.', 'success');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to delete employee');
+      }
+      fetchData();
     } catch (err) {
-      showToast(err.message, 'error');
+      // Revert on error
+      setEmployees(previousEmployees);
+      setSelectedIds(previousSelected);
+      try { localStorage.setItem('employeesCache', JSON.stringify(previousEmployees)); } catch (e) {}
+      showToast(err.message || 'Failed to delete employee', 'error');
     }
   };
 
@@ -383,10 +442,11 @@ export default function Employees({ defaultOpenAdd = false }) {
       showToast('Action Restricted: Please ask Super Admin to delete these entries.', 'error');
       return;
     }
+    const count = selectedIds.size;
     const input = await confirm({
       type: 'prompt',
       title: 'Bulk Delete',
-      message: `Are you sure you want to permanently delete ${selectedIds.size} employees? Type "DELETE" to confirm.`,
+      message: `Are you sure you want to permanently delete ${count} employees? Type "DELETE" to confirm.`,
       inputPlaceholder: 'DELETE',
       confirmText: 'Delete All'
     });
@@ -395,22 +455,35 @@ export default function Employees({ defaultOpenAdd = false }) {
       return;
     }
     
+    // 1. Instant optimistic UI update & instant toast message
+    const previousEmployees = [...employees];
+    const previousSelected = new Set(selectedIds);
+    const idsToDelete = Array.from(selectedIds);
+
+    setEmployees(prev => {
+      const next = prev.filter(emp => !selectedIds.has(emp.id));
+      try { localStorage.setItem('employeesCache', JSON.stringify(next)); } catch (e) {}
+      return next;
+    });
+    setSelectedIds(new Set());
+    showToast(`Successfully deleted ${count} employees.`, 'success');
+
+    // 2. Parallel background deletion
     try {
       const token = localStorage.getItem('token');
-      let successCount = 0;
-      
-      for (const id of selectedIds) {
-        const res = await fetch(`${API_URL}/employees/${id}`, {
-          method: 'DELETE',
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (res.ok) successCount++;
-      }
-      
-      await fetchData();
-      setSelectedIds(new Set());
-      showToast(`Successfully deleted ${successCount} employees.`, 'success');
+      await Promise.all(
+        idsToDelete.map(id =>
+          fetch(`${API_URL}/employees/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+          })
+        )
+      );
+      fetchData();
     } catch (err) {
+      setEmployees(previousEmployees);
+      setSelectedIds(previousSelected);
+      try { localStorage.setItem('employeesCache', JSON.stringify(previousEmployees)); } catch (e) {}
       showToast('Failed to delete some employees.', 'error');
     }
   };

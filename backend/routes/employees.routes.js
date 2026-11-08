@@ -33,49 +33,42 @@ router.get('/', async (req, res) => {
 
 // Admin and IT Officer can modify
 router.post('/', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
+  const tStart = Date.now();
+  console.log('[PERF] POST /employees started');
   try {
     const rawPayload = { ...req.body };
 
-    // Duplicate prevention: check if active employee with same email already exists
-    if (rawPayload.email && typeof rawPayload.email === 'string' && rawPayload.email.trim()) {
-      const existing = await prisma.employee.findFirst({
-        where: { email: rawPayload.email.trim(), status: 'ACTIVE' }
-      });
-      if (existing) {
-        return res.status(409).json({ error: `An active employee with email "${rawPayload.email.trim()}" already exists (${existing.fullName}).` });
-      }
+    const debounceKey = `emp_debounce:${rawPayload.fullName?.trim()}:${rawPayload.departmentId || ''}`;
+    const cachedRecent = memoryCache.get(debounceKey);
+    if (cachedRecent) {
+      return res.status(200).json(cachedRecent);
     }
 
-    // Debounce check: prevent double-clicks within 3 seconds for identical name + department
-    if (rawPayload.fullName) {
-      const recentDuplicate = await prisma.employee.findFirst({
-        where: {
-          fullName: rawPayload.fullName.trim(),
-          departmentId: rawPayload.departmentId || null,
-          createdAt: { gte: new Date(Date.now() - 3000) }
-        }
-      });
-      if (recentDuplicate) {
-        return res.status(200).json(recentDuplicate);
-      }
+    // Execute duplicate email check and employee code generation concurrently
+    const [existing, generatedCode] = await Promise.all([
+      (rawPayload.email && typeof rawPayload.email === 'string' && rawPayload.email.trim())
+        ? prisma.employee.findFirst({
+            where: { email: rawPayload.email.trim(), status: 'ACTIVE' },
+            select: { id: true, fullName: true }
+          })
+        : Promise.resolve(null),
+      (rawPayload.employeeCode && String(rawPayload.employeeCode).trim() !== '')
+        ? Promise.resolve(String(rawPayload.employeeCode).trim())
+        : generateEmployeeCode(prisma)
+    ]);
+
+    if (existing) {
+      return res.status(409).json({ error: `An active employee with email "${rawPayload.email.trim()}" already exists (${existing.fullName}).` });
     }
+
+    const employeeCode = generatedCode;
 
     const deptId = rawPayload.departmentId && String(rawPayload.departmentId).trim() !== '' ? String(rawPayload.departmentId).trim() : null;
     const locId = rawPayload.locationId && String(rawPayload.locationId).trim() !== '' ? String(rawPayload.locationId).trim() : null;
     const avatarUrl = rawPayload.avatarUrl && String(rawPayload.avatarUrl).trim() !== '' ? String(rawPayload.avatarUrl).trim() : null;
 
-    // Verify deptId and locId exist to ensure clean relation linking
-    let validDeptConnect = null;
-    if (deptId) {
-      const dept = await prisma.department.findUnique({ where: { id: deptId }, select: { id: true } });
-      if (dept) validDeptConnect = { connect: { id: dept.id } };
-    }
-
-    let validLocConnect = null;
-    if (locId) {
-      const loc = await prisma.location.findUnique({ where: { id: locId }, select: { id: true } });
-      if (loc) validLocConnect = { connect: { id: loc.id } };
-    }
+    const validDeptConnect = deptId ? { connect: { id: deptId } } : null;
+    const validLocConnect = locId ? { connect: { id: locId } } : null;
 
     // Build canonical relation-connected data object
     const dataToCreate = {
@@ -90,54 +83,42 @@ router.post('/', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
     };
 
     let record;
+    const t4 = Date.now();
     try {
-      record = await prisma.$transaction(async (tx) => {
-        const employeeCode = rawPayload.employeeCode && String(rawPayload.employeeCode).trim() !== '' 
-          ? String(rawPayload.employeeCode).trim() 
-          : await generateEmployeeCode(tx);
-
-        return await tx.employee.create({ 
-          data: {
-            ...dataToCreate,
-            employeeCode
-          },
-          include: {
-            department: true,
-            location: true,
-            assignedAssets: true,
-            assignments: { where: { status: 'ACTIVE' } }
-          }
-        });
-      }, {
-        maxWait: 5000,
-        timeout: 10000
+      record = await prisma.employee.create({ 
+        data: {
+          ...dataToCreate,
+          employeeCode
+        },
+        include: {
+          department: true,
+          location: true
+        }
       });
+      console.log(`[PERF] prisma.employee.create took ${Date.now() - t4}ms`);
     } catch (createErr) {
-      console.warn('Prisma create standard invocation failed, attempting resilient fallback:', createErr.message);
-
-      const employeeCode = rawPayload.employeeCode && String(rawPayload.employeeCode).trim() !== '' 
-        ? String(rawPayload.employeeCode).trim() 
-        : await generateEmployeeCode(prisma);
-
-      try {
-        record = await prisma.employee.create({
+      // If code collision occurred, retry with freshly incremented code
+      if (createErr.code === 'P2002' && (createErr.message?.includes('employeeCode') || createErr.meta?.target?.includes('employeeCode'))) {
+        employeeCode = await generateEmployeeCode(prisma);
+        record = await prisma.employee.create({ 
           data: {
             ...dataToCreate,
             employeeCode
           },
           include: {
             department: true,
-            location: true,
-            assignedAssets: true,
-            assignments: { where: { status: 'ACTIVE' } }
+            location: true
           }
         });
-      } catch (fallbackErr) {
-        console.error('All standard Prisma create attempts failed:', fallbackErr);
-        throw fallbackErr;
+      } else {
+        throw createErr;
       }
     }
 
+    record.assignedAssets = [];
+    record.assignments = [];
+
+    const t5 = Date.now();
     await logAudit({
       req,
       action: 'CREATE',
@@ -149,7 +130,9 @@ router.post('/', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
       newValue: record,
       description: `Registered employee: ${record.fullName} (${record.employeeCode})`
     });
+    console.log(`[PERF] logAudit took ${Date.now() - t5}ms`);
 
+    memoryCache.set(debounceKey, record, 3);
     memoryCache.delPrefix('employees');
     memoryCache.delPrefix('dashboard');
     res.status(201).json(record);

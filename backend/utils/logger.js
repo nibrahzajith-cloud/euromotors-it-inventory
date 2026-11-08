@@ -65,7 +65,7 @@ const getChangedFields = (oldVal, newVal) => {
  * Guarantees authenticated user attribution, IP, User-Agent, correlation ID,
  * Sri Lanka time compatibility, and differential state tracking.
  */
-const logAudit = async ({
+const logAudit = ({
   req,
   userOverride,
   employeeOverride,
@@ -84,114 +84,112 @@ const logAudit = async ({
   activityType = null,
   executedBy = null
 }) => {
-  try {
-    // 1. Identify Actor
-    const userId = userOverride?.id || req?.user?.id || null;
-    let userName = userOverride?.fullName || userOverride?.name || req?.user?.fullName || req?.user?.name || null;
-    let userEmail = userOverride?.email || req?.user?.email || null;
-    let userRole = userOverride?.role || req?.user?.role || null;
+  // Capture request values synchronously before request stream/context terminates
+  const userId = userOverride?.id || req?.user?.id || null;
+  let userName = userOverride?.fullName || userOverride?.name || req?.user?.fullName || req?.user?.name || null;
+  let userEmail = userOverride?.email || req?.user?.email || null;
+  let userRole = userOverride?.role || req?.user?.role || null;
+  const employeeId = employeeOverride?.id || null;
+  const employeeName = employeeOverride?.fullName || null;
+  const departmentName = employeeOverride?.departmentName || null;
+  const finalActivityType = activityType || (userId ? 'HUMAN' : 'SYSTEM');
+  const finalExecutedBy = executedBy || (userId ? 'USER' : 'SYSTEM');
+  const initiatedById = userId || null;
 
-    // Fallback: If userId exists but userName/email are missing, lookup user from DB cache
-    if (userId && (!userName || !userEmail)) {
-      try {
-        const u = await prisma.user.findUnique({
-          where: { id: userId },
-          select: { fullName: true, email: true, role: true }
-        });
-        if (u) {
-          userName = userName || u.fullName;
-          userEmail = userEmail || u.email;
-          userRole = userRole || u.role;
+  const ipAddress = req?.headers?.['x-forwarded-for']?.split(',')?.[0]?.trim() || 
+                    req?.socket?.remoteAddress || 
+                    req?.ip || 
+                    null;
+  const userAgent = req?.headers?.['user-agent'] || null;
+  const correlationId = req?.headers?.['x-correlation-id'] || randomUUID();
+  const changedFields = customChangedFields || getChangedFields(oldValue, newValue);
+
+  // Execute database insertion asynchronously in background so client response is not delayed
+  setImmediate(async () => {
+    try {
+      if (userId && (!userName || !userEmail)) {
+        try {
+          const u = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { fullName: true, email: true, role: true }
+          });
+          if (u) {
+            userName = userName || u.fullName;
+            userEmail = userEmail || u.email;
+            userRole = userRole || u.role;
+          }
+        } catch (_) {}
+      }
+
+      await prisma.auditLog.create({
+        data: {
+          userId,
+          userName,
+          userEmail,
+          userRole,
+          employeeId,
+          employeeName,
+          departmentName,
+          initiatedById,
+          executedBy: finalExecutedBy,
+          activityType: finalActivityType,
+          action: (action || 'UNKNOWN').toUpperCase(),
+          module: (module || 'GENERAL').toUpperCase(),
+          entityType: entityType ? entityType.toUpperCase() : null,
+          entityId: entityId ? String(entityId) : null,
+          entityCode: entityCode ? String(entityCode) : null,
+          description: description || null,
+          oldValue: oldValue ? (typeof oldValue === 'object' ? JSON.stringify(stripSensitive(oldValue)) : String(oldValue)) : null,
+          newValue: newValue ? (typeof newValue === 'object' ? JSON.stringify(stripSensitive(newValue)) : String(newValue)) : null,
+          changedFields,
+          status: status ? status.toUpperCase() : 'SUCCESS',
+          severity: severity ? severity.toUpperCase() : 'INFO',
+          errorMessage: errorMessage ? String(errorMessage) : null,
+          ipAddress,
+          userAgent,
+          correlationId
         }
-      } catch (err) {
-        // Non-fatal
-      }
+      });
+    } catch (error) {
+      console.error('Central Audit Engine Error (async):', error);
     }
+  });
 
-    // 2. Identify Linked Employee (if action targets or performed on behalf of an employee)
-    const employeeId = employeeOverride?.id || null;
-    const employeeName = employeeOverride?.fullName || null;
-    const departmentName = employeeOverride?.departmentName || null;
-
-    // 3. Execution Context Classification
-    const finalActivityType = activityType || (userId ? 'HUMAN' : 'SYSTEM');
-    const finalExecutedBy = executedBy || (userId ? 'USER' : 'SYSTEM');
-    const initiatedById = userId || null;
-
-    // 4. Client & Network Telemetry
-    const ipAddress = req?.headers?.['x-forwarded-for']?.split(',')?.[0]?.trim() || 
-                      req?.socket?.remoteAddress || 
-                      req?.ip || 
-                      null;
-    const userAgent = req?.headers?.['user-agent'] || null;
-    const correlationId = req?.headers?.['x-correlation-id'] || randomUUID();
-
-    // 5. Differential State Analysis
-    const changedFields = customChangedFields || getChangedFields(oldValue, newValue);
-
-    // 6. Write Centralized Immutable Audit Record
-    await prisma.auditLog.create({
-      data: {
-        userId,
-        userName,
-        userEmail,
-        userRole,
-        employeeId,
-        employeeName,
-        departmentName,
-        initiatedById,
-        executedBy: finalExecutedBy,
-        activityType: finalActivityType,
-        action: (action || 'UNKNOWN').toUpperCase(),
-        module: (module || 'GENERAL').toUpperCase(),
-        entityType: entityType ? entityType.toUpperCase() : null,
-        entityId: entityId ? String(entityId) : null,
-        entityCode: entityCode ? String(entityCode) : null,
-        description: description || null,
-        oldValue: oldValue ? (typeof oldValue === 'object' ? JSON.stringify(stripSensitive(oldValue)) : String(oldValue)) : null,
-        newValue: newValue ? (typeof newValue === 'object' ? JSON.stringify(stripSensitive(newValue)) : String(newValue)) : null,
-        changedFields,
-        status: status ? status.toUpperCase() : 'SUCCESS',
-        severity: severity ? severity.toUpperCase() : 'INFO',
-        errorMessage: errorMessage ? String(errorMessage) : null,
-        ipAddress,
-        userAgent,
-        correlationId
-      }
-    });
-  } catch (error) {
-    console.error('Central Audit Engine Error:', error);
-  }
+  return Promise.resolve();
 };
 
 /**
  * Reusable helper to log asset lifecycle timeline events.
  * Kept for backwards compatibility and synchronized with central audit logs.
  */
-const logAssetTimeline = async (data) => {
-  try {
-    await prisma.assetTimeline.create({
-      data: {
-        assetId: data.assetId,
-        assetCode: data.assetCode,
-        eventType: data.eventType,
-        title: data.title,
-        description: data.description,
-        oldStatus: data.oldStatus,
-        newStatus: data.newStatus,
-        employeeId: data.employeeId,
-        employeeName: data.employeeName,
-        departmentId: data.departmentId,
-        departmentName: data.departmentName,
-        locationId: data.locationId,
-        locationName: data.locationName,
-        performedById: data.performedById,
-        performedByName: data.performedByName
-      }
-    });
-  } catch (error) {
-    console.error('Asset Timeline Error:', error);
-  }
+const logAssetTimeline = (data) => {
+  setImmediate(async () => {
+    try {
+      await prisma.assetTimeline.create({
+        data: {
+          assetId: data.assetId,
+          assetCode: data.assetCode,
+          eventType: data.eventType,
+          title: data.title,
+          description: data.description,
+          oldStatus: data.oldStatus,
+          newStatus: data.newStatus,
+          employeeId: data.employeeId,
+          employeeName: data.employeeName,
+          departmentId: data.departmentId,
+          departmentName: data.departmentName,
+          locationId: data.locationId,
+          locationName: data.locationName,
+          performedById: data.performedById,
+          performedByName: data.performedByName
+        }
+      });
+    } catch (error) {
+      console.error('Asset Timeline Error (async):', error);
+    }
+  });
+
+  return Promise.resolve();
 };
 
 module.exports = {

@@ -279,22 +279,36 @@ export default function Assets() {
       if (input !== null) showToast('Deletion cancelled. You must type "DELETE".', 'info');
       return;
     }
+
+    // 1. Instant optimistic UI update & zero-latency feedback
+    const previousAssets = [...assets];
+    const previousSelected = new Set(selectedIds);
+
+    setAssets(prev => prev.filter(asset => asset.id !== id));
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    showToast('Asset successfully deleted from inventory matrix.', 'success');
+
+    // 2. Background deletion
     try {
       const token = localStorage.getItem('token');
       const res = await fetch(`${API_URL}/assets/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (!res.ok) throw new Error('Deletion failed');
-      setAssets(assets.filter(asset => asset.id !== id));
-      setSelectedIds(prev => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-      showToast('Asset successfully deleted from inventory matrix.', 'success');
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || 'Deletion failed');
+      }
+      fetchData();
     } catch (err) {
-      showToast(err.message, 'error');
+      // Revert if failed
+      setAssets(previousAssets);
+      setSelectedIds(previousSelected);
+      showToast(err.message || 'Failed to delete asset', 'error');
     }
   };
 
@@ -303,10 +317,11 @@ export default function Assets() {
       showToast('Action Restricted: Please ask Super Admin to delete these entries.', 'error');
       return;
     }
+    const count = selectedIds.size;
     const input = await confirm({
       type: 'prompt',
       title: 'Bulk Delete',
-      message: `Are you sure you want to delete ${selectedIds.size} assets? This action is irreversible. Type "DELETE" to confirm.`,
+      message: `Are you sure you want to delete ${count} assets? This action is irreversible. Type "DELETE" to confirm.`,
       inputPlaceholder: 'DELETE',
       confirmText: 'Delete All'
     });
@@ -315,22 +330,30 @@ export default function Assets() {
       return;
     }
     
+    // 1. Instant optimistic UI update & instant toast
+    const previousAssets = [...assets];
+    const previousSelected = new Set(selectedIds);
+    const idsToDelete = Array.from(selectedIds);
+
+    setAssets(prev => prev.filter(asset => !selectedIds.has(asset.id)));
+    setSelectedIds(new Set());
+    showToast(`Successfully deleted ${count} assets.`, 'success');
+
+    // 2. Parallel background deletion
     try {
       const token = localStorage.getItem('token');
-      let successCount = 0;
-      
-      for (const id of selectedIds) {
-        const res = await fetch(`${API_URL}/assets/${id}`, {
-          method: 'DELETE',
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (res.ok) successCount++;
-      }
-      
-      setAssets(assets.filter(asset => !selectedIds.has(asset.id)));
-      setSelectedIds(new Set());
-      showToast(`Successfully deleted ${successCount} assets.`, 'success');
+      await Promise.all(
+        idsToDelete.map(id =>
+          fetch(`${API_URL}/assets/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+          })
+        )
+      );
+      fetchData();
     } catch (err) {
+      setAssets(previousAssets);
+      setSelectedIds(previousSelected);
       showToast('Failed to delete some assets.', 'error');
     }
   };

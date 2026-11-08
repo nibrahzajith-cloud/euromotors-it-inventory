@@ -116,13 +116,33 @@ export default function Departments() {
     e.preventDefault();
     if (submitting) return;
 
+    const isEditing = !!editingDept;
+    const editingTarget = editingDept;
+    const prevDepartments = [...departments];
+    const tempId = isEditing ? editingTarget.id : `temp_${Date.now()}`;
+    const optimisticRecord = {
+      ...(isEditing ? editingTarget : {}),
+      ...formData,
+      id: tempId,
+      _count: isEditing ? (editingTarget._count || { employees: 0, assets: 0 }) : { employees: 0, assets: 0 }
+    };
+
+    if (isEditing) {
+      setDepartments(prev => prev.map(d => d.id === editingTarget.id ? optimisticRecord : d));
+      showToast('Department updated successfully.', 'success');
+    } else {
+      setDepartments(prev => [optimisticRecord, ...prev]);
+      showToast('Department created successfully.', 'success');
+    }
+    closeModal();
+
     try {
       setSubmitting(true);
       const token = localStorage.getItem('token');
-      const url = editingDept 
-        ? `${API_URL}/departments/${editingDept.id}` 
+      const url = isEditing 
+        ? `${API_URL}/departments/${editingTarget.id}` 
         : `${API_URL}/departments`;
-      const method = editingDept ? 'PUT' : 'POST';
+      const method = isEditing ? 'PUT' : 'POST';
 
       const res = await fetch(url, {
         method,
@@ -134,22 +154,17 @@ export default function Departments() {
       });
 
       if (!res.ok) {
-        const errorData = await res.json();
+        const errorData = await res.json().catch(() => ({}));
         throw new Error(errorData.error || 'Failed to save department');
       }
 
       const saved = await res.json();
-      if (editingDept) {
-        setDepartments(prev => prev.map(d => d.id === saved.id ? { ...d, ...saved } : d));
-      } else {
-        setDepartments(prev => [saved, ...prev]);
-      }
-
-      showToast(editingDept ? 'Department updated successfully.' : 'Department created successfully.', 'success');
-      closeModal();
+      setDepartments(prev => prev.map(d => d.id === tempId ? { ...optimisticRecord, ...saved } : d));
       fetchDepartments();
     } catch (err) {
-      showToast(err.message, 'error');
+      setDepartments(prevDepartments);
+      openModal(editingTarget);
+      showToast(err.message || 'Operation failed', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -171,6 +186,11 @@ export default function Departments() {
       return;
     }
 
+    // Instant optimistic update
+    const prevDepartments = [...departments];
+    setDepartments(prev => prev.filter(d => d.id !== dept.id));
+    showToast('Department node wiped from registry.', 'success');
+
     try {
       const token = localStorage.getItem('token');
       const res = await fetch(`${API_URL}/departments/${dept.id}`, {
@@ -178,10 +198,10 @@ export default function Departments() {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('Failed to delete');
-      setDepartments(departments.filter(d => d.id !== dept.id));
-      showToast('Department node wiped from registry.', 'success');
+      fetchDepartments();
     } catch (err) {
-      showToast(err.message, 'error');
+      setDepartments(prevDepartments);
+      showToast(err.message || 'Failed to delete department', 'error');
     }
   };
 

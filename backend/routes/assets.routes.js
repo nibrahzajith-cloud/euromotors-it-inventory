@@ -260,24 +260,28 @@ router.post('/', requirePermission('CREATE_ASSETS'), async (req, res) => {
     payload.locationId = (payload.locationId && String(payload.locationId).trim() !== '') ? String(payload.locationId).trim() : null;
     payload.assignedEmployeeId = (payload.assignedEmployeeId && String(payload.assignedEmployeeId).trim() !== '') ? String(payload.assignedEmployeeId).trim() : null;
 
-    // Verify referenced relational entities exist to avoid cryptic foreign key errors
-    if (payload.locationId) {
-      const loc = await prisma.location.findUnique({ where: { id: payload.locationId }, select: { id: true } });
-      if (!loc) {
-        return res.status(400).json({ error: 'The selected Location was not found in the database.', field: 'locationId' });
-      }
+    // Verify referenced relational entities and serial uniqueness concurrently in single round-trip
+    const [loc, dept, emp, existingSerial] = await Promise.all([
+      payload.locationId ? prisma.location.findUnique({ where: { id: payload.locationId }, select: { id: true } }) : Promise.resolve(true),
+      payload.departmentId ? prisma.department.findUnique({ where: { id: payload.departmentId }, select: { id: true } }) : Promise.resolve(true),
+      payload.assignedEmployeeId ? prisma.employee.findUnique({ where: { id: payload.assignedEmployeeId }, select: { id: true } }) : Promise.resolve(true),
+      payload.serialNumber ? prisma.asset.findUnique({ where: { serialNumber: payload.serialNumber }, select: { id: true, assetCode: true } }) : Promise.resolve(null)
+    ]);
+
+    if (payload.locationId && !loc) {
+      return res.status(400).json({ error: 'The selected Location was not found in the database.', field: 'locationId' });
     }
-    if (payload.departmentId) {
-      const dept = await prisma.department.findUnique({ where: { id: payload.departmentId }, select: { id: true } });
-      if (!dept) {
-        return res.status(400).json({ error: 'The selected Department was not found in the database.', field: 'departmentId' });
-      }
+    if (payload.departmentId && !dept) {
+      return res.status(400).json({ error: 'The selected Department was not found in the database.', field: 'departmentId' });
     }
-    if (payload.assignedEmployeeId) {
-      const emp = await prisma.employee.findUnique({ where: { id: payload.assignedEmployeeId }, select: { id: true } });
-      if (!emp) {
-        return res.status(400).json({ error: 'The selected Employee was not found in the database.', field: 'assignedEmployeeId' });
-      }
+    if (payload.assignedEmployeeId && !emp) {
+      return res.status(400).json({ error: 'The selected Employee was not found in the database.', field: 'assignedEmployeeId' });
+    }
+    if (existingSerial) {
+      return res.status(409).json({
+        error: `The Serial Number "${payload.serialNumber}" already exists in the system (assigned to ${existingSerial.assetCode}). Use a unique serial number.`,
+        field: 'serialNumber'
+      });
     }
 
     // Enforce required field defaults
@@ -288,20 +292,6 @@ router.post('/', requirePermission('CREATE_ASSETS'), async (req, res) => {
       ? payload.condition.trim()
       : 'New';
     payload.status = payload.status || 'AVAILABLE';
-
-    // Pre-check Serial Number uniqueness
-    if (payload.serialNumber) {
-      const existingSerial = await prisma.asset.findUnique({
-        where: { serialNumber: payload.serialNumber },
-        select: { id: true, assetCode: true }
-      });
-      if (existingSerial) {
-        return res.status(409).json({
-          error: `The Serial Number "${payload.serialNumber}" already exists in the system (assigned to ${existingSerial.assetCode}). Use a unique serial number.`,
-          field: 'serialNumber'
-        });
-      }
-    }
 
     // Inspect Asset Code: differentiate user-specified code vs auto-generation
     const rawAssetCode = payload.assetCode;

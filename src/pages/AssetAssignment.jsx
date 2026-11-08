@@ -194,11 +194,15 @@ export default function AssetAssignment() {
         body: JSON.stringify(payload)
       });
       if (!res.ok) {
-        const errData = await res.json();
+        const errData = await res.json().catch(() => ({}));
         throw new Error(errData.error || 'Assignment Transaction Failed');
       }
       showToast('Asset assigned successfully.', 'success');
-      await fetchData();
+      localStorage.removeItem('analyticsDashboardCache');
+      localStorage.removeItem('assetsCache');
+      localStorage.removeItem('assignmentsCache');
+      localStorage.removeItem('employeesCache');
+      fetchData(); // Non-blocking background sync
       return true;
     } catch (err) {
       showToast(err.message, 'error');
@@ -225,10 +229,10 @@ export default function AssetAssignment() {
       accessories: manualAccessories.filter(a => a.selected)
     };
 
-    if (await performAssignment(payload)) {
-      setShowManualModal(false);
-      setAssetId(''); setEmployeeId(''); setDepartmentId(''); setLocationId(''); setRemarks('');
-    }
+    setShowManualModal(false);
+    setAssetId(''); setEmployeeId(''); setDepartmentId(''); setLocationId(''); setRemarks('');
+    
+    await performAssignment(payload);
   };
 
   const handleDragStart = (event) => setActiveId(event.active.id);
@@ -281,6 +285,18 @@ export default function AssetAssignment() {
   };
 
   const handleConfirmReturn = async ({ assignmentId, assetId, returnAccessories, condition, remarks }) => {
+    // 1. Instant optimistic modal close and UI update
+    setReturnVerificationAssignment(null);
+    const prevAssignments = [...assignments];
+    const prevAssets = [...assets];
+
+    setAssignments(prev => prev.map(a => a.id === assignmentId ? { ...a, status: 'RETURNED' } : a));
+    if (assetId) {
+      setAssets(prev => prev.map(a => a.id === assetId ? { ...a, status: 'AVAILABLE', assignedEmployeeId: null, assignedEmployee: null } : a));
+    }
+    showToast('Asset returned & accessories verified.', 'success');
+
+    // 2. Background persistence
     try {
       const token = localStorage.getItem('token');
       const res = await fetch(`${API_URL}/assignments/${assignmentId}`, {
@@ -306,20 +322,28 @@ export default function AssetAssignment() {
         } catch (_) {}
       }
 
-      showToast('Asset returned & accessories verified.', 'success');
-      setReturnVerificationAssignment(null);
       localStorage.removeItem('analyticsDashboardCache');
       localStorage.removeItem('assetsCache');
       localStorage.removeItem('assignmentsCache');
       localStorage.removeItem('employeesCache');
-      await fetchData();
+      fetchData();
     } catch(err) {
-      showToast(err.message, 'error');
+      // Revert if error
+      setAssignments(prevAssignments);
+      setAssets(prevAssets);
+      showToast(err.message || 'Return failed', 'error');
     }
   };
 
   const handleReturn = async (id) => {
     if (!await confirm({ title: 'Confirm Check-in', message: 'Return this hardware asset back to Available Store stock?', confirmText: 'Check-in Asset' })) return;
+    
+    // 1. Instant optimistic update
+    const prevAssignments = [...assignments];
+    setAssignments(prev => prev.map(a => a.id === id ? { ...a, status: 'RETURNED' } : a));
+    showToast('Asset returned to available store stock.', 'success');
+
+    // 2. Background sync
     try {
       const res = await fetch(`${API_URL}/assignments/${id}`, {
         method: 'PUT',
@@ -327,26 +351,37 @@ export default function AssetAssignment() {
         body: JSON.stringify({ status: 'RETURNED', returnedDate: new Date().toISOString() })
       });
       if (!res.ok) throw new Error('Return failed.');
-      showToast('Asset returned to available store stock.', 'success');
       localStorage.removeItem('analyticsDashboardCache');
       localStorage.removeItem('assetsCache');
       localStorage.removeItem('assignmentsCache');
       localStorage.removeItem('employeesCache');
-      await fetchData();
-    } catch(err) { showToast(err.message, 'error'); }
+      fetchData();
+    } catch(err) {
+      setAssignments(prevAssignments);
+      showToast(err.message || 'Return failed', 'error');
+    }
   };
 
   const handleDelete = async (id) => {
     if (!await confirm({ title: 'Confirm Delete', message: 'Wipe historical assignment?', confirmText: 'Wipe Record' })) return;
+    
+    // 1. Instant optimistic delete
+    const prevAssignments = [...assignments];
+    setAssignments(prev => prev.filter(a => a.id !== id));
+    showToast('Record deleted.', 'success');
+
+    // 2. Background sync
     try {
       const res = await fetch(`${API_URL}/assignments/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
       if (!res.ok) throw new Error('Delete failed.');
-      showToast('Record deleted.', 'success');
-      await fetchData();
-    } catch(err) { showToast(err.message, 'error'); }
+      fetchData();
+    } catch(err) {
+      setAssignments(prevAssignments);
+      showToast(err.message || 'Delete failed', 'error');
+    }
   };
 
   const availableAssets = assets.filter(a => a.status === 'AVAILABLE');

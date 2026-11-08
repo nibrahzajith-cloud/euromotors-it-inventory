@@ -1,34 +1,44 @@
+let cachedPrefix = 'AST';
+let prefixCachedAt = 0;
+
 const generateNextCode = async (tx, modelName, fieldName, prefix, defaultStart = 0) => {
-  // Lock the global settings row to serialize concurrent code generation requests
-  // Caller must pass a transaction client (tx) to hold this lock through the INSERT
+  const tableName = modelName === 'employee' ? 'Employee' : 'Asset';
+  let max = defaultStart;
+
   try {
-    await tx.$executeRaw`SELECT 1 FROM "SystemSettings" WHERE id = 'global' FOR UPDATE`;
+    const rows = await tx.$queryRawUnsafe(`
+      SELECT MAX(CAST(SUBSTRING("${fieldName}" FROM '[0-9]+') AS INTEGER)) as max_num
+      FROM "${tableName}"
+      WHERE "${fieldName}" ~ '^${prefix}-[0-9]+$'
+        AND CAST(SUBSTRING("${fieldName}" FROM '[0-9]+') AS INTEGER) < 100000
+    `);
+    const val = rows?.[0]?.max_num;
+    if (val !== null && val !== undefined && !isNaN(Number(val))) {
+      max = Math.max(max, Number(val));
+    }
   } catch (_) {
-    // If table lock is not supported or timed out by serverless connection pooler, proceed safely
+    // Resilient fallback: fetch only top 20 latest matching codes
+    try {
+      const fallbackRows = await tx.$queryRawUnsafe(`
+        SELECT "${fieldName}" as code 
+        FROM "${tableName}" 
+        WHERE "${fieldName}" LIKE '${prefix}-%'
+        ORDER BY "${fieldName}" DESC 
+        LIMIT 20
+      `);
+      const regex = new RegExp(`^${prefix}-(\\d+)$`);
+      for (const r of fallbackRows) {
+        if (r.code) {
+          const m = r.code.match(regex);
+          if (m) {
+            const num = parseInt(m[1], 10);
+            if (num > max && num < 100000) max = num;
+          }
+        }
+      }
+    } catch (_) {}
   }
 
-  let query;
-  if (modelName === 'employee') {
-    query = tx.$queryRaw`SELECT "employeeCode" as code FROM "Employee" WHERE "employeeCode" LIKE ${prefix + '-%'}`;
-  } else {
-    query = tx.$queryRaw`SELECT "assetCode" as code FROM "Asset" WHERE "assetCode" LIKE ${prefix + '-%'}`;
-  }
-  
-  const records = await query;
-  let max = defaultStart;
-  const regex = new RegExp(`^${prefix}-(\\d+)$`);
-  
-  for (const record of records) {
-    if (record.code) {
-      const match = record.code.match(regex);
-      if (match) {
-        const num = parseInt(match[1], 10);
-        // Ignore previously generated random anomalies that are too high
-        if (num > max && num < 100000) max = num;
-      }
-    }
-  }
-  
   const nextNumber = max + 1;
   const paddedNumber = nextNumber.toString().padStart(9, '0');
   return `${prefix}-${paddedNumber}`;
@@ -40,9 +50,19 @@ const generateEmployeeCode = async (tx) => {
 };
 
 const generateAssetCode = async (tx) => {
-  const settings = await tx.systemSettings.findUnique({ where: { id: 'global' } });
-  const prefix = settings?.assetCodePrefix || 'AST';
-  // Use 550 as default max so the next starts at 551 if no higher valid sequence exists
+  let prefix = 'AST';
+  if (cachedPrefix && (Date.now() - prefixCachedAt) < 60000) {
+    prefix = cachedPrefix;
+  } else {
+    try {
+      const settings = await tx.systemSettings.findUnique({ where: { id: 'global' }, select: { assetCodePrefix: true } });
+      prefix = settings?.assetCodePrefix || 'AST';
+      cachedPrefix = prefix;
+      prefixCachedAt = Date.now();
+    } catch (_) {
+      prefix = 'AST';
+    }
+  }
   return await generateNextCode(tx, 'asset', 'assetCode', prefix, 550);
 };
 

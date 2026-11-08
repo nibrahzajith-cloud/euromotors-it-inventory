@@ -114,12 +114,32 @@ export default function Locations() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const isEditing = !!editingLoc;
+    const editingTarget = editingLoc;
+    const prevLocations = [...locations];
+    const tempId = isEditing ? editingTarget.id : `temp_${Date.now()}`;
+    const optimisticRecord = {
+      ...(isEditing ? editingTarget : {}),
+      ...formData,
+      id: tempId,
+      _count: isEditing ? (editingTarget._count || { employees: 0, assets: 0 }) : { employees: 0, assets: 0 }
+    };
+
+    if (isEditing) {
+      setLocations(prev => prev.map(l => l.id === editingTarget.id ? optimisticRecord : l));
+      showToast('Location updated successfully.', 'success');
+    } else {
+      setLocations(prev => [optimisticRecord, ...prev]);
+      showToast('Location successfully integrated into registry.', 'success');
+    }
+    closeModal();
+
     try {
       const token = localStorage.getItem('token');
-      const url = editingLoc 
-        ? `${API_URL}/locations/${editingLoc.id}` 
+      const url = isEditing 
+        ? `${API_URL}/locations/${editingTarget.id}` 
         : `${API_URL}/locations`;
-      const method = editingLoc ? 'PUT' : 'POST';
+      const method = isEditing ? 'PUT' : 'POST';
 
       const res = await fetch(url, {
         method,
@@ -131,15 +151,17 @@ export default function Locations() {
       });
 
       if (!res.ok) {
-        const errorData = await res.json();
+        const errorData = await res.json().catch(() => ({}));
         throw new Error(errorData.error || 'Failed to save location');
       }
 
-      showToast('Location successfully integrated into registry.', 'success');
-      await fetchLocations();
-      closeModal();
+      const saved = await res.json();
+      setLocations(prev => prev.map(l => l.id === tempId ? { ...optimisticRecord, ...saved } : l));
+      fetchLocations();
     } catch (err) {
-      showToast(err.message, 'error');
+      setLocations(prevLocations);
+      openModal(editingTarget);
+      showToast(err.message || 'Operation failed', 'error');
     }
   };
 
@@ -159,6 +181,11 @@ export default function Locations() {
       return;
     }
 
+    // Instant optimistic update
+    const prevLocations = [...locations];
+    setLocations(prev => prev.filter(l => l.id !== loc.id));
+    showToast('Location removed cleanly from matrix.', 'success');
+
     try {
       const token = localStorage.getItem('token');
       const res = await fetch(`${API_URL}/locations/${loc.id}`, {
@@ -166,10 +193,10 @@ export default function Locations() {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('Failed to delete');
-      setLocations(locations.filter(l => l.id !== loc.id));
-      showToast('Location removed cleanly from matrix.', 'success');
+      fetchLocations();
     } catch (err) {
-      showToast(err.message, 'error');
+      setLocations(prevLocations);
+      showToast(err.message || 'Failed to delete location', 'error');
     }
   };
 
