@@ -293,54 +293,33 @@ export default function Employees({ defaultOpenAdd = false }) {
     e.preventDefault();
     if (submitting || uploadingAvatar) return;
 
-    const previousEmployees = [...employees];
+    // 1. Client-Side Validation
+    const cleanFullName = formData.fullName ? formData.fullName.trim() : '';
+    if (!cleanFullName) {
+      showToast('Employee Full Name is required.', 'error');
+      return;
+    }
+
+    const cleanEmail = formData.email && formData.email.trim() !== '' ? formData.email.trim().toLowerCase() : null;
+    if (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      showToast('Please enter a valid email address.', 'error');
+      return;
+    }
+
     const isEditing = !!editingEmp;
     const editingTarget = editingEmp;
 
-    // Build payload
+    // 2. Build canonical payload
     const payload = {
-      ...formData,
-      email: formData.email?.trim() === '' ? null : formData.email?.trim(),
+      fullName: cleanFullName,
+      email: cleanEmail,
+      designation: formData.designation?.trim() === '' ? null : formData.designation?.trim(),
       phone: formData.phone?.trim() === '' ? null : formData.phone?.trim(),
-      departmentId: formData.departmentId && formData.departmentId.trim() !== '' ? formData.departmentId : null,
-      locationId: formData.locationId && formData.locationId.trim() !== '' ? formData.locationId : null,
+      departmentId: formData.departmentId && formData.departmentId.trim() !== '' ? formData.departmentId.trim() : null,
+      locationId: formData.locationId && formData.locationId.trim() !== '' ? formData.locationId.trim() : null,
+      status: formData.status || 'ACTIVE',
       avatarUrl: formData.avatarUrl ? formData.avatarUrl.trim() : null
     };
-
-    const targetDept = departments.find(d => d.id === payload.departmentId) || null;
-    const targetLoc = locations.find(l => l.id === payload.locationId) || null;
-
-    // Optimistic UI update: Instant modal dismissal and instant success feedback
-    const tempId = isEditing ? editingTarget.id : `temp_${Date.now()}`;
-    const optimisticRecord = {
-      ...(isEditing ? editingTarget : {}),
-      ...payload,
-      id: tempId,
-      employeeCode: isEditing ? editingTarget.employeeCode : 'Generating...',
-      department: targetDept,
-      location: targetLoc,
-      assignedAssets: isEditing ? (editingTarget.assignedAssets || []) : [],
-      assignments: isEditing ? (editingTarget.assignments || []) : [],
-      createdAt: isEditing ? editingTarget.createdAt : new Date().toISOString()
-    };
-
-    if (isEditing) {
-      setEmployees(prev => {
-        const next = prev.map(emp => emp.id === editingTarget.id ? optimisticRecord : emp);
-        try { localStorage.setItem('employeesCache', JSON.stringify(next)); } catch (e) {}
-        return next;
-      });
-      showToast('Employee profile updated!', 'success');
-    } else {
-      setEmployees(prev => {
-        const next = [optimisticRecord, ...prev];
-        try { localStorage.setItem('employeesCache', JSON.stringify(next)); } catch (e) {}
-        return next;
-      });
-      showToast('Employee registered successfully!', 'success');
-    }
-
-    closeModal();
 
     try {
       setSubmitting(true);
@@ -359,28 +338,38 @@ export default function Employees({ defaultOpenAdd = false }) {
         body: JSON.stringify(payload)
       });
 
+      const responseData = await res.json().catch(() => ({}));
+
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to save employee');
+        throw new Error(responseData.error || 'Failed to save employee profile.');
       }
 
-      const savedEmp = await res.json();
+      // 3. Database operation confirmed successful: Update local state & cache
+      if (isEditing) {
+        setEmployees(prev => {
+          const next = prev.map(emp => emp.id === editingTarget.id ? { ...emp, ...responseData } : emp);
+          try { localStorage.setItem('employeesCache', JSON.stringify(next)); } catch (e) {}
+          return next;
+        });
+        showToast(`Employee profile for ${responseData.fullName || cleanFullName} updated successfully!`, 'success');
+      } else {
+        setEmployees(prev => {
+          const next = [responseData, ...prev];
+          try { localStorage.setItem('employeesCache', JSON.stringify(next)); } catch (e) {}
+          return next;
+        });
+        showToast(`Employee ${responseData.fullName || cleanFullName} (${responseData.employeeCode || ''}) registered successfully!`, 'success');
+      }
 
-      // Seamlessly merge the final DB record with verified code and relations
-      setEmployees(prev => {
-        const next = prev.map(emp => emp.id === tempId ? { ...optimisticRecord, ...savedEmp } : emp);
-        try { localStorage.setItem('employeesCache', JSON.stringify(next)); } catch (e) {}
-        return next;
-      });
+      // 4. Close modal and reset form ONLY on verified success
+      closeModal();
 
-      // Background silent refresh for full metrics
+      // Background silent refresh for full metrics and cache synchronization
       fetchData();
     } catch (err) {
-      // Revert optimistic state and restore modal if error occurred
-      setEmployees(previousEmployees);
-      try { localStorage.setItem('employeesCache', JSON.stringify(previousEmployees)); } catch (e) {}
-      openModal(editingTarget);
-      showToast(err.message || 'Operation failed', 'error');
+      console.error('Employee save operation failed:', err);
+      // Keep registration form open, preserve all entered details, and show ONLY the error message
+      showToast(err.message || 'Operation failed. Please review your input and try again.', 'error');
     } finally {
       setSubmitting(false);
     }

@@ -211,87 +211,159 @@ router.post('/', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
   try {
     const rawPayload = { ...req.body };
 
-    const debounceKey = `emp_debounce:${rawPayload.fullName?.trim()}:${rawPayload.departmentId || ''}`;
+    const fullName = rawPayload.fullName ? String(rawPayload.fullName).trim() : '';
+    if (!fullName) {
+      return res.status(400).json({ error: 'Employee Full Name is required.' });
+    }
+
+    const email = rawPayload.email && String(rawPayload.email).trim() !== '' ? String(rawPayload.email).trim().toLowerCase() : null;
+    const designation = rawPayload.designation && String(rawPayload.designation).trim() !== '' ? String(rawPayload.designation).trim() : null;
+    const phone = rawPayload.phone && String(rawPayload.phone).trim() !== '' ? String(rawPayload.phone).trim() : null;
+    const status = rawPayload.status || 'ACTIVE';
+    const avatarUrl = rawPayload.avatarUrl && String(rawPayload.avatarUrl).trim() !== '' ? String(rawPayload.avatarUrl).trim() : null;
+
+    const deptId = rawPayload.departmentId && String(rawPayload.departmentId).trim() !== '' ? String(rawPayload.departmentId).trim() : null;
+    const locId = rawPayload.locationId && String(rawPayload.locationId).trim() !== '' ? String(rawPayload.locationId).trim() : null;
+
+    const debounceKey = `emp_debounce:${fullName}:${deptId || ''}`;
     const cachedRecent = memoryCache.get(debounceKey);
     if (cachedRecent) {
       return res.status(200).json(cachedRecent);
     }
 
     // Execute duplicate email check and employee code generation concurrently
-    const [existing, generatedCode] = await Promise.all([
-      (rawPayload.email && typeof rawPayload.email === 'string' && rawPayload.email.trim())
+    const [existing, generatedCode, verifiedDept, verifiedLoc] = await Promise.all([
+      email
         ? prisma.employee.findFirst({
-          where: { email: rawPayload.email.trim(), status: 'ACTIVE' },
-          select: { id: true, fullName: true }
+          where: { email: { equals: email, mode: 'insensitive' }, status: 'ACTIVE' },
+          select: { id: true, fullName: true, employeeCode: true }
         })
         : Promise.resolve(null),
       (rawPayload.employeeCode && String(rawPayload.employeeCode).trim() !== '')
         ? Promise.resolve(String(rawPayload.employeeCode).trim())
-        : generateEmployeeCode(prisma)
+        : generateEmployeeCode(prisma),
+      deptId ? prisma.department.findUnique({ where: { id: deptId }, select: { id: true } }) : Promise.resolve(null),
+      locId ? prisma.location.findUnique({ where: { id: locId }, select: { id: true } }) : Promise.resolve(null)
     ]);
 
     if (existing) {
-      return res.status(409).json({ error: `An active employee with email "${rawPayload.email.trim()}" already exists (${existing.fullName}).` });
+      return res.status(409).json({ 
+        error: `An active employee with email "${email}" already exists (${existing.fullName} - ${existing.employeeCode}).` 
+      });
     }
 
-    const employeeCode = generatedCode;
+    const verifiedDeptId = verifiedDept?.id || null;
+    const verifiedLocId = verifiedLoc?.id || null;
 
-    const deptId = rawPayload.departmentId && String(rawPayload.departmentId).trim() !== '' ? String(rawPayload.departmentId).trim() : null;
-    const locId = rawPayload.locationId && String(rawPayload.locationId).trim() !== '' ? String(rawPayload.locationId).trim() : null;
-    const avatarUrl = rawPayload.avatarUrl && String(rawPayload.avatarUrl).trim() !== '' ? String(rawPayload.avatarUrl).trim() : null;
+    let employeeCode = generatedCode;
+    let record = null;
 
-    const validDeptConnect = deptId ? { connect: { id: deptId } } : null;
-    const validLocConnect = locId ? { connect: { id: locId } } : null;
-
-    // Build canonical relation-connected data object
-    const dataToCreate = {
-      fullName: rawPayload.fullName ? String(rawPayload.fullName).trim() : '',
-      email: rawPayload.email && String(rawPayload.email).trim() !== '' ? String(rawPayload.email).trim() : null,
-      designation: rawPayload.designation && String(rawPayload.designation).trim() !== '' ? String(rawPayload.designation).trim() : null,
-      phone: rawPayload.phone && String(rawPayload.phone).trim() !== '' ? String(rawPayload.phone).trim() : null,
-      status: rawPayload.status || 'ACTIVE',
-      ...(avatarUrl ? { avatarUrl } : {}),
-      ...(validDeptConnect ? { department: validDeptConnect } : {}),
-      ...(validLocConnect ? { location: validLocConnect } : {})
-    };
-
-    let record;
-    const t4 = Date.now();
-    try {
-      record = await prisma.employee.create({
+    // Helper to attempt employee creation with canonical relation connects
+    const attemptRelationCreate = async (code) => {
+      return await prisma.employee.create({
         data: {
-          ...dataToCreate,
-          employeeCode
+          employeeCode: code,
+          fullName,
+          email,
+          designation,
+          phone,
+          status,
+          ...(avatarUrl ? { avatarUrl } : {}),
+          ...(verifiedDeptId ? { department: { connect: { id: verifiedDeptId } } } : {}),
+          ...(verifiedLocId ? { location: { connect: { id: verifiedLocId } } } : {})
         },
         include: {
           department: true,
           location: true
         }
       });
-      console.log(`[PERF] prisma.employee.create took ${Date.now() - t4}ms`);
+    };
+
+    // Helper to attempt employee creation with direct scalar fields
+    const attemptScalarCreate = async (code) => {
+      return await prisma.employee.create({
+        data: {
+          employeeCode: code,
+          fullName,
+          email,
+          designation,
+          phone,
+          status,
+          avatarUrl,
+          departmentId: verifiedDeptId,
+          locationId: verifiedLocId
+        },
+        include: {
+          department: true,
+          location: true
+        }
+      });
+    };
+
+    // Helper to perform direct SQL insert fallback
+    const attemptRawSqlCreate = async (code) => {
+      const newId = crypto.randomUUID();
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO "Employee" ("id", "employeeCode", "fullName", "email", "designation", "phone", "departmentId", "locationId", "status", "avatarUrl", "createdAt", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::"GeneralStatus", $10, NOW(), NOW())`,
+        newId,
+        code,
+        fullName,
+        email,
+        designation,
+        phone,
+        verifiedDeptId,
+        verifiedLocId,
+        status,
+        avatarUrl
+      );
+      return await prisma.employee.findUnique({
+        where: { id: newId },
+        include: {
+          department: true,
+          location: true
+        }
+      });
+    };
+
+    // Primary Creation Execution with Automated Collision Retry & Multi-Layer Fallback
+    try {
+      record = await attemptRelationCreate(employeeCode);
     } catch (createErr) {
-      // If code collision occurred, retry with freshly incremented code
+      console.warn('Initial relation create threw:', createErr.message);
+
+      // Handle employeeCode unique constraint collision (P2002)
       if (createErr.code === 'P2002' && (createErr.message?.includes('employeeCode') || createErr.meta?.target?.includes('employeeCode'))) {
         employeeCode = await generateEmployeeCode(prisma);
-        record = await prisma.employee.create({
-          data: {
-            ...dataToCreate,
-            employeeCode
-          },
-          include: {
-            department: true,
-            location: true
-          }
-        });
+        try {
+          record = await attemptRelationCreate(employeeCode);
+        } catch (retryErr) {
+          record = await attemptScalarCreate(employeeCode).catch(() => attemptRawSqlCreate(employeeCode));
+        }
+      } else if (createErr.message?.includes('Unknown argument') || createErr.message?.includes('Invalid `prisma.employee.create()`')) {
+        // Fallback to scalar or raw SQL if Prisma Client rejects relation syntax
+        try {
+          record = await attemptScalarCreate(employeeCode);
+        } catch (_) {
+          record = await attemptRawSqlCreate(employeeCode);
+        }
       } else {
-        throw createErr;
+        // Final fallback attempt via raw SQL
+        try {
+          record = await attemptRawSqlCreate(employeeCode);
+        } catch (rawErr) {
+          throw createErr;
+        }
       }
+    }
+
+    if (!record) {
+      throw new Error('Database failed to return the created employee record.');
     }
 
     record.assignedAssets = [];
     record.assignments = [];
 
-    const t5 = Date.now();
     await logAudit({
       req,
       action: 'CREATE',
@@ -303,7 +375,6 @@ router.post('/', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
       newValue: record,
       description: `Registered employee: ${record.fullName} (${record.employeeCode})`
     });
-    console.log(`[PERF] logAudit took ${Date.now() - t5}ms`);
 
     memoryCache.set(debounceKey, record, 3);
     memoryCache.delPrefix('employees');
@@ -311,12 +382,19 @@ router.post('/', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
     res.status(201).json(record);
   } catch (err) {
     console.error('Error creating employee:', err);
-    let userMsg = err.message || 'Failed to create employee';
-    if (userMsg.includes('Unique constraint failed') && userMsg.includes('employeeCode')) {
-      userMsg = 'Employee code collision detected. Please try saving again.';
-    } else if (userMsg.includes('Unique constraint failed') && userMsg.includes('email')) {
-      userMsg = 'An employee with this email address already exists in the system.';
+    let userMsg = 'Failed to register employee. Please verify details and try again.';
+    const rawMsg = err.message || '';
+
+    if (rawMsg.includes('Unique constraint failed') || err.code === 'P2002') {
+      if (rawMsg.includes('employeeCode') || err.meta?.target?.includes('employeeCode')) {
+        userMsg = 'Employee code collision detected. Please submit again to generate a new unique code.';
+      } else if (rawMsg.includes('email') || err.meta?.target?.includes('email')) {
+        userMsg = 'An employee with this email address already exists in the system.';
+      }
+    } else if (rawMsg.includes('Department') || rawMsg.includes('location')) {
+      userMsg = 'Invalid department or location selected. Please re-select and try again.';
     }
+
     res.status(500).json({ error: userMsg });
   }
 });

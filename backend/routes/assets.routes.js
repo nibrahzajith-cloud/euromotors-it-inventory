@@ -816,7 +816,9 @@ router.post('/bulk', requirePermission('BULK_IMPORT_ASSETS'), async (req, res) =
             employeeMap.set(empKey, emp);
             results.createdEmployees++;
           } else {
-            const updateData = { departmentId, locationId };
+            const updateData = {};
+            if (departmentId) updateData.department = { connect: { id: departmentId } };
+            if (locationId) updateData.location = { connect: { id: locationId } };
             if (a.employeeName) updateData.fullName = a.employeeName;
             if (a.email) updateData.email = a.email;
             if (a.phone) updateData.phone = a.phone;
