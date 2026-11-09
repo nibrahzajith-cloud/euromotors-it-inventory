@@ -253,3 +253,4 @@ export function computeEmployeeValuationSummary(assignedAssets = []) {
     enrichedAssets
   };
 }
+
