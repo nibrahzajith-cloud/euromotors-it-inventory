@@ -279,28 +279,7 @@ router.post('/', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
       });
     };
 
-    // Helper to attempt employee creation with direct scalar fields
-    const attemptScalarCreate = async (code) => {
-      return await prisma.employee.create({
-        data: {
-          employeeCode: code,
-          fullName,
-          email,
-          designation,
-          phone,
-          status,
-          avatarUrl,
-          departmentId: verifiedDeptId,
-          locationId: verifiedLocId
-        },
-        include: {
-          department: true,
-          location: true
-        }
-      });
-    };
-
-    // Helper to perform direct SQL insert fallback
+    // Helper to perform direct SQL insert fallback (safe against Prisma schema relation syntax differences)
     const attemptRawSqlCreate = async (code) => {
       const newId = crypto.randomUUID();
       await prisma.$executeRawUnsafe(
@@ -326,34 +305,29 @@ router.post('/', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
       });
     };
 
-    // Primary Creation Execution with Automated Collision Retry & Multi-Layer Fallback
-    try {
-      record = await attemptRelationCreate(employeeCode);
-    } catch (createErr) {
-      console.warn('Initial relation create threw:', createErr.message);
+    // Robust Execution with Automated Collision Retry & Direct Fallback
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        if (!employeeCode || attempt > 0) {
+          employeeCode = await generateEmployeeCode(prisma);
+        }
 
-      // Handle employeeCode unique constraint collision (P2002)
-      if (createErr.code === 'P2002' && (createErr.message?.includes('employeeCode') || createErr.meta?.target?.includes('employeeCode'))) {
-        employeeCode = await generateEmployeeCode(prisma);
         try {
           record = await attemptRelationCreate(employeeCode);
-        } catch (retryErr) {
-          record = await attemptScalarCreate(employeeCode).catch(() => attemptRawSqlCreate(employeeCode));
-        }
-      } else if (createErr.message?.includes('Unknown argument') || createErr.message?.includes('Invalid `prisma.employee.create()`')) {
-        // Fallback to scalar or raw SQL if Prisma Client rejects relation syntax
-        try {
-          record = await attemptScalarCreate(employeeCode);
-        } catch (_) {
+          break;
+        } catch (relationErr) {
+          console.warn(`[EMPLOYEE CREATE] Relation create failed on attempt ${attempt}:`, relationErr.message);
+          // If relation connects threw or failed, immediately use direct SQL fallback
           record = await attemptRawSqlCreate(employeeCode);
+          break;
         }
-      } else {
-        // Final fallback attempt via raw SQL
-        try {
-          record = await attemptRawSqlCreate(employeeCode);
-        } catch (rawErr) {
-          throw createErr;
+      } catch (err) {
+        // If employeeCode collision happened (P2002 or Postgres 23505 duplicate key), retry with fresh code
+        if (err.code === 'P2002' || err.message?.includes('employeeCode') || err.message?.includes('duplicate key')) {
+          employeeCode = null;
+          continue;
         }
+        throw err;
       }
     }
 
