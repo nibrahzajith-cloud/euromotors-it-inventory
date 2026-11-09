@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const ExcelJS = require('exceljs');
 const prisma = require('../prismaClient');
 const { authenticate, authorize, requirePermission } = require('../middleware/auth.middleware');
@@ -62,6 +63,24 @@ function formatAssetPrismaData(rawPayload, isUpdate = false) {
       data.assignedEmployee = { connect: { id: assignedEmployeeId } };
     } else if (isUpdate) {
       data.assignedEmployee = { disconnect: true };
+    }
+  }
+
+  // Parse and sanitize date fields
+  if (data.purchaseDate !== undefined) {
+    if (data.purchaseDate) {
+      const d = new Date(data.purchaseDate);
+      data.purchaseDate = isNaN(d.getTime()) ? null : d;
+    } else {
+      data.purchaseDate = null;
+    }
+  }
+  if (data.warrantyExpiryDate !== undefined) {
+    if (data.warrantyExpiryDate) {
+      const d = new Date(data.warrantyExpiryDate);
+      data.warrantyExpiryDate = isNaN(d.getTime()) ? null : d;
+    } else {
+      data.warrantyExpiryDate = null;
     }
   }
 
@@ -376,19 +395,59 @@ router.post('/', requirePermission('CREATE_ASSETS'), async (req, res) => {
               }
             });
           } catch (createErr) {
-            // Resilient fallback: if runtime expects scalar IDs instead of relation connects
-            if (createErr.message?.includes('Unknown argument') || createErr.message?.includes('location') || createErr.message?.includes('department') || createErr.message?.includes('assignedEmployee')) {
-              newRecord = await tx.asset.create({
-                data: rawWithCode,
-                include: {
-                  location: true,
-                  department: true,
-                  assignedEmployee: true
-                }
-              });
-            } else {
-              throw createErr;
-            }
+            console.warn('[ASSET CREATE] Prisma create with relation connects failed, using SQL fallback:', createErr.message);
+            // DO NOT call tx.asset.create({ data: rawWithCode }) because rawWithCode has scalar locationId which Prisma rejects!
+            // Fallback directly to parameterised raw SQL:
+            const newId = crypto.randomUUID();
+            await tx.$executeRawUnsafe(
+              `INSERT INTO "Asset" (
+                "id", "assetCode", "deviceType", "brand", "model", "serialNumber",
+                "processor", "ram", "storage", "operatingSystem", "vendor",
+                "purchaseDate", "warrantyStatus", "warrantyExpiryDate", "condition",
+                "status", "assignmentType", "macAddress", "ipAddress",
+                "locationId", "departmentId", "assignedEmployeeId",
+                "remarks", "accessories", "createdAt", "updatedAt"
+              ) VALUES (
+                $1, $2, $3, $4, $5, $6,
+                $7, $8, $9, $10, $11,
+                $12, $13, $14, $15,
+                $16::"AssetStatus", $17::"AssignmentType", $18, $19,
+                $20, $21, $22,
+                $23, $24::jsonb, NOW(), NOW()
+              )`,
+              newId,
+              codeToAssign,
+              payload.deviceType,
+              payload.brand || null,
+              payload.model || null,
+              payload.serialNumber || null,
+              payload.processor || null,
+              payload.ram || null,
+              payload.storage || null,
+              payload.operatingSystem || null,
+              payload.vendor || null,
+              payload.purchaseDate ? new Date(payload.purchaseDate) : null,
+              payload.warrantyStatus || 'Active',
+              payload.warrantyExpiryDate ? new Date(payload.warrantyExpiryDate) : null,
+              payload.condition || 'New',
+              payload.status || 'AVAILABLE',
+              payload.assignmentType || 'EMPLOYEE',
+              payload.macAddress || null,
+              payload.ipAddress || null,
+              payload.locationId || null,
+              payload.departmentId || null,
+              payload.assignedEmployeeId || null,
+              payload.remarks || null,
+              JSON.stringify(payload.accessories || [])
+            );
+            newRecord = await tx.asset.findUnique({
+              where: { id: newId },
+              include: {
+                location: true,
+                department: true,
+                assignedEmployee: true
+              }
+            });
           }
 
           // Create assignment history if assigned to employee during creation
@@ -951,10 +1010,56 @@ router.post('/bulk', requirePermission('BULK_IMPORT_ASSETS'), async (req, res) =
               data: formattedBulkData
             });
           } catch (upErr) {
-            updated = await prisma.asset.update({
-              where: { id: existingAsset.id },
-              data: assetPayload
-            });
+            console.warn('[BULK ASSET UPDATE] Prisma update with connects failed, using SQL fallback:', upErr.message);
+            await prisma.$executeRawUnsafe(
+              `UPDATE "Asset" SET
+                "deviceType" = COALESCE($1, "deviceType"),
+                "brand" = $2,
+                "model" = $3,
+                "serialNumber" = COALESCE($4, "serialNumber"),
+                "processor" = $5,
+                "ram" = $6,
+                "storage" = $7,
+                "operatingSystem" = $8,
+                "vendor" = $9,
+                "purchaseDate" = $10,
+                "warrantyStatus" = COALESCE($11, "warrantyStatus"),
+                "warrantyExpiryDate" = $12,
+                "condition" = COALESCE($13, "condition"),
+                "status" = COALESCE($14::"AssetStatus", "status"),
+                "assignmentType" = COALESCE($15::"AssignmentType", "assignmentType"),
+                "macAddress" = $16,
+                "ipAddress" = $17,
+                "locationId" = $18,
+                "departmentId" = $19,
+                "assignedEmployeeId" = $20,
+                "remarks" = $21,
+                "updatedAt" = NOW()
+               WHERE "id" = $22`,
+              a.deviceType || null,
+              a.brand || null,
+              a.model || null,
+              finalSerial || null,
+              a.processor || null,
+              a.ram || null,
+              a.storage || null,
+              a.operatingSystem || null,
+              a.vendor || null,
+              parseSafeDate(a.purchaseDate),
+              a.warrantyStatus || null,
+              parseSafeDate(a.warrantyExpiryDate),
+              a.condition || null,
+              finalStatus || null,
+              aType === 'IN STORE' ? 'STORE' : aType,
+              a.macAddress || null,
+              a.ipAddress || null,
+              locationId || null,
+              departmentId || null,
+              employeeId || null,
+              a.remarks || null,
+              existingAsset.id
+            );
+            updated = await prisma.asset.findUnique({ where: { id: existingAsset.id } });
           }
 
           results.updated++;
@@ -976,7 +1081,50 @@ router.post('/bulk', requirePermission('BULK_IMPORT_ASSETS'), async (req, res) =
           try {
             newAsset = await prisma.asset.create({ data: formattedBulkData });
           } catch (crErr) {
-            newAsset = await prisma.asset.create({ data: assetPayload });
+            console.warn('[BULK ASSET CREATE] Prisma create with connects failed, using SQL fallback:', crErr.message);
+            const newId = crypto.randomUUID();
+            await prisma.$executeRawUnsafe(
+              `INSERT INTO "Asset" (
+                "id", "assetCode", "deviceType", "brand", "model", "serialNumber",
+                "processor", "ram", "storage", "operatingSystem", "vendor",
+                "purchaseDate", "warrantyStatus", "warrantyExpiryDate", "condition",
+                "status", "assignmentType", "macAddress", "ipAddress",
+                "locationId", "departmentId", "assignedEmployeeId",
+                "remarks", "accessories", "createdAt", "updatedAt"
+              ) VALUES (
+                $1, $2, $3, $4, $5, $6,
+                $7, $8, $9, $10, $11,
+                $12, $13, $14, $15,
+                $16::"AssetStatus", $17::"AssignmentType", $18, $19,
+                $20, $21, $22,
+                $23, $24::jsonb, NOW(), NOW()
+              )`,
+              newId,
+              inputCode,
+              a.deviceType,
+              a.brand || null,
+              a.model || null,
+              finalSerial,
+              a.processor || null,
+              a.ram || null,
+              a.storage || null,
+              a.operatingSystem || null,
+              a.vendor || null,
+              parseSafeDate(a.purchaseDate),
+              a.warrantyStatus || 'Active',
+              parseSafeDate(a.warrantyExpiryDate),
+              a.condition || 'GOOD',
+              finalStatus,
+              aType === 'IN STORE' ? 'STORE' : aType,
+              a.macAddress || null,
+              a.ipAddress || null,
+              locationId,
+              departmentId,
+              employeeId,
+              a.remarks || null,
+              JSON.stringify(a.accessories || [])
+            );
+            newAsset = await prisma.asset.findUnique({ where: { id: newId } });
           }
           results.imported++;
           results.createdAssets++;
@@ -1109,19 +1257,63 @@ router.put('/:id', requirePermission('EDIT_ASSETS'), async (req, res) => {
         }
       });
     } catch (updateErr) {
-      if (updateErr.message?.includes('Unknown argument') || updateErr.message?.includes('location') || updateErr.message?.includes('department') || updateErr.message?.includes('assignedEmployee')) {
-        record = await prisma.asset.update({
-          where: { id: req.params.id },
-          data: payload,
-          include: {
-            location: true,
-            department: true,
-            assignedEmployee: true
-          }
-        });
-      } else {
-        throw updateErr;
-      }
+      console.warn('[ASSET UPDATE] Prisma update with connects failed, using SQL fallback:', updateErr.message);
+      await prisma.$executeRawUnsafe(
+        `UPDATE "Asset" SET
+          "deviceType" = COALESCE($1, "deviceType"),
+          "brand" = $2,
+          "model" = $3,
+          "serialNumber" = COALESCE($4, "serialNumber"),
+          "processor" = $5,
+          "ram" = $6,
+          "storage" = $7,
+          "operatingSystem" = $8,
+          "vendor" = $9,
+          "purchaseDate" = $10,
+          "warrantyStatus" = COALESCE($11, "warrantyStatus"),
+          "warrantyExpiryDate" = $12,
+          "condition" = COALESCE($13, "condition"),
+          "status" = COALESCE($14::"AssetStatus", "status"),
+          "assignmentType" = COALESCE($15::"AssignmentType", "assignmentType"),
+          "macAddress" = $16,
+          "ipAddress" = $17,
+          "locationId" = $18,
+          "departmentId" = $19,
+          "assignedEmployeeId" = $20,
+          "remarks" = $21,
+          "updatedAt" = NOW()
+         WHERE "id" = $22`,
+        payload.deviceType || null,
+        payload.brand !== undefined ? payload.brand : oldRecord.brand,
+        payload.model !== undefined ? payload.model : oldRecord.model,
+        payload.serialNumber !== undefined ? payload.serialNumber : oldRecord.serialNumber,
+        payload.processor !== undefined ? payload.processor : oldRecord.processor,
+        payload.ram !== undefined ? payload.ram : oldRecord.ram,
+        payload.storage !== undefined ? payload.storage : oldRecord.storage,
+        payload.operatingSystem !== undefined ? payload.operatingSystem : oldRecord.operatingSystem,
+        payload.vendor !== undefined ? payload.vendor : oldRecord.vendor,
+        payload.purchaseDate ? new Date(payload.purchaseDate) : (payload.purchaseDate === null ? null : oldRecord.purchaseDate),
+        payload.warrantyStatus || null,
+        payload.warrantyExpiryDate ? new Date(payload.warrantyExpiryDate) : (payload.warrantyExpiryDate === null ? null : oldRecord.warrantyExpiryDate),
+        payload.condition || null,
+        payload.status || null,
+        payload.assignmentType || null,
+        payload.macAddress !== undefined ? payload.macAddress : oldRecord.macAddress,
+        payload.ipAddress !== undefined ? payload.ipAddress : oldRecord.ipAddress,
+        payload.locationId !== undefined ? payload.locationId : oldRecord.locationId,
+        payload.departmentId !== undefined ? payload.departmentId : oldRecord.departmentId,
+        payload.assignedEmployeeId !== undefined ? payload.assignedEmployeeId : oldRecord.assignedEmployeeId,
+        payload.remarks !== undefined ? payload.remarks : oldRecord.remarks,
+        req.params.id
+      );
+      record = await prisma.asset.findUnique({
+        where: { id: req.params.id },
+        include: {
+          location: true,
+          department: true,
+          assignedEmployee: true
+        }
+      });
     }
 
     // If status was changed to AVAILABLE or STORE, close active assignments

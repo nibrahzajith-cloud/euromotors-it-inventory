@@ -308,6 +308,9 @@ export default function AddAsset() {
       if (payload.warrantyExpiryDate) {
         payload.warrantyExpiryDate = new Date(payload.warrantyExpiryDate).toISOString();
       }
+      if (payload.purchaseDate) {
+        payload.purchaseDate = new Date(payload.purchaseDate).toISOString();
+      }
 
       const res = await fetch(url, {
         method: id ? 'PUT' : 'POST',
