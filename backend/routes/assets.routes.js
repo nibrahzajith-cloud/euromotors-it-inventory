@@ -382,23 +382,11 @@ router.post('/', requirePermission('CREATE_ASSETS'), async (req, res) => {
             ...payload,
             assetCode: codeToAssign
           };
-          const formattedAssetData = formatAssetPrismaData(rawWithCode, false);
 
           let newRecord;
+          // PRIMARY: Always use direct SQL INSERT — works regardless of Prisma Client version
+          const newId = crypto.randomUUID();
           try {
-            newRecord = await tx.asset.create({
-              data: formattedAssetData,
-              include: {
-                location: true,
-                department: true,
-                assignedEmployee: true
-              }
-            });
-          } catch (createErr) {
-            console.warn('[ASSET CREATE] Prisma create with relation connects failed, using SQL fallback:', createErr.message);
-            // DO NOT call tx.asset.create({ data: rawWithCode }) because rawWithCode has scalar locationId which Prisma rejects!
-            // Fallback directly to parameterised raw SQL:
-            const newId = crypto.randomUUID();
             await tx.$executeRawUnsafe(
               `INSERT INTO "Asset" (
                 "id", "assetCode", "deviceType", "brand", "model", "serialNumber",
@@ -442,6 +430,18 @@ router.post('/', requirePermission('CREATE_ASSETS'), async (req, res) => {
             );
             newRecord = await tx.asset.findUnique({
               where: { id: newId },
+              include: {
+                location: true,
+                department: true,
+                assignedEmployee: true
+              }
+            });
+          } catch (sqlErr) {
+            console.warn('[ASSET CREATE] SQL INSERT failed, trying Prisma relation syntax:', sqlErr.message);
+            // FALLBACK: Prisma relation-connect syntax
+            const formattedAssetData = formatAssetPrismaData(rawWithCode, false);
+            newRecord = await tx.asset.create({
+              data: formattedAssetData,
               include: {
                 location: true,
                 department: true,
@@ -1244,46 +1244,36 @@ router.put('/:id', requirePermission('EDIT_ASSETS'), async (req, res) => {
       payload.assignedEmployeeId = null;
     }
 
-    const updateData = formatAssetPrismaData(payload, true);
     let record;
+    // PRIMARY: Always use direct SQL UPDATE — works regardless of Prisma Client version on Render
     try {
-      record = await prisma.asset.update({
-        where: { id: req.params.id },
-        data: updateData,
-        include: {
-          location: true,
-          department: true,
-          assignedEmployee: true
-        }
-      });
-    } catch (updateErr) {
-      console.warn('[ASSET UPDATE] Prisma update with connects failed, using SQL fallback:', updateErr.message);
       await prisma.$executeRawUnsafe(
         `UPDATE "Asset" SET
-          "deviceType" = COALESCE($1, "deviceType"),
-          "brand" = $2,
-          "model" = $3,
-          "serialNumber" = COALESCE($4, "serialNumber"),
-          "processor" = $5,
-          "ram" = $6,
-          "storage" = $7,
-          "operatingSystem" = $8,
-          "vendor" = $9,
-          "purchaseDate" = $10,
-          "warrantyStatus" = COALESCE($11, "warrantyStatus"),
+          "deviceType"       = COALESCE($1, "deviceType"),
+          "brand"            = $2,
+          "model"            = $3,
+          "serialNumber"     = COALESCE($4, "serialNumber"),
+          "processor"        = $5,
+          "ram"              = $6,
+          "storage"          = $7,
+          "operatingSystem"  = $8,
+          "vendor"           = $9,
+          "purchaseDate"     = $10,
+          "warrantyStatus"   = COALESCE($11, "warrantyStatus"),
           "warrantyExpiryDate" = $12,
-          "condition" = COALESCE($13, "condition"),
-          "status" = COALESCE($14::"AssetStatus", "status"),
-          "assignmentType" = COALESCE($15::"AssignmentType", "assignmentType"),
-          "macAddress" = $16,
-          "ipAddress" = $17,
-          "locationId" = $18,
-          "departmentId" = $19,
+          "condition"        = COALESCE($13, "condition"),
+          "status"           = COALESCE($14::"AssetStatus", "status"),
+          "assignmentType"   = COALESCE($15::"AssignmentType", "assignmentType"),
+          "macAddress"       = $16,
+          "ipAddress"        = $17,
+          "locationId"       = $18,
+          "departmentId"     = $19,
           "assignedEmployeeId" = $20,
-          "remarks" = $21,
-          "updatedAt" = NOW()
-         WHERE "id" = $22`,
-        payload.deviceType || null,
+          "remarks"          = $21,
+          "accessories"      = $22::jsonb,
+          "updatedAt"        = NOW()
+         WHERE "id" = $23`,
+        payload.deviceType || oldRecord.deviceType,
         payload.brand !== undefined ? payload.brand : oldRecord.brand,
         payload.model !== undefined ? payload.model : oldRecord.model,
         payload.serialNumber !== undefined ? payload.serialNumber : oldRecord.serialNumber,
@@ -1293,21 +1283,35 @@ router.put('/:id', requirePermission('EDIT_ASSETS'), async (req, res) => {
         payload.operatingSystem !== undefined ? payload.operatingSystem : oldRecord.operatingSystem,
         payload.vendor !== undefined ? payload.vendor : oldRecord.vendor,
         payload.purchaseDate ? new Date(payload.purchaseDate) : (payload.purchaseDate === null ? null : oldRecord.purchaseDate),
-        payload.warrantyStatus || null,
+        payload.warrantyStatus || oldRecord.warrantyStatus,
         payload.warrantyExpiryDate ? new Date(payload.warrantyExpiryDate) : (payload.warrantyExpiryDate === null ? null : oldRecord.warrantyExpiryDate),
-        payload.condition || null,
-        payload.status || null,
-        payload.assignmentType || null,
+        payload.condition || oldRecord.condition,
+        payload.status || oldRecord.status,
+        payload.assignmentType || oldRecord.assignmentType,
         payload.macAddress !== undefined ? payload.macAddress : oldRecord.macAddress,
         payload.ipAddress !== undefined ? payload.ipAddress : oldRecord.ipAddress,
         payload.locationId !== undefined ? payload.locationId : oldRecord.locationId,
         payload.departmentId !== undefined ? payload.departmentId : oldRecord.departmentId,
         payload.assignedEmployeeId !== undefined ? payload.assignedEmployeeId : oldRecord.assignedEmployeeId,
         payload.remarks !== undefined ? payload.remarks : oldRecord.remarks,
+        JSON.stringify(payload.accessories !== undefined ? (payload.accessories || []) : (oldRecord.accessories || [])),
         req.params.id
       );
       record = await prisma.asset.findUnique({
         where: { id: req.params.id },
+        include: {
+          location: true,
+          department: true,
+          assignedEmployee: true
+        }
+      });
+    } catch (sqlErr) {
+      console.warn('[ASSET UPDATE] Raw SQL failed, trying Prisma relation syntax:', sqlErr.message);
+      // FALLBACK: Prisma relation-connect syntax
+      const updateData = formatAssetPrismaData(payload, true);
+      record = await prisma.asset.update({
+        where: { id: req.params.id },
+        data: updateData,
         include: {
           location: true,
           department: true,

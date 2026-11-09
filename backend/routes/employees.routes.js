@@ -258,28 +258,7 @@ router.post('/', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
     let employeeCode = generatedCode;
     let record = null;
 
-    // Helper to attempt employee creation with canonical relation connects
-    const attemptRelationCreate = async (code) => {
-      return await prisma.employee.create({
-        data: {
-          employeeCode: code,
-          fullName,
-          email,
-          designation,
-          phone,
-          status,
-          ...(avatarUrl ? { avatarUrl } : {}),
-          ...(verifiedDeptId ? { department: { connect: { id: verifiedDeptId } } } : {}),
-          ...(verifiedLocId ? { location: { connect: { id: verifiedLocId } } } : {})
-        },
-        include: {
-          department: true,
-          location: true
-        }
-      });
-    };
-
-    // Helper to perform direct SQL insert fallback (safe against Prisma schema relation syntax differences)
+    // PRIMARY: Always use direct SQL INSERT — works regardless of Prisma Client version on Render
     const attemptRawSqlCreate = async (code) => {
       const newId = crypto.randomUUID();
       await prisma.$executeRawUnsafe(
@@ -305,25 +284,51 @@ router.post('/', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
       });
     };
 
-    // Robust Execution with Automated Collision Retry & Direct Fallback
+    // FALLBACK: Prisma relation-connect syntax (may fail on some Prisma Client versions)
+    const attemptRelationCreate = async (code) => {
+      return await prisma.employee.create({
+        data: {
+          employeeCode: code,
+          fullName,
+          email,
+          designation,
+          phone,
+          status,
+          ...(avatarUrl ? { avatarUrl } : {}),
+          ...(verifiedDeptId ? { department: { connect: { id: verifiedDeptId } } } : {}),
+          ...(verifiedLocId ? { location: { connect: { id: verifiedLocId } } } : {})
+        },
+        include: {
+          department: true,
+          location: true
+        }
+      });
+    };
+
+    // Robust Execution: SQL first, Prisma relation as fallback, with collision retry
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         if (!employeeCode || attempt > 0) {
           employeeCode = await generateEmployeeCode(prisma);
         }
 
+        // Try raw SQL first (always works on Render)
         try {
-          record = await attemptRelationCreate(employeeCode);
-          break;
-        } catch (relationErr) {
-          console.warn(`[EMPLOYEE CREATE] Relation create failed on attempt ${attempt}:`, relationErr.message);
-          // If relation connects threw or failed, immediately use direct SQL fallback
           record = await attemptRawSqlCreate(employeeCode);
+          break;
+        } catch (sqlErr) {
+          // SQL failed — if it's a code collision, retry outer loop
+          if (sqlErr.message?.includes('employeeCode') || sqlErr.message?.includes('duplicate key') || sqlErr.message?.includes('unique constraint')) {
+            throw sqlErr; // caught by outer catch → collision retry
+          }
+          // Otherwise try Prisma relation syntax as final fallback
+          console.warn(`[EMPLOYEE CREATE] SQL failed on attempt ${attempt}:`, sqlErr.message, '— trying Prisma relation syntax');
+          record = await attemptRelationCreate(employeeCode);
           break;
         }
       } catch (err) {
-        // If employeeCode collision happened (P2002 or Postgres 23505 duplicate key), retry with fresh code
-        if (err.code === 'P2002' || err.message?.includes('employeeCode') || err.message?.includes('duplicate key')) {
+        // Collision retry: employeeCode duplicate key
+        if (err.code === 'P2002' || err.message?.includes('employeeCode') || err.message?.includes('duplicate key') || err.message?.includes('unique constraint')) {
           employeeCode = null;
           continue;
         }
@@ -399,16 +404,53 @@ router.put('/:id', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
     const hasAvatar = raw.avatarUrl !== undefined;
     const cleanAvatar = hasAvatar ? (raw.avatarUrl && String(raw.avatarUrl).trim() !== '' ? String(raw.avatarUrl).trim() : null) : undefined;
 
-    // Use canonical Prisma relation update syntax
-    const relationData = {
-      ...dataToUpdate,
-      ...(hasAvatar ? { avatarUrl: cleanAvatar } : {}),
-      ...(hasDept ? (deptId ? { department: { connect: { id: deptId } } } : { department: { disconnect: true } }) : {}),
-      ...(hasLoc ? (locId ? { location: { connect: { id: locId } } } : { location: { disconnect: true } }) : {})
-    };
-
     let record;
+
+    // PRIMARY: Direct raw SQL UPDATE — works regardless of Prisma Client version on Render
     try {
+      await prisma.$executeRawUnsafe(
+        `UPDATE "Employee"
+         SET "fullName"    = COALESCE($1, "fullName"),
+             "email"       = $2,
+             "designation" = $3,
+             "phone"       = $4,
+             "departmentId"= $5,
+             "locationId"  = $6,
+             "status"      = COALESCE($7::"GeneralStatus", "status"),
+             "avatarUrl"   = $8,
+             "updatedAt"   = NOW()
+         WHERE "id" = $9`,
+        dataToUpdate.fullName || oldRecord.fullName,
+        dataToUpdate.email !== undefined ? dataToUpdate.email : oldRecord.email,
+        dataToUpdate.designation !== undefined ? dataToUpdate.designation : oldRecord.designation,
+        dataToUpdate.phone !== undefined ? dataToUpdate.phone : oldRecord.phone,
+        deptId !== undefined ? deptId : oldRecord.departmentId,
+        locId !== undefined ? locId : oldRecord.locationId,
+        dataToUpdate.status || oldRecord.status,
+        cleanAvatar !== undefined ? cleanAvatar : oldRecord.avatarUrl,
+        req.params.id
+      );
+
+      record = await prisma.employee.findUnique({
+        where: { id: req.params.id },
+        include: {
+          department: true,
+          location: true,
+          assignedAssets: true,
+          assignments: { where: { status: 'ACTIVE' } }
+        }
+      });
+    } catch (sqlErr) {
+      console.warn('[EMPLOYEE UPDATE] Raw SQL failed, trying Prisma relation syntax:', sqlErr.message);
+
+      // FALLBACK: Prisma relation-connect syntax
+      const relationData = {
+        ...dataToUpdate,
+        ...(hasAvatar ? { avatarUrl: cleanAvatar } : {}),
+        ...(hasDept ? (deptId ? { department: { connect: { id: deptId } } } : { department: { disconnect: true } }) : {}),
+        ...(hasLoc ? (locId ? { location: { connect: { id: locId } } } : { location: { disconnect: true } }) : {})
+      };
+
       record = await prisma.employee.update({
         where: { id: req.params.id },
         data: relationData,
@@ -419,73 +461,6 @@ router.put('/:id', requirePermission('MANAGE_EMPLOYEES'), async (req, res) => {
           assignments: { where: { status: 'ACTIVE' } }
         }
       });
-    } catch (prismaErr) {
-      console.warn('Prisma employee update relation syntax threw, using resilient fallback:', prismaErr.message);
-
-      try {
-        // Fallback 1: try fields with safe relation linking
-        record = await prisma.employee.update({
-          where: { id: req.params.id },
-          data: {
-            ...dataToUpdate,
-            ...(hasAvatar ? { avatarUrl: cleanAvatar } : {})
-          },
-          include: {
-            department: true,
-            location: true,
-            assignedAssets: true,
-            assignments: { where: { status: 'ACTIVE' } }
-          }
-        });
-        if (hasDept) {
-          if (deptId) {
-            record = await prisma.employee.update({ where: { id: req.params.id }, data: { department: { connect: { id: deptId } } } });
-          } else {
-            record = await prisma.employee.update({ where: { id: req.params.id }, data: { department: { disconnect: true } } });
-          }
-        }
-        if (hasLoc) {
-          if (locId) {
-            record = await prisma.employee.update({ where: { id: req.params.id }, data: { location: { connect: { id: locId } } } });
-          } else {
-            record = await prisma.employee.update({ where: { id: req.params.id }, data: { location: { disconnect: true } } });
-          }
-        }
-      } catch (scalarErr) {
-        // Fallback 2: Direct raw SQL update
-        await prisma.$executeRawUnsafe(
-          `UPDATE "Employee" 
-           SET "fullName" = COALESCE($1, "fullName"),
-               "email" = $2,
-               "designation" = $3,
-               "phone" = $4,
-               "departmentId" = $5,
-               "locationId" = $6,
-               "status" = COALESCE($7::"GeneralStatus", "status"),
-               "avatarUrl" = $8,
-               "updatedAt" = NOW()
-           WHERE id = $9`,
-          dataToUpdate.fullName || null,
-          dataToUpdate.email !== undefined ? dataToUpdate.email : oldRecord.email,
-          dataToUpdate.designation !== undefined ? dataToUpdate.designation : oldRecord.designation,
-          dataToUpdate.phone !== undefined ? dataToUpdate.phone : oldRecord.phone,
-          deptId !== undefined ? deptId : oldRecord.departmentId,
-          locId !== undefined ? locId : oldRecord.locationId,
-          dataToUpdate.status || null,
-          cleanAvatar !== undefined ? cleanAvatar : oldRecord.avatarUrl,
-          req.params.id
-        );
-
-        record = await prisma.employee.findUnique({
-          where: { id: req.params.id },
-          include: {
-            department: true,
-            location: true,
-            assignedAssets: true,
-            assignments: { where: { status: 'ACTIVE' } }
-          }
-        });
-      }
     }
 
     await logAudit({
