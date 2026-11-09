@@ -25,10 +25,18 @@ async function applyMigrations() {
         ADD COLUMN IF NOT EXISTS "mimeType" TEXT;
     `);
     await prisma.$executeRawUnsafe(`
-      UPDATE "AssetDocument"
-      SET "fileUrl" = "filePath",
-          "storageKey" = "filePath"
-      WHERE "fileUrl" IS NULL AND "filePath" IS NOT NULL;
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'AssetDocument' AND column_name = 'filePath'
+        ) THEN
+          UPDATE "AssetDocument"
+          SET "fileUrl" = "filePath",
+              "storageKey" = "filePath"
+          WHERE "fileUrl" IS NULL AND "filePath" IS NOT NULL;
+        END IF;
+      END $$;
     `);
   } catch (err) {
     console.warn('[MIGRATION] AssetDocument columns notice:', err.message);

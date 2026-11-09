@@ -10,6 +10,7 @@ import CopyButton from '../components/CopyButton';
 import EmployeeHandoverModal from '../components/EmployeeHandoverModal';
 import { returnAssetToStore } from '../utils/assetReturn';
 import { safeSetItem } from '../utils/storage';
+import { computeEmployeeValuationSummary } from '../utils/marketValuation';
 
 const _rawApi = import.meta.env.VITE_API_URL || '/api';
 const API_URL = _rawApi.endsWith('/api') ? _rawApi : `${_rawApi.replace(/\/$/, '')}/api`;
@@ -748,9 +749,13 @@ export default function Employees({ defaultOpenAdd = false }) {
                       {(() => {
                         const assigned = getAssignedAssets(emp);
                         const count = assigned.length;
-                        const valLKR = emp.totalAssetValueLKR || emp.valuationSummary?.totalValueLKR;
-                        const formatted = emp.formattedAssetValue || emp.valuationSummary?.formattedTotalLKR;
-                        const isPending = emp.valuationSummary?.isAllPending || (valLKR === 0 && count > 0);
+                        
+                        // Resilient calculation: use backend valuation if present, otherwise calculate client-side from assigned assets
+                        const summary = emp.valuationSummary || (assigned.length > 0 ? computeEmployeeValuationSummary(assigned) : null);
+                        const valLKR = emp.totalAssetValueLKR ?? summary?.totalValueLKR;
+                        const formatted = emp.formattedAssetValue ?? summary?.formattedTotalLKR;
+                        const isPending = summary?.isAllPending || (valLKR === 0 && count > 0);
+                        const isPartial = summary?.hasPartialValuation;
 
                         if (valLKR && valLKR > 0) {
                           return (
@@ -758,7 +763,7 @@ export default function Employees({ defaultOpenAdd = false }) {
                               <span className="font-mono font-bold text-slate-900 dark:text-slate-100 text-xs">
                                 {formatted || `LKR ${Number(valLKR).toLocaleString('en-LK')}`}
                               </span>
-                              {emp.valuationSummary?.hasPartialValuation ? (
+                              {isPartial ? (
                                 <span className="text-[9px] text-amber-500 font-medium">Partial Value</span>
                               ) : (
                                 <span className="text-[9px] text-slate-400 font-normal">Approx. Market Value</span>
@@ -1354,6 +1359,7 @@ export default function Employees({ defaultOpenAdd = false }) {
         <EmployeeHandoverModal
           employeeId={handoverModalEmp.id}
           initialEmployee={handoverModalEmp}
+          initialAssignedAssets={getAssignedAssets(handoverModalEmp)}
           onClose={() => setHandoverModalEmp(null)}
         />
       )}

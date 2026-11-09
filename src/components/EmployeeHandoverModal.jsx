@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { Printer, Download, X, CheckSquare, Square, Loader2, ShieldCheck, AlertCircle, Laptop } from 'lucide-react';
 import { downloadEmployeeHandoverPdf } from '../utils/pdfGenerator';
+import { computeEmployeeValuationSummary } from '../utils/marketValuation';
 
 const _rawApi = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) || '/api';
 const API_URL = _rawApi.endsWith('/api') ? _rawApi : `${_rawApi.replace(/\/$/, '')}/api`;
 
-export default function EmployeeHandoverModal({ employeeId, initialEmployee, onClose }) {
+export default function EmployeeHandoverModal({ employeeId, initialEmployee, initialAssignedAssets = [], onClose }) {
   const printAreaRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -27,8 +28,29 @@ export default function EmployeeHandoverModal({ employeeId, initialEmployee, onC
         });
 
         if (!res.ok) {
-          const errJson = await res.json().catch(() => ({}));
-          throw new Error(errJson.error || 'Failed to load employee handover data.');
+          // If the backend endpoint fails (e.g. Render server has not yet deployed the new route),
+          // fallback gracefully using the employee data and assigned assets
+          const emp = initialEmployee || {};
+          const fallbackAssets = Array.isArray(initialAssignedAssets) ? initialAssignedAssets : [];
+          const valuationSummary = computeEmployeeValuationSummary(fallbackAssets);
+          const now = new Date();
+          const dateCode = now.toISOString().slice(0, 10).replace(/-/g, '');
+          const cleanEmpCode = (emp.employeeCode || 'EMP').replace(/[^A-Za-z0-9]/g, '');
+
+          const fallbackData = {
+            employee: emp,
+            assignedAssets: valuationSummary.enrichedAssets,
+            assetCount: valuationSummary.totalAssignedAssets,
+            valuationSummary,
+            handoverReference: `EM-HO-${cleanEmpCode}-${dateCode}`,
+            generatedAt: now.toISOString()
+          };
+
+          if (isMounted) {
+            setHandoverData(fallbackData);
+            setLoading(false);
+            return;
+          }
         }
 
         const data = await res.json();
@@ -37,7 +59,25 @@ export default function EmployeeHandoverModal({ employeeId, initialEmployee, onC
         }
       } catch (err) {
         if (isMounted) {
-          setError(err.message || 'Error initializing employee handover document.');
+          // Fallback if network or endpoint threw
+          if (initialEmployee) {
+            const fallbackAssets = Array.isArray(initialAssignedAssets) ? initialAssignedAssets : [];
+            const valuationSummary = computeEmployeeValuationSummary(fallbackAssets);
+            const now = new Date();
+            const dateCode = now.toISOString().slice(0, 10).replace(/-/g, '');
+            const cleanEmpCode = (initialEmployee.employeeCode || 'EMP').replace(/[^A-Za-z0-9]/g, '');
+
+            setHandoverData({
+              employee: initialEmployee,
+              assignedAssets: valuationSummary.enrichedAssets,
+              assetCount: valuationSummary.totalAssignedAssets,
+              valuationSummary,
+              handoverReference: `EM-HO-${cleanEmpCode}-${dateCode}`,
+              generatedAt: now.toISOString()
+            });
+          } else {
+            setError(err.message || 'Error initializing employee handover document.');
+          }
         }
       } finally {
         if (isMounted) setLoading(false);
@@ -46,22 +86,71 @@ export default function EmployeeHandoverModal({ employeeId, initialEmployee, onC
 
     fetchHandoverData();
     return () => { isMounted = false; };
-  }, [employeeId, initialEmployee]);
+  }, [employeeId, initialEmployee, initialAssignedAssets]);
 
   const handlePrint = () => {
     window.print();
   };
 
-  const handleDownloadPdf = () => {
+  const handleDownloadPdf = async () => {
     if (downloadingPdf || !handoverData) return;
     try {
       setDownloadingPdf(true);
       const emp = handoverData?.employee || initialEmployee || {};
       const filename = `EuroMotors_Handover_${emp.employeeCode || 'Employee'}_${(emp.fullName || 'Staff').replace(/\s+/g, '_')}`;
-      downloadEmployeeHandoverPdf(handoverData, filename);
+
+      // 1. Primary Vector PDF Generation
+      try {
+        downloadEmployeeHandoverPdf(handoverData, filename);
+        return;
+      } catch (vectorErr) {
+        console.warn('Primary vector PDF generation encountered an issue, trying high-definition canvas fallback:', vectorErr);
+      }
+
+      // 2. High-Definition Multi-Page Canvas Fallback
+      const printSheet = printAreaRef.current || document.getElementById('employee-handover-sheet');
+      if (printSheet) {
+        const html2canvasModule = await import('html2canvas');
+        const html2canvas = html2canvasModule.default || html2canvasModule;
+        const { jsPDF } = await import('jspdf');
+
+        const canvas = await html2canvas(printSheet, {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#ffffff'
+        });
+
+        const imgData = canvas.toDataURL('image/jpeg', 0.95);
+        const pdf = new jsPDF({
+          orientation: 'portrait',
+          unit: 'mm',
+          format: 'a4'
+        });
+
+        const pageWidth = 210;
+        const pageHeight = 297;
+        const imgHeight = (canvas.height * pageWidth) / canvas.width;
+        let heightLeft = imgHeight;
+        let position = 0;
+
+        pdf.addImage(imgData, 'JPEG', 0, position, pageWidth, imgHeight);
+        heightLeft -= pageHeight;
+
+        while (heightLeft > 0) {
+          position = heightLeft - imgHeight;
+          pdf.addPage();
+          pdf.addImage(imgData, 'JPEG', 0, position, pageWidth, imgHeight);
+          heightLeft -= pageHeight;
+        }
+
+        pdf.save(`${filename}.pdf`);
+      } else {
+        throw new Error('Handover print template element not available.');
+      }
     } catch (err) {
-      console.error('PDF generation error:', err);
-      alert('Failed to generate PDF. Please use the Print Handover Form button as a fallback.');
+      console.error('All PDF generation methods failed:', err);
+      alert('Unable to generate PDF automatically: ' + (err.message || 'Unknown error') + '\n\nPlease click the "Print Handover Form" button and choose "Save as PDF" as your printer destination.');
     } finally {
       setDownloadingPdf(false);
     }

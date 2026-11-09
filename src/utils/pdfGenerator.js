@@ -1,16 +1,32 @@
 import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import autoTable, { applyPlugin } from 'jspdf-autotable';
+
+// Ensure jsPDF prototype is patched with autoTable plugin
+try {
+  if (typeof applyPlugin === 'function') {
+    applyPlugin(jsPDF);
+  }
+} catch (_) {
+  // Plugin may already be applied
+}
 
 // Resilient autoTable runner across all ESM/CJS bundlers
 function runAutoTable(pdf, options) {
   if (typeof pdf.autoTable === 'function') {
-    return pdf.autoTable(options);
+    pdf.autoTable(options);
+    return;
   }
   if (typeof autoTable === 'function') {
-    return autoTable(pdf, options);
+    autoTable(pdf, options);
+    return;
   }
-  if (autoTable?.default && typeof autoTable.default === 'function') {
-    return autoTable.default(pdf, options);
+  if (typeof autoTable?.default === 'function') {
+    autoTable.default(pdf, options);
+    return;
+  }
+  if (typeof autoTable?.autoTable === 'function') {
+    autoTable.autoTable(pdf, options);
+    return;
   }
   throw new Error('PDF Table engine (jspdf-autotable) is not available.');
 }
@@ -78,7 +94,7 @@ export function downloadEmployeeHandoverPdf(handoverData, filename) {
   pdf.setFont('helvetica', 'normal');
   pdf.setFontSize(7);
   pdf.setTextColor(100, 116, 139);
-  pdf.text('Information Technology Department  •  Asset Custody Division', marginLeft, 23.5);
+  pdf.text('Information Technology Department  |  Asset Custody Division', marginLeft, 23.5);
 
   // Right: Document Metadata Box (Strictly bounded so it never overlaps title)
   const refBoxWidth = 66;
@@ -305,11 +321,11 @@ export function downloadEmployeeHandoverPdf(handoverData, filename) {
   pdf.setFont('helvetica', 'normal');
   pdf.setFontSize(6.8);
   pdf.setTextColor(71, 85, 105);
-  pdf.text(`Employee: ${emp.fullName || 'N/A'} (${emp.employeeCode || 'N/A'})  •  Total Assigned Assets: ${assets.length} Item(s)`, marginLeft + 4, valCardY + 10.5);
+  pdf.text(`Employee: ${emp.fullName || 'N/A'} (${emp.employeeCode || 'N/A'})  |  Total Assigned Assets: ${assets.length} Item(s)`, marginLeft + 4, valCardY + 10.5);
 
   const valDateFormatted = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   const pendingText = valSummary.pendingCount > 0 
-    ? `⚠️ Incomplete Valuation: ${valSummary.pendingCount} asset(s) pending valuation. Shown amount is Known Total.`
+    ? `[!] Incomplete Valuation: ${valSummary.pendingCount} asset(s) pending valuation. Shown amount is Known Total.`
     : `Valuation Status: Complete & Verified as of ${valDateFormatted}`;
   
   pdf.setFont('helvetica', valSummary.pendingCount > 0 ? 'bold' : 'normal');
@@ -492,14 +508,31 @@ export function downloadEmployeeHandoverPdf(handoverData, filename) {
     pdf.setFontSize(6.2);
     pdf.setTextColor(148, 163, 184);
     pdf.text(
-      `Euro Motors Private Limited  •  Standard IT Custody & Valuation Agreement  •  Ref: ${handoverRef}  •  Page ${p} of ${totalPages}`,
+      `Euro Motors Private Limited  |  Standard IT Custody & Valuation Agreement  |  Ref: ${handoverRef}  |  Page ${p} of ${totalPages}`,
       pageWidth / 2,
       pageHeight - 6,
       { align: 'center' }
     );
   }
 
-  pdf.save(cleanFilename);
+  try {
+    pdf.save(cleanFilename);
+  } catch (saveErr) {
+    console.warn('pdf.save failed, falling back to direct blob download:', saveErr);
+    if (typeof window !== 'undefined' && typeof window.document !== 'undefined') {
+      const blob = pdf.output('blob');
+      const blobUrl = window.URL.createObjectURL(blob);
+      const tempLink = window.document.createElement('a');
+      tempLink.href = blobUrl;
+      tempLink.download = cleanFilename;
+      window.document.body.appendChild(tempLink);
+      tempLink.click();
+      window.document.body.removeChild(tempLink);
+      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 2000);
+    } else {
+      throw saveErr;
+    }
+  }
 }
 
 /**
