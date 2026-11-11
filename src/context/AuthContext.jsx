@@ -97,7 +97,8 @@ export function AuthProvider({ children }) {
       }
 
       if (!response.ok) {
-        throw new Error(data.error || `Login failed with status ${response.status}`);
+        const errorMsg = data.error || (data.details ? `Server error: ${data.details}` : `Login failed with status ${response.status}`);
+        throw new Error(errorMsg);
       }
       
       const authUser = data.user;

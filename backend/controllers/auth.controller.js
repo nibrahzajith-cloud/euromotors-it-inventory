@@ -140,7 +140,12 @@ exports.login = async (req, res) => {
 
     res.json({ message: 'Login successful', token, user: { id: user.id, fullName: user.fullName, role: user.role, email: user.email, mustChangePassword: user.mustChangePassword, permissions } });
   } catch (error) {
-    res.status(500).json({ error: 'Server error during login', details: error.message });
+    console.error('[LOGIN ERROR]', error);
+    const isQuota = error.message && (error.message.includes('quota') || error.message.includes('53000'));
+    const friendlyError = isQuota
+      ? 'Database quota exceeded on Neon PostgreSQL. Please upgrade plan or reset quota in Neon console.'
+      : 'Server error during login';
+    res.status(500).json({ error: friendlyError, details: error.message });
   }
 };
 
