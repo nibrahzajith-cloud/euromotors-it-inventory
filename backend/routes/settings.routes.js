@@ -3,8 +3,18 @@ const router = express.Router();
 const prisma = require('../prismaClient');
 const { authenticate, authorize, requireModule, requireAnyModule } = require('../middleware/auth.middleware');
 const { logAudit } = require('../utils/logger');
+const { getSystemVersionInfo } = require('../utils/systemVersion');
 
 router.use(authenticate);
+
+router.get('/version', authorize(['ADMIN', 'HEAD_OF_IT']), async (req, res) => {
+  try {
+    const info = await getSystemVersionInfo(prisma);
+    res.json(info);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 router.get('/', requireAnyModule(['IT_INVENTORY', 'SYSTEM_SETTINGS']), authorize(['ADMIN', 'HEAD_OF_IT', 'IT_MANAGER', 'IT_OFFICER']), async (req, res) => {
   try {

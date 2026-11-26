@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Save, User, Building2, Server, Globe, DownloadCloud, Activity, UploadCloud, Play, FileText, CheckCircle2, AlertCircle, Eye, Download, Search, Loader2, ShieldCheck, Shield, ShieldAlert } from 'lucide-react';
 import RolePermissions from '../components/RolePermissions';
+import SystemVersionCard from '../components/SystemVersionCard';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useNavigate } from 'react-router-dom';
@@ -788,6 +789,8 @@ export default function Settings() {
         </div>
 
         <RolePermissions />
+
+        <SystemVersionCard user={user} />
 
         <div className="bg-slate-50 p-4 border-t border-slate-100 flex justify-end gap-4">
           <button type="button" className="px-6 py-2 border border-slate-200 text-slate-700 rounded-xl font-medium hover:bg-slate-100 transition-colors">

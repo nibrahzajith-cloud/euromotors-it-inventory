@@ -2,9 +2,30 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import { readFileSync } from 'node:fs'
+import { execSync } from 'node:child_process'
+
+const rootPkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'))
+function resolveBuildCommit() {
+  const envCommit = process.env.VERCEL_GIT_COMMIT_SHA || process.env.GIT_COMMIT || ''
+  if (envCommit.trim()) return envCommit.trim()
+  try {
+    return execSync('git rev-parse HEAD', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+  } catch {
+    return 'unknown'
+  }
+}
+const BUILD_COMMIT = resolveBuildCommit()
+const BUILD_TIME = new Date().toISOString()
 
 // https://vite.dev/config/
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(rootPkg.version || '2.0.0'),
+    __FRONTEND_COMMIT__: JSON.stringify(BUILD_COMMIT),
+    __BUILD_TIME__: JSON.stringify(BUILD_TIME),
+    __API_CONTRACT__: JSON.stringify('helpdesk-v1'),
+  },
   plugins: [
     react(), 
     tailwindcss(),

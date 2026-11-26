@@ -71,6 +71,7 @@ const reportsRoutes = require('./routes/reports.routes');
 const dropdownOptionsRoutes = require('./routes/dropdownOptions.routes');
 const applyMigrations = require('./utils/migrations');
 const { ensureHelpDeskSeeded } = require('./utils/helpdeskSeed');
+const { getGitCommit, getRuntimeEnvironment, BACKEND_VERSION, API_CONTRACT_VERSION, STARTED_AT } = require('./utils/systemVersion');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRoutes);
@@ -100,7 +101,15 @@ app.use('/api/dropdown-options', dropdownOptionsRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'API is running' });
+  const commit = getGitCommit();
+  res.json({
+    status: 'API is running',
+    version: BACKEND_VERSION,
+    apiContract: API_CONTRACT_VERSION,
+    commit: commit.short,
+    environment: getRuntimeEnvironment(),
+    startedAt: STARTED_AT,
+  });
 });
 
 const PORT = process.env.PORT || 5000;

@@ -362,4 +362,6 @@ async function applyMigrations() {
   console.log('[MIGRATION] Database migrations and performance indexing complete.');
 }
 
+applyMigrations.MIGRATION_VERSION = '2026.11.26-helpdesk-v1.0';
+
 module.exports = applyMigrations;
