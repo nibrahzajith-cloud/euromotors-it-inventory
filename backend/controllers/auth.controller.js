@@ -2,15 +2,65 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const prisma = require('../prismaClient');
 const { logAudit } = require('../utils/logger');
+const {
+  resolveModuleAccess,
+  resolveGranularPermissions,
+  getDefaultLandingRoute,
+} = require('../utils/rbac');
+const { ensureHelpDeskSeeded, DEFAULT_PORTAL_CONFIG } = require('../utils/helpdeskSeed');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_jwt_key_for_euro_motors';
 const IS_DEV = process.env.NODE_ENV !== 'production';
-
-// Enterprise bcrypt configuration:
-// - 8 rounds for new passwords: ~25ms hashing time (OWASP minimum is 10,000 iterations equivalent)
-// - Existing hashes stored with 10 rounds will still verify correctly (bcrypt.compare is round-agnostic)
-// - To get full benefit for existing users, they must change their password
 const BCRYPT_ROUNDS = 8;
+
+async function buildAuthUserPayload(userRecord) {
+  const rolePerm = await prisma.rolePermission.findUnique({
+    where: { role: userRecord.role },
+  }).catch(() => null);
+
+  let employee = userRecord.employee || null;
+  if (!employee && userRecord.employeeId) {
+    employee = await prisma.employee.findUnique({
+      where: { id: userRecord.employeeId },
+      include: { department: true, location: true },
+    }).catch(() => null);
+  } else if (!employee && userRecord.email) {
+    employee = await prisma.employee.findFirst({
+      where: { email: { equals: userRecord.email, mode: 'insensitive' } },
+      include: { department: true, location: true },
+    }).catch(() => null);
+  }
+
+  const moduleAccess = resolveModuleAccess(userRecord);
+  const permissions = resolveGranularPermissions(userRecord, rolePerm);
+  const landingRoute = getDefaultLandingRoute({ ...userRecord, moduleAccess });
+
+  return {
+    id: userRecord.id,
+    fullName: userRecord.fullName,
+    email: userRecord.email,
+    role: userRecord.role,
+    status: userRecord.status,
+    mustChangePassword: userRecord.mustChangePassword,
+    employeeId: userRecord.employeeId || employee?.id || null,
+    employee: employee ? {
+      id: employee.id,
+      employeeCode: employee.employeeCode,
+      fullName: employee.fullName,
+      email: employee.email,
+      phone: employee.phone,
+      designation: employee.designation,
+      departmentId: employee.departmentId,
+      departmentName: employee.department?.name || null,
+      locationId: employee.locationId,
+      locationName: employee.location?.name || null,
+    } : null,
+    moduleAccess,
+    modulePermissions: userRecord.modulePermissions || null,
+    permissions,
+    landingRoute,
+  };
+}
 
 exports.register = async (req, res) => {
   try {
@@ -29,11 +79,10 @@ exports.register = async (req, res) => {
         fullName,
         email,
         passwordHash,
-        role: role || 'VIEWER'
-      }
+        role: role || 'EMPLOYEE',
+      },
     });
 
-    // Fire-and-forget: do not block registration response on audit log write
     logAudit({
       req,
       userOverride: user,
@@ -41,11 +90,16 @@ exports.register = async (req, res) => {
       module: 'AUTH',
       entityType: 'USER',
       entityId: user.id,
-      description: `New user registered: ${user.email} (${user.role})`
+      description: `New user registered: ${user.email} (${user.role})`,
     });
 
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role, fullName: user.fullName }, JWT_SECRET, { expiresIn: '30d' });
-    res.status(201).json({ message: 'User registered successfully', token, user: { id: user.id, fullName: user.fullName, role: user.role, mustChangePassword: user.mustChangePassword } });
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: user.role, fullName: user.fullName },
+      JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+    const userPayload = await buildAuthUserPayload(user);
+    res.status(201).json({ message: 'User registered successfully', token, user: userPayload });
   } catch (error) {
     res.status(500).json({ error: 'Server error during registration', details: error.message });
   }
@@ -54,9 +108,9 @@ exports.register = async (req, res) => {
 exports.login = async (req, res) => {
   const t0 = IS_DEV ? Date.now() : 0;
   try {
+    await ensureHelpDeskSeeded();
     const { email, password } = req.body;
 
-    // Single optimized query — only select the fields we actually need
     const user = await prisma.user.findUnique({
       where: { email },
       select: {
@@ -66,8 +120,13 @@ exports.login = async (req, res) => {
         role: true,
         status: true,
         fullName: true,
-        mustChangePassword: true
-      }
+        mustChangePassword: true,
+        employeeId: true,
+        modulePermissions: true,
+        employee: {
+          include: { department: true, location: true },
+        },
+      },
     });
 
     if (IS_DEV) console.log(`[LOGIN] DB query: ${Date.now() - t0}ms`);
@@ -76,30 +135,68 @@ exports.login = async (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    // Status check before bcrypt to fail fast without hashing cost
     if (user.status !== 'ACTIVE') {
       return res.status(403).json({ error: 'Account is deactivated' });
     }
 
     const t1 = IS_DEV ? Date.now() : 0;
-    
-    // Run bcrypt and role permission query concurrently to save latency
-    const [validPassword, rolePerm] = await Promise.all([
-      bcrypt.compare(password, user.passwordHash),
-      prisma.rolePermission.findUnique({ where: { role: user.role } })
-    ]);
-    
-    if (IS_DEV) console.log(`[LOGIN] bcrypt compare & role query: ${Date.now() - t1}ms`);
+    const validPassword = await bcrypt.compare(password, user.passwordHash);
+    if (IS_DEV) console.log(`[LOGIN] bcrypt compare: ${Date.now() - t1}ms`);
 
     if (!validPassword) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    const t2 = IS_DEV ? Date.now() : 0;
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role, fullName: user.fullName }, JWT_SECRET, { expiresIn: '30d' });
-    if (IS_DEV) console.log(`[LOGIN] JWT sign: ${Date.now() - t2}ms`);
+    if (user.role === 'PORTAL_ACCESS') {
+      const hdSettings = await prisma.helpDeskSettings.findUnique({
+        where: { id: 'global' },
+        select: { portalConfig: true },
+      }).catch(() => null);
+      const portalCfg = { ...DEFAULT_PORTAL_CONFIG, ...(hdSettings?.portalConfig || {}) };
+      if (!portalCfg.enabled) {
+        return res.status(403).json({ error: 'Employee Support Portal access is currently disabled by IT Administration.' });
+      }
 
-    // CRITICAL: Fire-and-forget audit log — do NOT await this.
+      const gatewayToken = jwt.sign(
+        {
+          id: user.id,
+          email: user.email,
+          role: 'PORTAL_ACCESS',
+          fullName: user.fullName,
+          tokenScope: 'PORTAL_GATEWAY',
+        },
+        JWT_SECRET,
+        { expiresIn: '8h' }
+      );
+
+      logAudit({
+        req,
+        userOverride: user,
+        action: 'PORTAL_GATEWAY_LOGIN',
+        module: 'PORTAL',
+        entityType: 'USER',
+        entityId: user.id,
+        description: `Common portal account signed in: ${user.email}`,
+      });
+
+      const gatewayPayload = await buildAuthUserPayload(user);
+      return res.json({
+        message: 'Portal gateway authenticated',
+        token: gatewayToken,
+        user: {
+          ...gatewayPayload,
+          tokenScope: 'PORTAL_GATEWAY',
+          landingRoute: '/portal/identify',
+        },
+      });
+    }
+
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: user.role, fullName: user.fullName },
+      JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+
     logAudit({
       req,
       userOverride: user,
@@ -107,38 +204,12 @@ exports.login = async (req, res) => {
       module: 'AUTH',
       entityType: 'USER',
       entityId: user.id,
-      description: `User logged in: ${user.email}`
+      description: `User logged in: ${user.email}`,
     });
 
-    if (IS_DEV) console.log(`[LOGIN] Total response time: ${Date.now() - t0}ms (audit log: background)`);
+    const userPayload = await buildAuthUserPayload(user);
 
-    // Default fallback logic
-    const fullPermissions = {
-      VIEW_ASSETS: true, CREATE_ASSETS: true, EDIT_ASSETS: true, DELETE_ASSETS: true,
-      ASSIGN_ASSETS: true, TRANSFER_ASSETS: true, 
-      UPLOAD_ASSET_IMAGES: true, REPLACE_ASSET_IMAGES: true, DELETE_ASSET_IMAGES: true,
-      UPLOAD_ASSET_DOCUMENTS: true, DOWNLOAD_ASSET_DOCUMENTS: true, DELETE_ASSET_DOCUMENTS: true,
-      BULK_IMPORT_ASSETS: true, EXPORT_REPORTS: true, VIEW_STORAGE_STATS: true,
-      MANAGE_EMPLOYEES: true, MANAGE_DEPARTMENTS: true, MANAGE_LOCATIONS: true,
-      MANAGE_USERS: true, MANAGE_ROLES: true, VIEW_AUDIT_LOG: true, EXPORT_AUDIT_LOG: true, CONFIGURE_SYSTEM: true
-    };
-    const defaultPermissions = {
-      ADMIN: fullPermissions,
-      IT_OFFICER: fullPermissions,
-      VIEWER: fullPermissions
-    };
-    
-    const permissions = rolePerm ? { ...rolePerm.permissions } : defaultPermissions[user.role];
-
-    // Safety net: ADMIN must always retain critical permissions regardless of DB state
-    if (user.role === 'ADMIN') {
-      permissions.MANAGE_USERS = true;
-      permissions.MANAGE_ROLES = true;
-      permissions.VIEW_AUDIT_LOG = true;
-      permissions.CONFIGURE_SYSTEM = true;
-    }
-
-    res.json({ message: 'Login successful', token, user: { id: user.id, fullName: user.fullName, role: user.role, email: user.email, mustChangePassword: user.mustChangePassword, permissions } });
+    res.json({ message: 'Login successful', token, user: userPayload });
   } catch (error) {
     console.error('[LOGIN ERROR]', error);
     const isQuota = error.message && (error.message.includes('quota') || error.message.includes('53000'));
@@ -151,43 +222,60 @@ exports.login = async (req, res) => {
 
 exports.getMe = async (req, res) => {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: { id: true, fullName: true, email: true, role: true, status: true, mustChangePassword: true }
-    });
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    const rolePerm = await prisma.rolePermission.findUnique({
-      where: { role: user.role }
-    });
-
-    const fullPermissions = {
-      VIEW_ASSETS: true, CREATE_ASSETS: true, EDIT_ASSETS: true, DELETE_ASSETS: true,
-      ASSIGN_ASSETS: true, TRANSFER_ASSETS: true, 
-      UPLOAD_ASSET_IMAGES: true, REPLACE_ASSET_IMAGES: true, DELETE_ASSET_IMAGES: true,
-      UPLOAD_ASSET_DOCUMENTS: true, DOWNLOAD_ASSET_DOCUMENTS: true, DELETE_ASSET_DOCUMENTS: true,
-      BULK_IMPORT_ASSETS: true, EXPORT_REPORTS: true, VIEW_STORAGE_STATS: true,
-      MANAGE_EMPLOYEES: true, MANAGE_DEPARTMENTS: true, MANAGE_LOCATIONS: true,
-      MANAGE_USERS: true, MANAGE_ROLES: true, VIEW_AUDIT_LOG: true, EXPORT_AUDIT_LOG: true, CONFIGURE_SYSTEM: true
-    };
-    const defaultPermissions = {
-      ADMIN: fullPermissions,
-      IT_OFFICER: fullPermissions,
-      VIEWER: fullPermissions
-    };
-    
-    const permissions = rolePerm ? { ...rolePerm.permissions } : defaultPermissions[user.role];
-
-    // Safety net: ADMIN must always retain critical permissions regardless of DB state
-    if (user.role === 'ADMIN') {
-      permissions.MANAGE_USERS = true;
-      permissions.MANAGE_ROLES = true;
-      permissions.VIEW_AUDIT_LOG = true;
-      permissions.CONFIGURE_SYSTEM = true;
+    if (req.user.tokenScope === 'PORTAL_GATEWAY') {
+      const portalUser = await prisma.user.findUnique({
+        where: { id: req.user.id },
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+          role: true,
+          status: true,
+          mustChangePassword: true,
+          employeeId: true,
+          modulePermissions: true,
+        },
+      });
+      if (!portalUser) return res.status(404).json({ error: 'User not found' });
+      const payload = await buildAuthUserPayload(portalUser);
+      return res.json({
+        ...payload,
+        tokenScope: 'PORTAL_GATEWAY',
+        landingRoute: '/portal/identify',
+      });
     }
 
-    user.permissions = permissions;
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        role: true,
+        status: true,
+        mustChangePassword: true,
+        employeeId: true,
+        modulePermissions: true,
+        employee: {
+          include: { department: true, location: true },
+        },
+      },
+    });
+    if (!user) return res.status(404).json({ error: 'User not found' });
 
-    res.json(user);
+    const userPayload = await buildAuthUserPayload(user);
+    if (req.user.tokenScope === 'PORTAL_EMPLOYEE') {
+      return res.json({
+        ...userPayload,
+        tokenScope: 'PORTAL_EMPLOYEE',
+        isPortalSession: true,
+        portalSessionId: req.user.portalSessionId,
+        rememberDevice: !!req.user.rememberDevice,
+        idleTimeoutMinutes: req.user.idleTimeoutMinutes || 30,
+        landingRoute: '/helpdesk/employee',
+      });
+    }
+    res.json(userPayload);
   } catch (error) {
     res.status(500).json({ error: 'Server error fetching user details' });
   }
@@ -208,17 +296,16 @@ exports.changePassword = async (req, res) => {
 
     await prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash: newPasswordHash, mustChangePassword: false }
+      data: { passwordHash: newPasswordHash, mustChangePassword: false },
     });
 
-    // Fire-and-forget audit log
     logAudit({
       req,
       action: 'CHANGE_PASSWORD',
       module: 'AUTH',
       entityType: 'USER',
       entityId: user.id,
-      description: `User changed their own password: ${user.email}`
+      description: `User changed their own password: ${user.email}`,
     });
 
     res.json({ message: 'Password changed successfully' });
@@ -226,4 +313,3 @@ exports.changePassword = async (req, res) => {
     res.status(500).json({ error: 'Server error changing password' });
   }
 };
-

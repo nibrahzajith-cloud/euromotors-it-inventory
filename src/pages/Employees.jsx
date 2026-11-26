@@ -647,13 +647,14 @@ export default function Employees({ defaultOpenAdd = false }) {
                 <th className="px-5 py-4 text-center">Status</th>
                 <th className="px-5 py-4 text-center">Assigned Assets</th>
                 <th className="px-5 py-4 text-right">Asset Value (LKR)</th>
+                <th className="px-5 py-4 text-right">Actual Purchase Price</th>
                 <th className="px-5 py-4 text-right sticky right-0 bg-slate-50 dark:bg-slate-800 z-10 shadow-[-4px_0_6px_rgba(0,0,0,0.04)]">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
               {filteredEmployees.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="px-5 py-10 text-center text-slate-500">
+                  <td colSpan="9" className="px-5 py-10 text-center text-slate-500">
                     No employees matching your criteria were found.
                   </td>
                 </tr>
@@ -768,6 +769,36 @@ export default function Employees({ defaultOpenAdd = false }) {
                           );
                         }
                         return <span className="text-xs text-slate-400">—</span>;
+                      })()}
+                    </td>
+                    <td className="px-5 py-4 text-right whitespace-nowrap">
+                      {(() => {
+                        const assigned = getAssignedAssets(emp);
+                        if (assigned.length === 0) {
+                          return <span className="text-xs text-slate-400">—</span>;
+                        }
+                        const summary = emp.valuationSummary || computeEmployeeValuationSummary(assigned);
+                        const recordedCount = emp.purchasePriceRecordedCount ?? summary?.purchasePriceRecordedCount ?? 0;
+                        const totalPurchase = emp.totalPurchasePriceLKR ?? summary?.totalPurchasePriceLKR ?? 0;
+                        const formattedPurchase = emp.formattedPurchasePrice ?? summary?.formattedTotalPurchasePriceLKR ?? 'Not Recorded';
+
+                        if (recordedCount > 0 && totalPurchase > 0) {
+                          return (
+                            <div className="flex flex-col items-end">
+                              <span className="font-mono font-bold text-emerald-700 dark:text-emerald-300 text-xs">
+                                {formattedPurchase}
+                              </span>
+                              <span className="text-[9px] text-slate-400 font-normal">
+                                {recordedCount}/{assigned.length} Recorded
+                              </span>
+                            </div>
+                          );
+                        }
+                        return (
+                          <span className="text-[11px] italic text-slate-400 dark:text-slate-500">
+                            Not Recorded
+                          </span>
+                        );
                       })()}
                     </td>
                     <td className="px-5 py-4 text-right sticky right-0 bg-white dark:bg-slate-900 z-10 shadow-[-4px_0_6px_rgba(0,0,0,0.04)] group-hover:bg-slate-50/70 dark:group-hover:bg-slate-800/50 transition-colors">

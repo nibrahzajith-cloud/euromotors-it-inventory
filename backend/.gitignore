@@ -4,3 +4,4 @@ node_modules
 
 /generated/prisma
 local_uploads
+local_uploads_dev

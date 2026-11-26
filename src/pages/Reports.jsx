@@ -5,6 +5,7 @@ import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { resolveAssetValuation, resolveActualPurchasePrice } from '../utils/marketValuation';
 
 const _rawApi = import.meta.env.VITE_API_URL || '/api';
 const API_URL = _rawApi.endsWith('/api') ? _rawApi : `${_rawApi.replace(/\/$/, '')}/api`;
@@ -105,20 +106,25 @@ export default function Reports() {
     if (activeTab === 'assets') {
       const data = assetsData.filter(a =>
         (a.assetCode?.toLowerCase().includes(q) || a.model?.toLowerCase().includes(q) || a.status?.toLowerCase().includes(q))
-      ).map(ast => ({
-        'Asset Code': ast.assetCode,
-        'Device Type': ast.deviceType,
-        'Brand': ast.brand || '-',
-        'Model': ast.model,
-        'Serial Number': ast.serialNumber,
-        'Status': ast.status,
-        'Condition': ast.condition,
-        'Purchase Date': ast.purchaseDate ? new Date(ast.purchaseDate).toLocaleDateString() : 'Unknown',
-        'Warranty Expiry': ast.warrantyExpiryDate ? new Date(ast.warrantyExpiryDate).toLocaleDateString() : 'Unknown',
-        'Department': ast.department?.name || 'Unassigned',
-        'Location': ast.location?.name || 'Unassigned',
-        'Assigned Employee': ast.assignedEmployee?.fullName || 'None'
-      }));
+      ).map(ast => {
+        const estVal = resolveAssetValuation(ast);
+        const actualPrice = resolveActualPurchasePrice(ast);
+        return {
+          'Asset Code': ast.assetCode,
+          'Device Type': ast.deviceType,
+          'Brand': ast.brand || '-',
+          'Model': ast.model,
+          'Serial Number': ast.serialNumber,
+          'Status': ast.status,
+          'Condition': ast.condition,
+          'Purchase Date': ast.purchaseDate ? new Date(ast.purchaseDate).toLocaleDateString() : 'Unknown',
+          'Estimated Asset Value (LKR)': estVal.formattedValue,
+          'Actual Purchase Price (LKR)': actualPrice.formattedPurchasePrice,
+          'Department': ast.department?.name || 'Unassigned',
+          'Location': ast.location?.name || 'Unassigned',
+          'Assigned Employee': ast.assignedEmployee?.fullName || 'None'
+        };
+      });
       // Sort ascending numerically/naturally
       return data.sort((a, b) => (a['Asset Code'] || '').localeCompare(b['Asset Code'] || '', undefined, { numeric: true }));
     }

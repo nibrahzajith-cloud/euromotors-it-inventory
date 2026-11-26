@@ -142,6 +142,8 @@ export default function AddAsset() {
     storage: '',
     operatingSystem: '',
     vendor: '',
+    purchaseDate: '',
+    purchasePrice: '',
     warrantyStatus: 'Active',
     warrantyExpiryDate: '',
     status: 'AVAILABLE',
@@ -194,6 +196,8 @@ export default function AddAsset() {
               storage: target.storage || '',
               operatingSystem: target.operatingSystem || '',
               vendor: target.vendor || '',
+              purchaseDate: target.purchaseDate ? target.purchaseDate.split('T')[0] : '',
+              purchasePrice: (target.purchasePrice !== null && target.purchasePrice !== undefined && Number(target.purchasePrice) > 0) ? String(target.purchasePrice) : '',
               warrantyStatus: target.warrantyStatus || 'Active',
               warrantyExpiryDate: target.warrantyExpiryDate ? target.warrantyExpiryDate.split('T')[0] : '',
               status: target.status || 'AVAILABLE',
@@ -310,6 +314,19 @@ export default function AddAsset() {
       }
       if (payload.purchaseDate) {
         payload.purchaseDate = new Date(payload.purchaseDate).toISOString();
+      }
+
+      const canManagePurchasePrice = user?.role === 'ADMIN' || user?.role === 'HEAD_OF_IT' || !!user?.permissions?.MANAGE_PURCHASE_PRICE;
+      if (!canManagePurchasePrice) {
+        delete payload.purchasePrice;
+      } else if (payload.purchasePrice !== null && payload.purchasePrice !== undefined) {
+        const parsedPrice = Number(payload.purchasePrice);
+        if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+          setSubmitError('Actual Purchase Price (LKR) must be a valid positive number.');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
+        payload.purchasePrice = parsedPrice === 0 ? null : parsedPrice;
       }
 
       const res = await fetch(url, {
@@ -678,31 +695,73 @@ export default function AddAsset() {
             </div>
           </div>
 
-          {/* Warranty Information */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-6">
-             <div>
-                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Warranty Term Validity *</label>
-                <select
-                  required
-                  value={formData.warrantyStatus}
-                  onChange={e => handleChange('warrantyStatus', e.target.value)}
-                  className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-slate-500 font-sans text-sm cursor-pointer"
-                >
-                  {STANDARD_WARRANTY_STATUSES.map(ws => (
-                    <option key={ws} value={ws}>{ws}</option>
-                  ))}
-                </select>
-             </div>
+          {/* Procurement & Warranty Information */}
+          <div className="bg-slate-50/70 dark:bg-[#080d18] p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800/80">
+            <h2 className="text-lg font-bold text-slate-800 dark:text-white mb-5 flex items-center gap-2">
+              <div className="w-2 h-6 bg-amber-500 rounded-full"></div> Procurement, Valuation & Warranty
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 pb-2">
+               <div>
+                  <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Purchase Date</label>
+                  <input
+                    type="date"
+                    value={formData.purchaseDate}
+                    onChange={e => handleChange('purchaseDate', e.target.value)}
+                    className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-amber-500 font-sans text-sm"
+                  />
+               </div>
 
-             <div>
-                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Warranty End Date</label>
-                <input 
-                  type="date" 
-                  value={formData.warrantyExpiryDate} 
-                  onChange={e => handleChange('warrantyExpiryDate', e.target.value)} 
-                  className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-slate-500 font-sans text-sm" 
-                />
-             </div>
+               <div>
+                  <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Actual Purchase Price (LKR)
+                    <span className="ml-1.5 text-[11px] font-normal text-slate-400">(Optional)</span>
+                  </label>
+                  {(user?.role === 'ADMIN' || user?.role === 'HEAD_OF_IT' || !!user?.permissions?.MANAGE_PURCHASE_PRICE) ? (
+                    <>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={formData.purchasePrice}
+                        onChange={e => handleChange('purchasePrice', e.target.value)}
+                        placeholder="Leave blank if unavailable"
+                        className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-emerald-500 font-mono text-sm placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                      />
+                      <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+                        Displays &quot;Not Recorded&quot; when omitted. Audit-logged.
+                      </p>
+                    </>
+                  ) : (
+                    <div className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 rounded-xl px-4 py-2.5 text-sm cursor-not-allowed">
+                      {formData.purchasePrice ? `LKR ${Number(formData.purchasePrice).toLocaleString('en-LK')}` : 'Not Recorded'} (Admin / Authorized Only)
+                    </div>
+                  )}
+               </div>
+
+               <div>
+                  <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Warranty Term Validity *</label>
+                  <select
+                    required
+                    value={formData.warrantyStatus}
+                    onChange={e => handleChange('warrantyStatus', e.target.value)}
+                    className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-slate-500 font-sans text-sm cursor-pointer"
+                  >
+                    {STANDARD_WARRANTY_STATUSES.map(ws => (
+                      <option key={ws} value={ws}>{ws}</option>
+                    ))}
+                  </select>
+               </div>
+
+               <div>
+                  <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Warranty End Date</label>
+                  <input 
+                    type="date" 
+                    value={formData.warrantyExpiryDate} 
+                    onChange={e => handleChange('warrantyExpiryDate', e.target.value)} 
+                    className="w-full bg-white dark:bg-[#0c1322] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-slate-500 font-sans text-sm" 
+                  />
+               </div>
+            </div>
           </div>
 
           {/* Form Actions */}

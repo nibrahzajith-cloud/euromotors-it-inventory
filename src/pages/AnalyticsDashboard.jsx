@@ -530,6 +530,51 @@ export default function AnalyticsDashboard() {
             onClick={() => navigate('/reports')} 
           />
         </div>
+
+        {/* Authorized Financial Valuation & Purchase Cost Summary (Separate Metrics) */}
+        {data?.financialSummary && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+            <div
+              onClick={() => navigate('/reports')}
+              className="p-4 rounded-2xl bg-white dark:bg-[#0e1626] border border-blue-200/70 dark:border-blue-900/50 shadow-sm flex items-center justify-between gap-4 cursor-pointer hover:border-blue-400 transition-colors"
+            >
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                  Total Estimated Asset Value (LKR)
+                </span>
+                <p className="text-xl md:text-2xl font-black font-mono text-slate-900 dark:text-white mt-0.5">
+                  {data.financialSummary.formattedTotalEstimatedValueLKR}
+                </p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                  Auto-calculated market valuation • {data.financialSummary.estimatedValuedCount}/{data.financialSummary.totalAssets} assets valued
+                </p>
+              </div>
+              <div className="w-11 h-11 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
+                <TrendingUp className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div
+              onClick={() => navigate('/reports')}
+              className="p-4 rounded-2xl bg-white dark:bg-[#0e1626] border border-emerald-200/70 dark:border-emerald-900/50 shadow-sm flex items-center justify-between gap-4 cursor-pointer hover:border-emerald-400 transition-colors"
+            >
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                  Total Recorded Purchase Price (LKR)
+                </span>
+                <p className="text-xl md:text-2xl font-black font-mono text-slate-900 dark:text-white mt-0.5">
+                  {data.financialSummary.formattedTotalActualPurchasePriceLKR}
+                </p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                  Actual procurement cost • {data.financialSummary.purchasePriceRecordedCount} recorded, {data.financialSummary.purchasePriceUnrecordedCount} Not Recorded
+                </p>
+              </div>
+              <div className="w-11 h-11 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
+                <Wallet className="w-5 h-5" />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 3. MAIN DASHBOARD CONTENT GRID (Left Column 8 / Right Column 4) */}

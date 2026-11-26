@@ -19,8 +19,23 @@ html, body {
 body {
   background-color: var(--color-light-grey);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
   transition: background-color 0.4s ease, color 0.4s ease;
   min-height: 100%;
+}
+
+.font-display {
+  font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+.font-ui {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+.font-code {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 /* Dark mode body background — deep navy-black matching reference */

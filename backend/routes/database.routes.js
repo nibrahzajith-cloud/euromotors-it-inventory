@@ -1,10 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prismaClient');
-const { authenticate, authorize } = require('../middleware/auth.middleware');
+const { authenticate, authorize, requireModule } = require('../middleware/auth.middleware');
 const { logAudit } = require('../utils/logger');
 
 router.use(authenticate);
+router.use(requireModule('SYSTEM_SETTINGS'));
 
 // GET /api/database/counts — Returns actual record counts per table
 router.get('/counts', authorize(['ADMIN']), async (req, res) => {

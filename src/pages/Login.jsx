@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { getDefaultLandingRoute } from '../utils/helpdeskApi';
 import { Lock, Mail, AlertCircle, Eye, EyeOff, Shield, ArrowRight, Loader2, CheckCircle2, Clock } from 'lucide-react';
 
 export default function Login() {
@@ -34,7 +35,7 @@ export default function Login() {
     setLoading(true);
 
     try {
-      await login(email, password);
+      const loggedInUser = await login(email, password);
       
       if (rememberMe) {
         localStorage.setItem('rememberedEmail', email);
@@ -42,9 +43,9 @@ export default function Login() {
         localStorage.removeItem('rememberedEmail');
       }
 
-      // Navigate immediately — don't wait for any post-login work
+      // Navigate immediately based on user role & module permissions
       showToast('Login successful. Welcome back!', 'success');
-      navigate('/');
+      navigate(getDefaultLandingRoute(loggedInUser));
     } catch (err) {
       setError(err.message);
     } finally {

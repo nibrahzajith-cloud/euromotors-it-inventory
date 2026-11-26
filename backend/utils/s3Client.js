@@ -60,10 +60,28 @@ function validateObjectKey(key) {
 
 const fs = require('fs');
 const path = require('path');
-const LOCAL_DIR = path.join(__dirname, '..', 'local_uploads');
+const LOCAL_DIR = path.join(__dirname, '..', process.env.LOCAL_UPLOAD_DIR || 'local_uploads');
 
 function getLocalFilePath(key) {
   return path.join(LOCAL_DIR, key.replace(/\//g, '_'));
+}
+
+async function readFileBuffer(key) {
+  validateObjectKey(key);
+  if (isR2Configured()) {
+    const res = await getR2Client().send(new GetObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME,
+      Key: key,
+    }));
+    const chunks = [];
+    for await (const chunk of res.Body) {
+      chunks.push(chunk);
+    }
+    return Buffer.concat(chunks);
+  }
+  const filePath = getLocalFilePath(key);
+  if (!fs.existsSync(filePath)) return null;
+  return fs.readFileSync(filePath);
 }
 
 async function uploadFile(buffer, key, mimeType) {
@@ -273,4 +291,5 @@ module.exports = {
   getPresignedUrl,
   getR2StorageStats,
   getLocalFilePath,
+  readFileBuffer,
 };

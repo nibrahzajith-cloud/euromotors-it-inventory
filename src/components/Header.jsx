@@ -9,9 +9,10 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { API_URL, getDefaultLandingRoute, hasModuleAccess } from '../utils/helpdeskApi';
 
 export default function Header() {
-  const { user, logout } = useAuth();
+  const { user, logout, switchEmployee } = useAuth();
   const { toggleTheme, isDark } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
@@ -19,33 +20,54 @@ export default function Header() {
   const [showNotifications, setShowNotifications] = useState(false);
   const notifRef = useRef(null);
   const [notifications, setNotifications] = useState([]);
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  const fetchNotifications = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const res = await fetch(`${API_URL}/notifications`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setNotifications(data.notifications || []);
+        setUnreadCount(data.unreadCount || 0);
+      }
+    } catch (_) {}
+  };
 
   useEffect(() => {
-    const fetchOpenTickets = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        const res = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/tickets`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (res.ok) {
-          const tickets = await res.json();
-          const openTickets = tickets.filter(t => t.status === 'OPEN');
-          setNotifications(openTickets.map(t => ({
-            id: t.id,
-            title: `New Ticket: ${t.subject}`,
-            message: `Raised by ${t.employee?.fullName || 'Employee'} for ${t.asset?.model || 'General Issue'}`,
-            time: new Date(t.createdAt).toLocaleDateString(),
-            read: false
-          })));
-        }
-      } catch (e) { }
-    };
-
-    fetchOpenTickets();
-    const interval = setInterval(fetchOpenTickets, 30000);
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  const markAllRead = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      await fetch(`${API_URL}/notifications/read-all`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      setUnreadCount(0);
+    } catch (_) {}
+  };
+
+  const handleNotifClick = async (n) => {
+    if (!n.isRead) {
+      const token = localStorage.getItem('token');
+      fetch(`${API_URL}/notifications/${n.id}/read`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => {});
+      setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, isRead: true } : x)));
+      setUnreadCount((c) => Math.max(0, c - 1));
+    }
+    setShowNotifications(false);
+    if (n.link) navigate(n.link);
+  };
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -86,7 +108,7 @@ export default function Header() {
       <div className="flex items-center gap-4">
         {/* Euro Motors Wing Emblem */}
         <div
-          onClick={() => navigate('/')}
+          onClick={() => navigate(getDefaultLandingRoute(user))}
           className="flex items-center gap-2.5 cursor-pointer group"
         >
           <div className="relative flex items-center justify-center">
@@ -124,56 +146,77 @@ export default function Header() {
       {/* Right Controls: Search, Notifications, Theme, User */}
       <div className="flex items-center gap-3">
 
-        {/* Global Search Bar (with Ctrl + K) */}
-        <div
-          onClick={openSearch}
-          className="relative hidden md:flex items-center bg-slate-100 hover:bg-slate-200/70 dark:bg-[#0d1424] dark:hover:bg-[#111a2e] border border-slate-200 dark:border-slate-700/60 hover:border-slate-300 dark:hover:border-slate-600 rounded-xl px-3.5 py-1.5 cursor-pointer transition-all w-64 lg:w-72 shadow-inner"
-        >
-          <Search className="w-3.5 h-3.5 text-slate-400 shrink-0 mr-2.5" />
-          <span className="text-xs text-slate-500 dark:text-slate-400 flex-1 truncate">Search assets, employees, locations...</span>
-          <kbd className="hidden lg:inline-flex items-center text-[10px] font-mono font-semibold text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700/80 px-1.5 py-0.5 rounded shadow-sm">
-            Ctrl + K
-          </kbd>
-        </div>
+        {/* Global Search Bar (only shown if user has Inventory or Help Desk navigation) */}
+        {hasModuleAccess(user, 'IT_INVENTORY') && (
+          <div
+            onClick={openSearch}
+            className="relative hidden md:flex items-center bg-slate-100 hover:bg-slate-200/70 dark:bg-[#0d1424] dark:hover:bg-[#111a2e] border border-slate-200 dark:border-slate-700/60 hover:border-slate-300 dark:hover:border-slate-600 rounded-xl px-3.5 py-1.5 cursor-pointer transition-all w-64 lg:w-72 shadow-inner"
+          >
+            <Search className="w-3.5 h-3.5 text-slate-400 shrink-0 mr-2.5" />
+            <span className="text-xs text-slate-500 dark:text-slate-400 flex-1 truncate">Search assets, employees, locations...</span>
+            <kbd className="hidden lg:inline-flex items-center text-[10px] font-mono font-semibold text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700/80 px-1.5 py-0.5 rounded shadow-sm">
+              Ctrl + K
+            </kbd>
+          </div>
+        )}
 
         {/* Mobile Search Button */}
-        <button
-          onClick={openSearch}
-          className="md:hidden p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800/80 transition-colors"
-          title="Search (Ctrl + K)"
-        >
-          <Search className="w-4 h-4" />
-        </button>
+        {hasModuleAccess(user, 'IT_INVENTORY') && (
+          <button
+            onClick={openSearch}
+            className="md:hidden p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800/80 transition-colors"
+            title="Search (Ctrl + K)"
+          >
+            <Search className="w-4 h-4" />
+          </button>
+        )}
 
         {/* Notification Bell */}
         <div className="relative" ref={notifRef}>
           <button
             onClick={() => setShowNotifications(!showNotifications)}
-            className="relative p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800/80 transition-colors"
+            className="relative p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800/80 transition-colors cursor-pointer"
             title="Notifications"
           >
             <Bell className="w-4 h-4" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_6px_#3b82f6]" />
+            {unreadCount > 0 && (
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500 shadow-[0_0_6px_#f43f5e]" />
+            )}
           </button>
 
           {/* Notifications Dropdown */}
           {showNotifications && (
             <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-[#0e1626] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150">
               <div className="p-3.5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-[#0a0f1a]">
-                <span className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">Alerts & Tickets</span>
-                <span className="text-[10px] bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400 px-2 py-0.5 rounded-full font-bold">
-                  {notifications.length} Active
-                </span>
+                <span className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">Notifications</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400 px-2 py-0.5 rounded-full font-bold">
+                    {unreadCount} Unread
+                  </span>
+                  {unreadCount > 0 && (
+                    <button onClick={markAllRead} className="text-[10px] font-bold text-blue-600 hover:underline cursor-pointer">
+                      Mark all
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/60">
                 {notifications.length === 0 ? (
                   <p className="text-xs text-slate-400 p-4 text-center">No new notifications</p>
                 ) : (
-                  notifications.map(n => (
-                    <div key={n.id} className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors text-xs space-y-0.5">
+                  notifications.map((n) => (
+                    <div
+                      key={n.id}
+                      onClick={() => handleNotifClick(n)}
+                      className={`p-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors text-xs space-y-0.5 cursor-pointer ${
+                        !n.isRead ? 'bg-blue-50/50 dark:bg-blue-950/20' : ''
+                      }`}
+                    >
                       <p className="font-semibold text-slate-800 dark:text-slate-200">{n.title}</p>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400">{n.message}</p>
-                      <span className="text-[9px] text-slate-400 dark:text-slate-500 font-mono block pt-0.5">{n.time}</span>
+                      <span className="text-[9px] text-slate-400 dark:text-slate-500 font-mono block pt-0.5">
+                        {new Date(n.createdAt).toLocaleString()}
+                      </span>
                     </div>
                   ))
                 )}
@@ -193,9 +236,9 @@ export default function Header() {
 
         {/* User Avatar & Name */}
         <div
-          onClick={() => navigate('/settings')}
+          onClick={() => navigate(user?.isPortalSession ? '/helpdesk/employee' : (hasModuleAccess(user, 'SYSTEM_SETTINGS') ? '/settings' : getDefaultLandingRoute(user)))}
           className="flex items-center gap-2.5 pl-2 cursor-pointer group"
-          title="Profile & Settings"
+          title={user?.isPortalSession ? 'Employee Help Desk' : 'Profile & Settings'}
         >
           <div className="w-8 h-8 rounded-full bg-blue-600 hover:bg-blue-500 flex items-center justify-center text-white font-bold text-xs shadow-md shadow-blue-600/30 ring-2 ring-blue-500/30 transition-all shrink-0">
             {initials}
@@ -212,6 +255,20 @@ export default function Header() {
 
         {/* Vertical divider */}
         <div className="h-6 w-[1px] bg-slate-200 dark:bg-slate-800/80 mx-0.5" />
+
+        {user?.isPortalSession && (
+          <button
+            onClick={async () => {
+              const target = await switchEmployee();
+              navigate(target);
+            }}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-blue-600 hover:text-blue-700 dark:text-blue-400 bg-blue-50 hover:bg-blue-100 dark:bg-blue-500/10 dark:hover:bg-blue-500/20 border border-blue-200 dark:border-blue-500/30 transition-all text-xs font-bold cursor-pointer"
+            title="Clear current employee session and verify another employee"
+          >
+            <ArrowRightLeft className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden md:inline">Switch Employee</span>
+          </button>
+        )}
 
         {/* Logout Option */}
         <button

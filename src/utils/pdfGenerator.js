@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf';
 import autoTable, { applyPlugin } from 'jspdf-autotable';
+import { resolveAssetValuation, resolveActualPurchasePrice, resolveHandoverAssetValue, computeEmployeeValuationSummary } from './marketValuation';
 
 // Ensure jsPDF prototype is patched with autoTable plugin
 try {
@@ -234,7 +235,7 @@ export function downloadEmployeeHandoverPdf(handoverData, filename) {
   pdf.text('2. ALL IT HARDWARE ASSETS CURRENTLY ASSIGNED & VALUATION (LKR)', marginLeft, currentY);
   currentY += 2;
 
-  const tableHeaders = ['#', 'Asset Code', 'Category', 'Make & Model', 'Serial Number', 'Condition', 'Assigned Date', 'Asset Value (LKR)'];
+  const tableHeaders = ['#', 'Asset Code', 'Category', 'Make & Model', 'Serial Number', 'Condition', 'Assigned Date', 'Asset Value (LKR)', 'Purchase Price'];
 
   const tableBody = assets.length > 0 
     ? assets.map((ast, idx) => {
@@ -242,9 +243,10 @@ export function downloadEmployeeHandoverPdf(handoverData, filename) {
           ? new Date(ast.assignedDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
           : '—';
         
-        const valObj = ast.valuation || {};
-        const formattedVal = valObj.formattedValue || (ast.estimatedValue ? `LKR ${Number(ast.estimatedValue).toLocaleString('en-LK')}` : 'Valuation Pending');
-        const sourceLabel = valObj.source ? `\n(${valObj.source})` : '';
+        const calcVal = ast.handoverValuation || resolveHandoverAssetValue(ast);
+        const formattedVal = calcVal.formattedValue || 'Valuation Pending';
+        const sourceLabel = calcVal.source ? `\n(${calcVal.source})` : '';
+        const actualObj = ast.actualPurchase || resolveActualPurchasePrice(ast);
 
         return [
           String(idx + 1),
@@ -254,10 +256,11 @@ export function downloadEmployeeHandoverPdf(handoverData, filename) {
           String(ast.serialNumber || 'N/A'),
           String(ast.condition || 'Good'),
           asgDate,
-          `${formattedVal}${sourceLabel}`
+          `${formattedVal}${sourceLabel}`,
+          actualObj.formattedPurchasePrice
         ];
       })
-    : [['—', 'No hardware assets currently assigned to this employee.', '', '', '', '', '', '—']];
+    : [['—', 'No hardware assets currently assigned to this employee.', '', '', '', '', '', '—', '—']];
 
   runAutoTable(pdf, {
     startY: currentY,
@@ -265,31 +268,34 @@ export function downloadEmployeeHandoverPdf(handoverData, filename) {
     body: tableBody,
     theme: 'grid',
     styles: {
-      fontSize: 6.8,
-      cellPadding: 2,
+      fontSize: 6.2,
+      cellPadding: { top: 1.8, right: 1.2, bottom: 1.8, left: 1.2 },
       textColor: [15, 23, 42],
       lineColor: [226, 232, 240],
       lineWidth: 0.15,
-      overflow: 'linebreak'
+      overflow: 'linebreak',
+      valign: 'middle'
     },
     headStyles: {
       fillColor: [15, 23, 42],
       textColor: 255,
       fontStyle: 'bold',
-      fontSize: 7
+      fontSize: 6.3,
+      valign: 'middle'
     },
     alternateRowStyles: {
       fillColor: [248, 250, 252]
     },
     columnStyles: {
-      0: { cellWidth: 7, halign: 'center' },
-      1: { cellWidth: 26, fontStyle: 'bold' },
-      2: { cellWidth: 20 },
-      3: { cellWidth: 38 },
-      4: { cellWidth: 26 },
-      5: { cellWidth: 16, halign: 'center' },
-      6: { cellWidth: 21, halign: 'center' },
-      7: { cellWidth: 'auto', halign: 'right', fontStyle: 'bold' }
+      0: { cellWidth: 6, halign: 'center' },
+      1: { cellWidth: 23, fontStyle: 'bold' },
+      2: { cellWidth: 15 },
+      3: { cellWidth: 27 },
+      4: { cellWidth: 35, fontSize: 5.8 },
+      5: { cellWidth: 13, halign: 'center' },
+      6: { cellWidth: 18, halign: 'center' },
+      7: { cellWidth: 26, halign: 'right', fontStyle: 'bold' },
+      8: { cellWidth: 23, halign: 'right' }
     },
     margin: { left: marginLeft, right: marginRight }
   });
@@ -305,8 +311,15 @@ export function downloadEmployeeHandoverPdf(handoverData, filename) {
     currentY = 16;
   }
 
+  const liveSummary = computeEmployeeValuationSummary(assets);
+  const pendingCnt = valSummary.handoverPendingCount ?? liveSummary.handoverPendingCount;
+  const actualCnt = valSummary.actualPriceUsedCount ?? liveSummary.actualPriceUsedCount;
+  const estCnt = valSummary.estimatedValueUsedCount ?? liveSummary.estimatedValueUsedCount;
+  const totalDisplayLKR = valSummary.formattedTotalHandoverLKR || liveSummary.formattedTotalHandoverLKR || 'LKR 0';
+  const displayTotalLabel = valSummary.handoverTotalLabel || liveSummary.handoverTotalLabel || 'TOTAL IT ASSET VALUE';
+
   const valCardY = currentY;
-  const valCardHeight = 18;
+  const valCardHeight = 22;
   pdf.setFillColor(248, 250, 252);
   pdf.setDrawColor(203, 213, 225);
   pdf.setLineWidth(0.3);
@@ -316,33 +329,33 @@ export function downloadEmployeeHandoverPdf(handoverData, filename) {
   pdf.setFont('helvetica', 'bold');
   pdf.setFontSize(8);
   pdf.setTextColor(15, 23, 42);
-  pdf.text('TOTAL IT ASSET VALUE ALLOCATED TO EMPLOYEE', marginLeft + 4, valCardY + 5.5);
+  pdf.text('TOTAL IT ASSET VALUE ALLOCATED TO EMPLOYEE', marginLeft + 4, valCardY + 5.2);
 
   pdf.setFont('helvetica', 'normal');
-  pdf.setFontSize(6.8);
+  pdf.setFontSize(6.6);
   pdf.setTextColor(71, 85, 105);
-  pdf.text(`Employee: ${emp.fullName || 'N/A'} (${emp.employeeCode || 'N/A'})  |  Total Assigned Assets: ${assets.length} Item(s)`, marginLeft + 4, valCardY + 10.5);
+  pdf.text(`Employee: ${emp.fullName || 'N/A'} (${emp.employeeCode || 'N/A'})  |  Total Assigned Assets: ${assets.length} Item(s)`, marginLeft + 4, valCardY + 9.8);
+  pdf.text(`Basis: ${actualCnt} Actual Purchase Price, ${estCnt} Estimated Market Value (Actual Purchase Price used first when recorded)`, marginLeft + 4, valCardY + 14.0);
 
   const valDateFormatted = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-  const pendingText = valSummary.pendingCount > 0 
-    ? `[!] Incomplete Valuation: ${valSummary.pendingCount} asset(s) pending valuation. Shown amount is Known Total.`
+  const pendingText = pendingCnt > 0 
+    ? `[!] Incomplete Valuation: ${pendingCnt} asset(s) pending valuation. Shown amount is Known Total.`
     : `Valuation Status: Complete & Verified as of ${valDateFormatted}`;
   
-  pdf.setFont('helvetica', valSummary.pendingCount > 0 ? 'bold' : 'normal');
-  pdf.setTextColor(valSummary.pendingCount > 0 ? 180 : 100, valSummary.pendingCount > 0 ? 83 : 116, valSummary.pendingCount > 0 ? 9 : 139);
-  pdf.text(pendingText, marginLeft + 4, valCardY + 15);
+  pdf.setFont('helvetica', pendingCnt > 0 ? 'bold' : 'normal');
+  pdf.setTextColor(pendingCnt > 0 ? 180 : 100, pendingCnt > 0 ? 83 : 116, pendingCnt > 0 ? 9 : 139);
+  pdf.text(pendingText, marginLeft + 4, valCardY + 18.4);
 
   // Right side of total card: Amount in LKR
-  const totalDisplayLKR = valSummary.formattedTotalLKR || (valSummary.totalValueLKR ? `LKR ${Number(valSummary.totalValueLKR).toLocaleString('en-LK')}` : 'LKR 0');
   pdf.setFont('helvetica', 'bold');
   pdf.setFontSize(12);
   pdf.setTextColor(15, 23, 42);
-  pdf.text(totalDisplayLKR, pageWidth - marginRight - 4, valCardY + 8, { align: 'right' });
+  pdf.text(totalDisplayLKR, pageWidth - marginRight - 4, valCardY + 9.5, { align: 'right' });
 
   pdf.setFont('helvetica', 'normal');
   pdf.setFontSize(6.5);
   pdf.setTextColor(100, 116, 139);
-  pdf.text(valSummary.totalLabel || 'Estimated Total (LKR)', pageWidth - marginRight - 4, valCardY + 13.5, { align: 'right' });
+  pdf.text(displayTotalLabel, pageWidth - marginRight - 4, valCardY + 15.0, { align: 'right' });
 
   currentY = valCardY + valCardHeight + 5;
 
@@ -549,24 +562,13 @@ export function downloadAssignmentHandoverPdf(assignment, filename) {
 
   const handoverData = {
     employee,
-    assignedAssets: [{
+    assignedAssets: computeEmployeeValuationSummary([{
       ...asset,
       assignedDate: assignment.assignedDate,
       accessories: assignment.accessories,
       remarks: assignment.remarks,
-      valuation: asset.valuation || {
-        formattedValue: asset.estimatedValue ? `LKR ${Number(asset.estimatedValue).toLocaleString('en-LK')}` : 'Valuation Pending',
-        source: asset.valuationSource || 'Recorded Value'
-      }
-    }],
-    valuationSummary: {
-      totalValueLKR: asset.estimatedValue || asset.purchasePrice || 0,
-      formattedTotalLKR: (asset.estimatedValue || asset.purchasePrice) ? `LKR ${Number(asset.estimatedValue || asset.purchasePrice).toLocaleString('en-LK')}` : 'Valuation Pending',
-      pendingCount: (asset.estimatedValue || asset.purchasePrice) ? 0 : 1,
-      valuedCount: (asset.estimatedValue || asset.purchasePrice) ? 1 : 0,
-      isCompleteValuation: Boolean(asset.estimatedValue || asset.purchasePrice),
-      totalLabel: 'TOTAL IT ASSET VALUE'
-    },
+    }]).enrichedAssets,
+    valuationSummary: computeEmployeeValuationSummary([asset]),
     handoverReference: `EM-HO-${asset.assetCode || 'AST'}-${employee.employeeCode || 'EMP'}`,
     generatedAt: new Date().toISOString()
   };

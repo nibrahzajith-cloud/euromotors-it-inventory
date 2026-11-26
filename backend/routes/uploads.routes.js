@@ -26,10 +26,13 @@ async function writeAuditLog(data) {
 // -----------------------------------------------------------------------------
 const fs = require('fs');
 const path = require('path');
-const LOCAL_DIR = path.join(__dirname, '..', 'local_uploads');
+const LOCAL_DIR = path.join(__dirname, '..', process.env.LOCAL_UPLOAD_DIR || 'local_uploads');
 
 router.get('/local/:key', (req, res) => {
-    const key = req.params.key;
+    const key = path.basename(req.params.key || '');
+    if (!key || key.startsWith('helpdesk')) {
+        return res.status(403).json({ error: 'Forbidden: Use authenticated Help Desk attachment endpoint' });
+    }
     let filePath = path.join(LOCAL_DIR, key);
     if (!fs.existsSync(filePath)) {
         const alt1 = path.join(__dirname, '..', 'uploads', 'images', key);
@@ -484,6 +487,14 @@ router.get('/image/:assetId/:type', authenticate, async (req, res) => {
         
         if (!asset || (!asset.imageStorageKey && !asset.imageUrl)) {
             return res.status(404).json({ error: 'Image not found' });
+        }
+
+        // Enforce row-level ownership for employees / portal users viewing assigned assets
+        const hasInventoryAccess = ['ADMIN', 'HEAD_OF_IT', 'IT_MANAGER', 'IT_OFFICER', 'VIEWER'].includes(req.user.role) || !!req.user.moduleAccess?.IT_INVENTORY;
+        if (!hasInventoryAccess) {
+            if (!req.user.employeeId || asset.assignedEmployeeId !== req.user.employeeId) {
+                return res.status(403).json({ error: 'Forbidden: You can only view images of IT assets assigned to you' });
+            }
         }
 
         let key = asset.imageStorageKey || asset.imageUrl;

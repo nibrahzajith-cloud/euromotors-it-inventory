@@ -24,9 +24,11 @@ import {
   Eye,
   EyeOff,
   Command,
-  LogOut
+  LogOut,
+  LifeBuoy
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { hasModuleAccess, isAdminOrHeadOfIT, isHelpDeskManager, isITStaff } from '../utils/helpdeskApi';
 
 export default function Sidebar() {
   const { user, logout } = useAuth();
@@ -133,152 +135,211 @@ export default function Sidebar() {
     }
   };
 
-  // 14 Core Authorized Modules
-  const allModules = useMemo(() => [
-    {
-      id: 'dashboard',
-      name: 'Control Center',
-      path: '/',
-      icon: LayoutDashboard,
-      description: 'System metrics & operational KPIs',
-      hasSubmenu: false
-    },
-    {
-      id: 'assets',
-      name: 'Asset Management',
-      path: '/assets',
-      icon: MonitorSmartphone,
-      description: 'All hardware and IT assets',
-      hasSubmenu: true,
-      subItems: [
-        { name: 'All Assets List', path: '/assets' },
-        { name: 'Register New Asset', path: '/assets/add' },
-        { name: 'Bulk Upload & Export', path: '/assets?tab=export' }
-      ]
-    },
-    {
-      id: 'inventory',
-      name: 'Inventory & Store',
-      path: '/assets?status=AVAILABLE',
-      icon: Layers,
-      description: 'Stock availability and store assets',
-      hasSubmenu: true,
-      subItems: [
-        { name: 'Available in Store', path: '/assets?status=AVAILABLE' },
-        { name: 'Currently Assigned', path: '/assets?status=ASSIGNED' },
-        { name: 'Scanner Check-in', path: '/scanner' }
-      ]
-    },
-    {
-      id: 'employees',
-      name: 'Employees',
-      path: '/employees',
-      icon: Users,
-      description: 'Employee profiles & asset custodian list',
-      hasSubmenu: true,
-      subItems: [
-        { name: 'Staff Directory', path: '/employees' },
-        { name: 'Add New Employee', path: '/employees/add' }
-      ]
-    },
-    {
-      id: 'departments',
-      name: 'Departments',
-      path: '/departments',
-      icon: Building2,
-      description: 'Departmental divisions & unit assets',
-      hasSubmenu: false
-    },
-    {
-      id: 'locations',
-      name: 'Locations',
-      path: '/locations',
-      icon: MapPin,
-      description: 'Branches, facilities & showrooms',
-      hasSubmenu: false
-    },
-    {
-      id: 'assignments',
-      name: 'Assignments & Returns',
-      path: '/assignments',
-      icon: ArrowRightLeft,
-      description: 'Issue assets and process check-in returns',
-      hasSubmenu: false
-    },
-    {
-      id: 'shared-assets',
-      name: 'Shared Assets',
-      path: '/assets?assignmentType=SHARED',
-      icon: Share2,
-      description: 'Common pool & multi-user equipment',
-      hasSubmenu: false
-    },
-    {
-      id: 'maintenance',
-      name: 'Maintenance & Repairs',
-      path: '/maintenance',
-      icon: Wrench,
-      description: 'Repair tracking and maintenance logs',
-      hasSubmenu: true,
-      subItems: [
-        { name: 'Active Repair Queue', path: '/maintenance' },
-        { name: 'Support Tickets', path: '/tickets' }
-      ]
-    },
-    {
-      id: 'warranty',
-      name: 'Warranty Management',
-      path: '/reports',
-      icon: ShieldCheck,
-      description: 'Expiry alerts and SLA coverage',
-      hasSubmenu: true,
-      subItems: [
-        { name: 'Warranty Alerts', path: '/reports?tab=warranty' },
-        { name: 'Vendor SLA Tracking', path: '/reports?tab=sla' }
-      ]
-    },
-    {
-      id: 'qr-codes',
-      name: 'QR Code Management',
-      path: '/qr-code',
-      icon: QrCode,
-      description: 'QR generation, batch print & scanning',
-      hasSubmenu: true,
-      subItems: [
-        { name: 'Generate & Batch Print', path: '/qr-code' },
-        { name: 'Live Camera Scanner', path: '/scanner' }
-      ]
-    },
-    {
-      id: 'reports',
-      name: 'Reports & Analytics',
-      path: '/reports',
-      icon: FileText,
-      description: 'Executive dashboards & data exports',
-      hasSubmenu: false
-    },
-    {
-      id: 'audit-logs',
-      name: 'System Audit Logs',
-      path: '/audit-logs',
-      icon: History,
-      description: 'Activity timeline & security trail',
-      hasSubmenu: false
-    },
-    {
-      id: 'settings',
-      name: 'Settings & Admin',
-      path: '/settings',
-      icon: Settings,
-      description: 'System config & user access',
-      hasSubmenu: true,
-      subItems: [
-        { name: 'System Settings', path: '/settings' },
-        { name: 'User Management', path: '/users' },
-        { name: 'Database & Storage', path: '/database' }
-      ]
-    }
-  ], []);
+  // Core Authorized Modules (gated by individual module permissions)
+  const allModules = useMemo(() => {
+    const manager = isHelpDeskManager(user);
+    const staff = isITStaff(user);
+    const admin = isAdminOrHeadOfIT(user);
+
+    const helpDeskSubItems = [
+      ...(hasModuleAccess(user, 'HELP_DESK_EMPLOYEE_DASHBOARD') ? [{ name: 'Employee Dashboard', path: '/helpdesk/employee' }] : []),
+      { name: 'Create Support Request', path: '/helpdesk/new' },
+      { name: 'My Support Requests', path: '/helpdesk/my-requests' },
+      ...(manager ? [
+        { name: 'Management Dashboard', path: '/helpdesk/management' },
+        { name: 'All Tickets', path: '/helpdesk/tickets' },
+        { name: 'Unassigned Tickets', path: '/helpdesk/unassigned' },
+      ] : []),
+      ...(staff ? [
+        { name: 'My Assigned Tickets', path: '/helpdesk/my-assigned' },
+        { name: 'Pending Tickets', path: '/helpdesk/pending' },
+        { name: 'Resolved & Closed', path: '/helpdesk/resolved-closed' },
+      ] : []),
+      ...(manager ? [
+        { name: 'Technician Performance', path: '/helpdesk/technicians' },
+        { name: 'SLA Management', path: '/helpdesk/sla' },
+      ] : []),
+      ...((manager || hasModuleAccess(user, 'MANAGEMENT_REPORTS')) ? [{ name: 'Help Desk Reports', path: '/helpdesk/reports' }] : []),
+      ...((admin || hasModuleAccess(user, 'SYSTEM_SETTINGS')) ? [{ name: 'Help Desk Settings', path: '/helpdesk/settings' }] : []),
+    ];
+
+    const list = [
+      {
+        id: 'helpdesk',
+        name: 'IT Help Desk',
+        path: manager ? '/helpdesk/management' : '/helpdesk/employee',
+        icon: LifeBuoy,
+        description: 'Support tickets, SLA & employee portal',
+        hasSubmenu: true,
+        moduleKey: 'IT_HELP_DESK',
+        subItems: helpDeskSubItems,
+      },
+      {
+        id: 'dashboard',
+        name: 'Control Center',
+        path: '/',
+        icon: LayoutDashboard,
+        description: 'System metrics & operational KPIs',
+        hasSubmenu: false,
+        moduleKey: 'INVENTORY_DASHBOARD',
+      },
+      {
+        id: 'assets',
+        name: 'Asset Management',
+        path: '/assets',
+        icon: MonitorSmartphone,
+        description: 'All hardware and IT assets',
+        hasSubmenu: true,
+        moduleKey: 'IT_INVENTORY',
+        subItems: [
+          { name: 'All Assets List', path: '/assets' },
+          ...(hasModuleAccess(user, 'ASSET_MANAGEMENT') ? [{ name: 'Register New Asset', path: '/assets/add' }] : []),
+          { name: 'Bulk Upload & Export', path: '/assets?tab=export' }
+        ]
+      },
+      {
+        id: 'inventory',
+        name: 'Inventory & Store',
+        path: '/assets?status=AVAILABLE',
+        icon: Layers,
+        description: 'Stock availability and store assets',
+        hasSubmenu: true,
+        moduleKey: 'IT_INVENTORY',
+        subItems: [
+          { name: 'Available in Store', path: '/assets?status=AVAILABLE' },
+          { name: 'Currently Assigned', path: '/assets?status=ASSIGNED' },
+          ...(hasModuleAccess(user, 'ASSET_MANAGEMENT') ? [{ name: 'Scanner Check-in', path: '/scanner' }] : [])
+        ]
+      },
+      {
+        id: 'employees',
+        name: 'Employees',
+        path: '/employees',
+        icon: Users,
+        description: 'Employee profiles & asset custodian list',
+        hasSubmenu: true,
+        moduleKey: 'IT_INVENTORY',
+        subItems: [
+          { name: 'Staff Directory', path: '/employees' },
+          ...(hasModuleAccess(user, 'ASSET_MANAGEMENT') ? [{ name: 'Add New Employee', path: '/employees/add' }] : [])
+        ]
+      },
+      {
+        id: 'departments',
+        name: 'Departments',
+        path: '/departments',
+        icon: Building2,
+        description: 'Departmental divisions & unit assets',
+        hasSubmenu: false,
+        moduleKey: 'IT_INVENTORY',
+      },
+      {
+        id: 'locations',
+        name: 'Locations',
+        path: '/locations',
+        icon: MapPin,
+        description: 'Branches, facilities & showrooms',
+        hasSubmenu: false,
+        moduleKey: 'IT_INVENTORY',
+      },
+      {
+        id: 'assignments',
+        name: 'Assignments & Returns',
+        path: '/assignments',
+        icon: ArrowRightLeft,
+        description: 'Issue assets and process check-in returns',
+        hasSubmenu: false,
+        moduleKey: 'ASSET_MANAGEMENT',
+      },
+      {
+        id: 'shared-assets',
+        name: 'Shared Assets',
+        path: '/assets?assignmentType=SHARED',
+        icon: Share2,
+        description: 'Common pool & multi-user equipment',
+        hasSubmenu: false,
+        moduleKey: 'IT_INVENTORY',
+      },
+      {
+        id: 'maintenance',
+        name: 'Maintenance & Repairs',
+        path: '/maintenance',
+        icon: Wrench,
+        description: 'Repair tracking and maintenance logs',
+        hasSubmenu: true,
+        moduleKey: 'ASSET_MANAGEMENT',
+        subItems: [
+          { name: 'Active Repair Queue', path: '/maintenance' },
+          { name: 'Support Tickets', path: '/helpdesk/tickets' }
+        ]
+      },
+      {
+        id: 'warranty',
+        name: 'Warranty Management',
+        path: '/reports',
+        icon: ShieldCheck,
+        description: 'Expiry alerts and SLA coverage',
+        hasSubmenu: true,
+        moduleKey: 'MANAGEMENT_REPORTS',
+        subItems: [
+          { name: 'Warranty Alerts', path: '/reports?tab=warranty' },
+          { name: 'Vendor SLA Tracking', path: '/reports?tab=sla' }
+        ]
+      },
+      {
+        id: 'qr-codes',
+        name: 'QR Code Management',
+        path: '/qr-code',
+        icon: QrCode,
+        description: 'QR generation, batch print & scanning',
+        hasSubmenu: true,
+        moduleKey: 'ASSET_MANAGEMENT',
+        subItems: [
+          { name: 'Generate & Batch Print', path: '/qr-code' },
+          { name: 'Live Camera Scanner', path: '/scanner' }
+        ]
+      },
+      {
+        id: 'reports',
+        name: 'Reports & Analytics',
+        path: '/reports',
+        icon: FileText,
+        description: 'Executive dashboards & data exports',
+        hasSubmenu: false,
+        moduleKey: 'MANAGEMENT_REPORTS',
+      },
+      {
+        id: 'audit-logs',
+        name: 'System Audit Logs',
+        path: '/audit-logs',
+        icon: History,
+        description: 'Activity timeline & security trail',
+        hasSubmenu: false,
+        moduleKey: 'SYSTEM_SETTINGS',
+      },
+      {
+        id: 'settings',
+        name: 'Settings & Admin',
+        path: '/settings',
+        icon: Settings,
+        description: 'System config & user access',
+        hasSubmenu: true,
+        moduleKey: 'SYSTEM_SETTINGS',
+        subItems: [
+          ...(hasModuleAccess(user, 'SYSTEM_SETTINGS') ? [{ name: 'System Settings', path: '/settings' }] : []),
+          ...(hasModuleAccess(user, 'USER_MANAGEMENT') ? [{ name: 'User Management', path: '/users' }] : []),
+          ...(hasModuleAccess(user, 'SYSTEM_SETTINGS') ? [{ name: 'Database & Storage', path: '/database' }] : []),
+        ]
+      }
+    ];
+
+    return list.filter((m) => {
+      if (m.id === 'settings') {
+        return hasModuleAccess(user, 'SYSTEM_SETTINGS') || hasModuleAccess(user, 'USER_MANAGEMENT');
+      }
+      return hasModuleAccess(user, m.moduleKey);
+    });
+  }, [user]);
 
   // Filter modules based on search input
   const filteredModules = useMemo(() => {

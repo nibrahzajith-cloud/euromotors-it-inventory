@@ -7,6 +7,10 @@ const API_URL = _rawApi.endsWith('/api') ? _rawApi : `${_rawApi.replace(/\/$/, '
 
 // Helpers to persist/clear the user object in localStorage for optimistic hydration
 const STORAGE_USER_KEY = 'authUser';
+const PORTAL_GATEWAY_TOKEN_KEY = 'portalGatewayToken';
+const PORTAL_GATEWAY_USER_KEY = 'portalGatewayUser';
+const PORTAL_TAB_ACTIVE_KEY = 'portalVerifiedActive';
+
 const saveUserToStorage = (user) => {
   try { localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(user)); } catch (_) {}
 };
@@ -17,7 +21,36 @@ const loadUserFromStorage = () => {
   } catch (_) { return null; }
 };
 
+function clearPortalBrowserCaches() {
+  try {
+    Object.keys(localStorage).forEach((k) => {
+      if (k.startsWith('reports') || k.startsWith('assets') || k.startsWith('employees')) {
+        localStorage.removeItem(k);
+      }
+    });
+  } catch (_) {}
+}
+
 export function AuthProvider({ children }) {
+  // Enforce shared-computer boundary: if unremembered portal user reopened browser, revert to gateway token
+  const rawCached = loadUserFromStorage();
+  if (
+    typeof window !== 'undefined' &&
+    rawCached?.isPortalSession &&
+    !rawCached?.rememberDevice &&
+    !sessionStorage.getItem(PORTAL_TAB_ACTIVE_KEY)
+  ) {
+    const gwToken = localStorage.getItem(PORTAL_GATEWAY_TOKEN_KEY);
+    const gwUserRaw = localStorage.getItem(PORTAL_GATEWAY_USER_KEY);
+    if (gwToken && gwUserRaw) {
+      localStorage.setItem('token', gwToken);
+      localStorage.setItem(STORAGE_USER_KEY, gwUserRaw);
+    } else {
+      localStorage.removeItem('token');
+      localStorage.removeItem(STORAGE_USER_KEY);
+    }
+  }
+
   // Hydrate user state immediately from localStorage.
   // If user is cached, render immediately (loading = false) so UI is instant.
   const cachedUser = loadUserFromStorage();
@@ -27,9 +60,27 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(() => !cachedUser && !!token);
 
   const handleSessionExpired = () => {
+    const gwToken = localStorage.getItem(PORTAL_GATEWAY_TOKEN_KEY);
+    const gwUserRaw = localStorage.getItem(PORTAL_GATEWAY_USER_KEY);
+    sessionStorage.removeItem(PORTAL_TAB_ACTIVE_KEY);
+    if (gwToken && gwUserRaw && cachedUser?.isPortalSession) {
+      try {
+        const gwUser = JSON.parse(gwUserRaw);
+        localStorage.setItem('token', gwToken);
+        saveUserToStorage(gwUser);
+        setUser(gwUser);
+        if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/portal/identify')) {
+          window.location.href = '/portal/identify';
+        }
+        return;
+      } catch (_) {}
+    }
+
     setUser(null);
     localStorage.removeItem('token');
     localStorage.removeItem(STORAGE_USER_KEY);
+    localStorage.removeItem(PORTAL_GATEWAY_TOKEN_KEY);
+    localStorage.removeItem(PORTAL_GATEWAY_USER_KEY);
     if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
       window.location.href = '/login?expired=1';
     }
@@ -103,7 +154,16 @@ export function AuthProvider({ children }) {
       
       const authUser = data.user;
       const userState = { ...authUser, full_name: authUser.fullName, name: authUser.fullName };
-      
+
+      sessionStorage.removeItem(PORTAL_TAB_ACTIVE_KEY);
+      if (authUser.role === 'PORTAL_ACCESS' || authUser.tokenScope === 'PORTAL_GATEWAY') {
+        localStorage.setItem(PORTAL_GATEWAY_TOKEN_KEY, data.token);
+        localStorage.setItem(PORTAL_GATEWAY_USER_KEY, JSON.stringify(userState));
+      } else {
+        localStorage.removeItem(PORTAL_GATEWAY_TOKEN_KEY);
+        localStorage.removeItem(PORTAL_GATEWAY_USER_KEY);
+      }
+
       localStorage.setItem('token', data.token);
       saveUserToStorage(userState);
       setUser(userState);
@@ -116,13 +176,98 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const logout = () => {
+  const verifyPortalEmployee = (verifyPayload) => {
+    const verifiedUser = verifyPayload.user;
+    const userState = { ...verifiedUser, full_name: verifiedUser.fullName, name: verifiedUser.fullName };
+    clearPortalBrowserCaches();
+    localStorage.setItem('token', verifyPayload.token);
+    saveUserToStorage(userState);
+    if (!verifiedUser.rememberDevice) {
+      sessionStorage.setItem(PORTAL_TAB_ACTIVE_KEY, '1');
+    } else {
+      sessionStorage.removeItem(PORTAL_TAB_ACTIVE_KEY);
+    }
+    setUser(userState);
+    return userState;
+  };
+
+  const switchEmployee = async () => {
+    const activeToken = localStorage.getItem('token');
+    if (activeToken && user?.isPortalSession) {
+      try {
+        await fetch(`${API_URL}/portal/switch`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${activeToken}` },
+          keepalive: true,
+        });
+      } catch (_) {}
+    }
+
+    sessionStorage.removeItem(PORTAL_TAB_ACTIVE_KEY);
+    clearPortalBrowserCaches();
+
+    const gwToken = localStorage.getItem(PORTAL_GATEWAY_TOKEN_KEY);
+    const gwUserRaw = localStorage.getItem(PORTAL_GATEWAY_USER_KEY);
+    if (gwToken && gwUserRaw) {
+      try {
+        const gwUser = JSON.parse(gwUserRaw);
+        localStorage.setItem('token', gwToken);
+        saveUserToStorage(gwUser);
+        setUser(gwUser);
+        return '/portal/identify';
+      } catch (_) {}
+    }
+
     setUser(null);
     localStorage.removeItem('token');
     localStorage.removeItem(STORAGE_USER_KEY);
+    localStorage.removeItem(PORTAL_GATEWAY_TOKEN_KEY);
+    localStorage.removeItem(PORTAL_GATEWAY_USER_KEY);
+    return '/login';
   };
 
-  const value = { user, login, logout, loading };
+  const logout = () => {
+    const activeToken = localStorage.getItem('token');
+    if (activeToken && user?.isPortalSession) {
+      fetch(`${API_URL}/portal/switch`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${activeToken}` },
+        keepalive: true,
+      }).catch(() => {});
+    }
+    sessionStorage.removeItem(PORTAL_TAB_ACTIVE_KEY);
+    clearPortalBrowserCaches();
+    setUser(null);
+    localStorage.removeItem('token');
+    localStorage.removeItem(STORAGE_USER_KEY);
+    localStorage.removeItem(PORTAL_GATEWAY_TOKEN_KEY);
+    localStorage.removeItem(PORTAL_GATEWAY_USER_KEY);
+  };
+
+  // Automatic inactivity expiry for portal sessions without Remember My Device
+  useEffect(() => {
+    if (!user?.isPortalSession || user?.rememberDevice) return;
+    const timeoutMs = Math.max(5, Number(user.idleTimeoutMinutes) || 30) * 60 * 1000;
+    let timer = null;
+    const resetTimer = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(async () => {
+        const target = await switchEmployee();
+        if (typeof window !== 'undefined') {
+          window.location.href = target;
+        }
+      }, timeoutMs);
+    };
+    const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
+    events.forEach((ev) => window.addEventListener(ev, resetTimer, { passive: true }));
+    resetTimer();
+    return () => {
+      if (timer) clearTimeout(timer);
+      events.forEach((ev) => window.removeEventListener(ev, resetTimer));
+    };
+  }, [user?.isPortalSession, user?.rememberDevice, user?.idleTimeoutMinutes]);
+
+  const value = { user, login, logout, verifyPortalEmployee, switchEmployee, loading };
 
   return (
     <AuthContext.Provider value={value}>

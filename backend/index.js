@@ -60,6 +60,9 @@ const settingsRoutes = require('./routes/settings.routes');
 const auditLogsRoutes = require('./routes/auditLogs.routes');
 const dashboardRoutes = require('./routes/dashboard.routes');
 const ticketsRoutes = require('./routes/tickets.routes');
+const helpdeskRoutes = require('./routes/helpdesk.routes');
+const portalRoutes = require('./routes/portal.routes');
+const notificationsRoutes = require('./routes/notifications.routes');
 const databaseRoutes = require('./routes/database.routes');
 const uploadsRoutes = require('./routes/uploads.routes');
 const warmupRoutes = require('./routes/warmup.routes');
@@ -67,6 +70,7 @@ const permissionsRoutes = require('./routes/permissions.routes');
 const reportsRoutes = require('./routes/reports.routes');
 const dropdownOptionsRoutes = require('./routes/dropdownOptions.routes');
 const applyMigrations = require('./utils/migrations');
+const { ensureHelpDeskSeeded } = require('./utils/helpdeskSeed');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRoutes);
@@ -85,6 +89,9 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/local_uploads', express.static(path.join(__dirname, 'local_uploads')));
 
 app.use('/api/tickets', ticketsRoutes);
+app.use('/api/helpdesk', helpdeskRoutes);
+app.use('/api/portal', portalRoutes);
+app.use('/api/notifications', notificationsRoutes);
 app.use('/api/database', databaseRoutes);
 app.use('/api/warmup', warmupRoutes);
 app.use('/api/permissions', permissionsRoutes);
@@ -138,6 +145,7 @@ prisma.$connect()
           ADD COLUMN IF NOT EXISTS "thumbnailUrl" TEXT;
       `);
           await applyMigrations();
+          await ensureHelpDeskSeeded();
     } catch (_) {}
   })
   .catch((err) => {

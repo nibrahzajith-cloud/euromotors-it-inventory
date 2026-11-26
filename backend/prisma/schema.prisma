@@ -8,8 +8,12 @@ generator client {
 
 enum Role {
   ADMIN
+  HEAD_OF_IT
+  IT_MANAGER
   IT_OFFICER
+  EMPLOYEE
   VIEWER
+  PORTAL_ACCESS
 }
 
 enum GeneralStatus {
@@ -48,11 +52,22 @@ model User {
   fullName           String
   email              String        @unique
   passwordHash       String
-  role               Role          @default(VIEWER)
+  role               Role          @default(EMPLOYEE)
   status             GeneralStatus @default(ACTIVE)
   mustChangePassword Boolean       @default(true)
+  employeeId         String?       @unique
+  employee           Employee?     @relation(fields: [employeeId], references: [id])
+  modulePermissions  Json?
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
+
+  requestedTickets SupportTicket[]       @relation("RequestedTickets")
+  assignedTickets  SupportTicket[]       @relation("AssignedTickets")
+  assignedByTickets SupportTicket[]      @relation("AssignedByTickets")
+  ticketComments   TicketComment[]
+  statusHistories  TicketStatusHistory[]
+  notifications    Notification[]
+  portalSessions   PortalSession[]
 }
 
 model Department {
@@ -63,8 +78,9 @@ model Department {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
-  employees Employee[]
-  assets    Asset[]
+  employees      Employee[]
+  assets         Asset[]
+  supportTickets SupportTicket[]
 }
 
 model Location {
@@ -75,8 +91,9 @@ model Location {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
-  employees Employee[]
-  assets    Asset[]
+  employees      Employee[]
+  assets         Asset[]
+  supportTickets SupportTicket[]
 }
 
 model Employee {
@@ -101,6 +118,8 @@ model Employee {
   assignedAssets Asset[]           @relation("DirectAssignment")
   assignments    AssetAssignment[]
   supportTickets SupportTicket[]
+  portalSessions PortalSession[]
+  user           User?
 }
 
 model Asset {
@@ -204,6 +223,7 @@ model SystemSettings {
   assetCodePrefix  String   @default("AST")
   warrantyPeriod   Int      @default(12)
   dbStorageLimitMB Int?
+  customOptions    Json?
   updatedAt        DateTime @updatedAt
 }
 
@@ -297,28 +317,271 @@ enum TicketPriority {
 
 enum TicketStatus {
   OPEN
+  ASSIGNED
   IN_PROGRESS
+  PENDING
   RESOLVED
   CLOSED
+  REOPENED
+}
+
+enum TicketRequestType {
+  INCIDENT
+  SERVICE_REQUEST
+  INQUIRY
+}
+
+enum BusinessImpact {
+  INDIVIDUAL_EMPLOYEE
+  MULTIPLE_EMPLOYEES
+  ENTIRE_DEPARTMENT
+  ENTIRE_BRANCH
+  COMPANY_WIDE
+}
+
+enum SlaStatus {
+  ON_TRACK
+  APPROACHING
+  BREACHED
+  PAUSED
+  MET
+}
+
+model HelpDeskCategory {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  examples    String?
+  isActive    Boolean  @default(true)
+  isSystem    Boolean  @default(false)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tickets SupportTicket[]
+}
+
+model HelpDeskSlaRule {
+  id                        String         @id @default(uuid())
+  priority                  TicketPriority @unique
+  firstResponseMinutes      Int
+  resolutionMinutes         Int
+  warningThresholdPercent   Int            @default(75)
+  escalateAfterBreachMinutes Int           @default(30)
+  isActive                  Boolean        @default(true)
+  updatedAt                 DateTime       @updatedAt
+}
+
+model HelpDeskSettings {
+  id                   String   @id @default("global")
+  ticketPrefix         String   @default("HD")
+  ticketNumberFormat   String   @default("HD-{YYYY}-{SEQ6}")
+  nextSequenceNumber   Int      @default(1)
+  workingHours         Json
+  holidays             Json
+  allowedPauseReasons  Json
+  requestTypes         Json
+  priorityLevels       Json
+  notificationSettings Json
+  feedbackSettings     Json
+  assignmentRules      Json
+  escalationRules      Json
+  portalConfig         Json?
+  updatedAt            DateTime @updatedAt
 }
 
 model SupportTicket {
-  id          String         @id @default(uuid())
-  ticketCode  String         @unique
+  id          String            @id @default(uuid())
+  ticketCode  String            @unique
   subject     String
   description String
-  priority    TicketPriority @default(MEDIUM)
-  status      TicketStatus   @default(OPEN)
+  priority    TicketPriority    @default(MEDIUM)
+  status      TicketStatus      @default(OPEN)
+  requestType TicketRequestType @default(INCIDENT)
 
-  employeeId String
-  employee   Employee @relation(fields: [employeeId], references: [id])
+  categoryId String?
+  category   HelpDeskCategory? @relation(fields: [categoryId], references: [id])
+
+  businessImpact        BusinessImpact @default(INDIVIDUAL_EMPLOYEE)
+  businessImpactDetails String?
+
+  requesterUserId     String?
+  requesterUser       User?   @relation("RequestedTickets", fields: [requesterUserId], references: [id])
+  requesterName       String?
+  requesterEmployeeCode String?
+  requesterEmail      String?
+  contactNumber       String?
+  submittedByUserId   String?
+  submittedByName     String?
+  submittedByRole     String?
+
+  employeeId String?
+  employee   Employee? @relation(fields: [employeeId], references: [id])
+
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+
+  locationId String?
+  location   Location? @relation(fields: [locationId], references: [id])
 
   assetId String?
   asset   Asset?  @relation(fields: [assetId], references: [id])
 
-  resolvedAt DateTime?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  assignedToId String?
+  assignedTo   User?     @relation("AssignedTickets", fields: [assignedToId], references: [id])
+  assignedById String?
+  assignedBy   User?     @relation("AssignedByTickets", fields: [assignedById], references: [id])
+  assignedAt   DateTime?
+
+  investigationDetails       String?
+  actionTaken                String?
+  repairOrReplacementDetails String?
+  repairCost                 Float?
+  internalRemarks            String?
+  pendingReason              String?
+
+  firstResponseDueAt    DateTime?
+  resolutionDueAt       DateTime?
+  firstRespondedAt      DateTime?
+  firstResponseMinutes  Int?
+  resolutionMinutes     Int?
+  slaPausedAt           DateTime?
+  slaTotalPausedMinutes Int       @default(0)
+  slaPauseReason        String?
+  slaStatus             SlaStatus @default(ON_TRACK)
+  slaBreachedAt         DateTime?
+  escalatedAt           DateTime?
+  approachingNotifiedAt DateTime?
+  breachNotifiedAt      DateTime?
+
+  employeeConfirmed   Boolean?
+  employeeConfirmedAt DateTime?
+  employeeFeedback    String?
+  satisfactionRating  Int?
+  employeeRemarks     String?
+
+  resolvedAt  DateTime?
+  closedAt    DateTime?
+  reopenedAt  DateTime?
+  reopenCount Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  statusHistory  TicketStatusHistory[]
+  comments       TicketComment[]
+  attachments    TicketAttachment[]
+  slaBreachLogs  SlaBreachLog[]
+
+  @@index([status])
+  @@index([priority])
+  @@index([employeeId])
+  @@index([requesterUserId])
+  @@index([assignedToId])
+  @@index([categoryId])
+  @@index([departmentId])
+  @@index([locationId])
+  @@index([assetId])
+  @@index([slaStatus])
+  @@index([createdAt])
+}
+
+model TicketStatusHistory {
+  id            String   @id @default(uuid())
+  ticketId      String
+  ticket        SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  fromStatus    String?
+  toStatus      String
+  reason        String?
+  note          String?
+  changedById   String?
+  changedBy     User?    @relation(fields: [changedById], references: [id])
+  changedByName String?
+  changedByRole String?
+  createdAt     DateTime @default(now())
+
+  @@index([ticketId])
+  @@index([createdAt])
+}
+
+model TicketComment {
+  id         String        @id @default(uuid())
+  ticketId   String
+  ticket     SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorId   String?
+  author     User?         @relation(fields: [authorId], references: [id])
+  authorName String?
+  authorRole String?
+  message    String
+  isInternal Boolean       @default(false)
+  createdAt  DateTime      @default(now())
+
+  attachments TicketAttachment[]
+
+  @@index([ticketId])
+  @@index([createdAt])
+}
+
+model TicketAttachment {
+  id                String         @id @default(uuid())
+  ticketId          String
+  ticket            SupportTicket  @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  commentId         String?
+  comment           TicketComment? @relation(fields: [commentId], references: [id], onDelete: SetNull)
+  fileName          String
+  storageKey        String
+  fileSize          Int
+  mimeType          String?
+  uploadedById      String?
+  uploadedByName    String?
+  isResolutionProof Boolean        @default(false)
+  createdAt         DateTime       @default(now())
+
+  @@index([ticketId])
+}
+
+model SlaBreachLog {
+  id              String        @id @default(uuid())
+  ticketId        String
+  ticket          SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  breachType      String
+  dueAt           DateTime
+  breachedAt      DateTime      @default(now())
+  overdueMinutes  Int
+  escalatedToId   String?
+  escalatedToName String?
+  createdAt       DateTime      @default(now())
+
+  @@index([ticketId])
+}
+
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ticketId  String?
+  type      String
+  title     String
+  message   String
+  link      String?
+  isRead    Boolean   @default(false)
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+}
+
+model EmailNotificationLog {
+  id             String   @id @default(uuid())
+  recipientEmail String
+  subject        String
+  body           String
+  eventType      String
+  ticketId       String?
+  status         String   @default("SUPPRESSED_DEV")
+  createdAt      DateTime @default(now())
+
+  @@index([createdAt])
 }
 
 model RolePermission {
@@ -326,4 +589,25 @@ model RolePermission {
   role        Role     @unique
   permissions Json
   updatedAt   DateTime @updatedAt
+}
+
+model PortalSession {
+  id                 String    @id @default(uuid())
+  employeeId         String
+  employee           Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  userId             String
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portalAccountId    String?
+  verificationMethod String?
+  rememberDevice     Boolean   @default(false)
+  expiresAt          DateTime
+  lastActivityAt     DateTime  @default(now())
+  revokedAt          DateTime?
+  ipAddress          String?
+  userAgent          String?
+  createdAt          DateTime  @default(now())
+
+  @@index([employeeId])
+  @@index([userId])
+  @@index([expiresAt])
 }

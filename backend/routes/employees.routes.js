@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prismaClient');
-const { authenticate, requirePermission } = require('../middleware/auth.middleware');
+const { authenticate, requirePermission, requireAnyModule } = require('../middleware/auth.middleware');
 const { generateEmployeeCode } = require('../utils/codeGenerator');
 const { logAudit } = require('../utils/logger');
 const memoryCache = require('../utils/cache');
@@ -9,6 +9,7 @@ const crypto = require('crypto');
 const { computeEmployeeValuationSummary } = require('../utils/marketValuation');
 
 router.use(authenticate);
+router.use(requireAnyModule(['IT_INVENTORY', 'ASSET_MANAGEMENT']));
 
 // Everyone can view employees
 router.get('/', async (req, res) => {
@@ -56,6 +57,9 @@ router.get('/', async (req, res) => {
         assignedAssetsCount: activeList.length,
         totalAssetValueLKR: valSummary.totalValueLKR,
         formattedAssetValue: valSummary.formattedTotalLKR,
+        totalPurchasePriceLKR: valSummary.totalPurchasePriceLKR,
+        formattedPurchasePrice: valSummary.formattedTotalPurchasePriceLKR,
+        purchasePriceRecordedCount: valSummary.purchasePriceRecordedCount,
         valuationSummary: valSummary
       };
     });
@@ -126,6 +130,11 @@ router.get('/:id/handover', async (req, res) => {
         serialNumber: ast.serialNumber || 'N/A',
         condition: ast.condition || 'Good',
         status: ast.status,
+        purchaseDate: ast.purchaseDate || null,
+        purchasePrice: ast.purchasePrice ?? null,
+        estimatedValue: ast.estimatedValue ?? null,
+        valuationSource: ast.valuationSource || null,
+        valuationDate: ast.valuationDate || null,
         assignedDate: ast.updatedAt || ast.createdAt,
         remarks: ast.remarks || '',
         accessories: Array.isArray(ast.accessories) ? ast.accessories : [],
@@ -146,6 +155,11 @@ router.get('/:id/handover', async (req, res) => {
           serialNumber: ast.serialNumber || 'N/A',
           condition: ast.condition || 'Good',
           status: ast.status,
+          purchaseDate: ast.purchaseDate || null,
+          purchasePrice: ast.purchasePrice ?? null,
+          estimatedValue: ast.estimatedValue ?? null,
+          valuationSource: ast.valuationSource || null,
+          valuationDate: ast.valuationDate || null,
           assignedDate: asg.assignedDate || ast.updatedAt,
           remarks: asg.remarks || ast.remarks || '',
           accessories: Array.isArray(asg.accessories) && asg.accessories.length > 0

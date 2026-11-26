@@ -5,10 +5,46 @@ const path = require('path');
 const crypto = require('crypto');
 const ExcelJS = require('exceljs');
 const prisma = require('../prismaClient');
-const { authenticate, authorize, requirePermission } = require('../middleware/auth.middleware');
+const { authenticate, authorize, requirePermission, requireAnyModule } = require('../middleware/auth.middleware');
 const { logAudit, logAssetTimeline } = require('../utils/logger');
 const { generateAssetCode, generateEmployeeCode } = require('../utils/codeGenerator');
+const { userHasPermission } = require('../utils/rbac');
+const { resolveAssetValuation, resolveActualPurchasePrice } = require('../utils/marketValuation');
 const memoryCache = require('../utils/cache');
+
+function parseOptionalPurchasePrice(rawVal) {
+  if (rawVal === undefined) return { provided: false, value: null };
+  if (rawVal === null || rawVal === '') return { provided: true, value: null };
+  if (typeof rawVal === 'string') {
+    const trimmed = rawVal.trim();
+    if (!trimmed || /^not\s+recorded$/i.test(trimmed) || /^n\/?a$/i.test(trimmed)) {
+      return { provided: true, value: null };
+    }
+    const cleaned = trimmed.replace(/^lkr\s*/i, '').replace(/,/g, '').trim();
+    if (!cleaned) return { provided: true, value: null };
+    const num = Number(cleaned);
+    if (!Number.isFinite(num) || num < 0) {
+      return { error: 'Actual Purchase Price (LKR) must be a valid non-negative number.' };
+    }
+    return { provided: true, value: num === 0 ? null : Math.round(num * 100) / 100 };
+  }
+  const num = Number(rawVal);
+  if (!Number.isFinite(num) || num < 0) {
+    return { error: 'Actual Purchase Price (LKR) must be a valid non-negative number.' };
+  }
+  return { provided: true, value: num === 0 ? null : Math.round(num * 100) / 100 };
+}
+
+function normalizePriceVal(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null;
+}
+
+function formatPriceForAudit(v) {
+  const n = normalizePriceVal(v);
+  return n !== null ? `LKR ${n.toLocaleString('en-LK')}` : 'Not Recorded';
+}
 
 const MAC_REGEX = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/;
 const IPV4_REGEX = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
@@ -112,6 +148,7 @@ router.get('/guide/download', (req, res) => {
 });
 
 router.use(authenticate);
+router.use(requireAnyModule(['IT_INVENTORY', 'ASSET_MANAGEMENT']));
 
 router.get('/', async (req, res) => {
   try {
@@ -303,6 +340,22 @@ router.post('/', requirePermission('CREATE_ASSETS'), async (req, res) => {
       });
     }
 
+    // Validate & authorize Actual Purchase Price (LKR)
+    const purchasePriceInput = parseOptionalPurchasePrice(payload.purchasePrice);
+    if (purchasePriceInput.error) {
+      return res.status(400).json({ error: purchasePriceInput.error, field: 'purchasePrice' });
+    }
+    if (purchasePriceInput.provided && purchasePriceInput.value !== null) {
+      const allowedPurchasePrice = await userHasPermission(prisma, req.user, 'MANAGE_PURCHASE_PRICE');
+      if (!allowedPurchasePrice) {
+        return res.status(403).json({
+          error: 'Forbidden: Only administrators or authorized users can record Actual Purchase Price (LKR).',
+          field: 'purchasePrice'
+        });
+      }
+    }
+    payload.purchasePrice = purchasePriceInput.provided ? purchasePriceInput.value : null;
+
     // Enforce required field defaults
     payload.warrantyStatus = (payload.warrantyStatus && typeof payload.warrantyStatus === 'string' && payload.warrantyStatus.trim())
       ? payload.warrantyStatus.trim()
@@ -391,17 +444,17 @@ router.post('/', requirePermission('CREATE_ASSETS'), async (req, res) => {
               `INSERT INTO "Asset" (
                 "id", "assetCode", "deviceType", "brand", "model", "serialNumber",
                 "processor", "ram", "storage", "operatingSystem", "vendor",
-                "purchaseDate", "warrantyStatus", "warrantyExpiryDate", "condition",
+                "purchaseDate", "purchasePrice", "warrantyStatus", "warrantyExpiryDate", "condition",
                 "status", "assignmentType", "macAddress", "ipAddress",
                 "locationId", "departmentId", "assignedEmployeeId",
                 "remarks", "accessories", "createdAt", "updatedAt"
               ) VALUES (
                 $1, $2, $3, $4, $5, $6,
                 $7, $8, $9, $10, $11,
-                $12, $13, $14, $15,
-                $16::"AssetStatus", $17::"AssignmentType", $18, $19,
-                $20, $21, $22,
-                $23, $24::jsonb, NOW(), NOW()
+                $12, $13, $14, $15, $16,
+                $17::"AssetStatus", $18::"AssignmentType", $19, $20,
+                $21, $22, $23,
+                $24, $25::jsonb, NOW(), NOW()
               )`,
               newId,
               codeToAssign,
@@ -415,6 +468,7 @@ router.post('/', requirePermission('CREATE_ASSETS'), async (req, res) => {
               payload.operatingSystem || null,
               payload.vendor || null,
               payload.purchaseDate ? new Date(payload.purchaseDate) : null,
+              payload.purchasePrice !== undefined ? payload.purchasePrice : null,
               payload.warrantyStatus || 'Active',
               payload.warrantyExpiryDate ? new Date(payload.warrantyExpiryDate) : null,
               payload.condition || 'New',
@@ -568,7 +622,31 @@ router.post('/', requirePermission('CREATE_ASSETS'), async (req, res) => {
       performedByName: req.user.fullName
     });
 
+    if (normalizePriceVal(record.purchasePrice) !== null) {
+      await logAudit({
+        req,
+        action: 'SET_PURCHASE_PRICE',
+        module: 'ASSETS',
+        entityType: 'ASSET',
+        entityId: record.id,
+        entityCode: record.assetCode,
+        oldValue: { purchasePrice: null, formatted: 'Not Recorded' },
+        newValue: { purchasePrice: record.purchasePrice, formatted: formatPriceForAudit(record.purchasePrice) },
+        description: `Actual Purchase Price recorded for ${record.assetCode}: ${formatPriceForAudit(record.purchasePrice)}`
+      });
+      await logAssetTimeline({
+        assetId: record.id,
+        assetCode: record.assetCode,
+        eventType: 'PURCHASE_PRICE_UPDATED',
+        title: 'Actual Purchase Price Recorded',
+        description: `Initial Actual Purchase Price set to ${formatPriceForAudit(record.purchasePrice)} by ${req.user.fullName}`,
+        performedById: req.user.id,
+        performedByName: req.user.fullName
+      });
+    }
+
     memoryCache.delPrefix('assets');
+    memoryCache.delPrefix('employees');
     memoryCache.delPrefix('dashboard');
     res.status(201).json(record);
   } catch (err) {
@@ -595,6 +673,33 @@ router.get('/export/excel', async (req, res) => {
     const totalRows = ws1.rowCount;
     for (let r = totalRows; r >= 2; r--) {
       ws1.spliceRows(r, 1);
+    }
+
+    // Ensure purchasePrice (Actual Purchase Price) & Estimated Asset Value (LKR) columns align cleanly
+    const headerRow = ws1.getRow(1);
+    const existingHeaders = [];
+    headerRow.eachCell((cell, colNumber) => {
+      existingHeaders[colNumber] = String(cell.value || '').trim().toLowerCase();
+    });
+    const refStyle = headerRow.getCell(Math.max(1, existingHeaders.length - 1)).style || {};
+    const styleNewHeader = (colIdx, title) => {
+      const c = headerRow.getCell(colIdx);
+      c.value = title;
+      if (refStyle.font) c.font = { ...refStyle.font };
+      if (refStyle.fill) c.fill = { ...refStyle.fill };
+      if (refStyle.border) c.border = { ...refStyle.border };
+      if (refStyle.alignment) c.alignment = { ...refStyle.alignment };
+      ws1.getColumn(colIdx).width = 24;
+    };
+    let actualColIdx = existingHeaders.findIndex(h => h && (h === 'purchaseprice' || h.includes('actual purchase price')));
+    if (actualColIdx <= 0) {
+      actualColIdx = existingHeaders.length > 0 ? existingHeaders.length : 25;
+      styleNewHeader(actualColIdx, 'Actual Purchase Price (LKR)');
+    }
+    let estColIdx = existingHeaders.findIndex(h => h && (h.includes('estimated asset value') || h === 'estimatedvalue'));
+    if (estColIdx <= 0) {
+      estColIdx = actualColIdx + 1;
+      styleNewHeader(estColIdx, 'Estimated Asset Value (LKR)');
     }
 
     const assets = await prisma.asset.findMany({
@@ -666,6 +771,8 @@ router.get('/export/excel', async (req, res) => {
 
       list.forEach(a => {
         const emp = a.assignedEmployee;
+        const estVal = resolveAssetValuation(a);
+        const actualPrice = resolveActualPurchasePrice(a);
         const rowValues = [
           formatAssignmentType(a.assignmentType),
           a.location?.name || '',
@@ -690,7 +797,9 @@ router.get('/export/excel', async (req, res) => {
           a.status === 'AVAILABLE' ? 'In Store' : (a.status === 'ASSIGNED' ? 'Assigned' : a.status),
           a.brand || '',
           a.condition || '',
-          a.remarks || ''
+          a.remarks || '',
+          actualPrice.formattedPurchasePrice,
+          estVal.formattedValue
         ];
 
         const newRow = ws1.addRow(rowValues);
@@ -747,7 +856,8 @@ router.post('/bulk', requirePermission('BULK_IMPORT_ASSETS'), async (req, res) =
     const departmentMap = new Map(departments.map(d => [d.name.toLowerCase().trim(), d]));
     const employeeMap = new Map(employees.map(e => [e.employeeCode ? e.employeeCode.toUpperCase().trim() : '', e]));
 
-    const existingAssetRecords = await prisma.asset.findMany({ select: { id: true, assetCode: true, serialNumber: true } });
+    const canManagePurchasePrice = await userHasPermission(prisma, req.user, 'MANAGE_PURCHASE_PRICE');
+    const existingAssetRecords = await prisma.asset.findMany({ select: { id: true, assetCode: true, serialNumber: true, purchasePrice: true } });
     const assetCodeToAsset = new Map(existingAssetRecords.map(a => [a.assetCode.toUpperCase().trim(), a]));
     const serialToAsset = new Map(existingAssetRecords.filter(a => a.serialNumber).map(a => [a.serialNumber.toUpperCase().trim(), a]));
 
@@ -974,6 +1084,37 @@ router.post('/bulk', requirePermission('BULK_IMPORT_ASSETS'), async (req, res) =
           return isNaN(parsed.getTime()) ? null : parsed;
         };
 
+        const rawBulkPurchasePrice =
+          a.purchasePrice !== undefined ? a.purchasePrice :
+          a.actualPurchasePrice !== undefined ? a.actualPurchasePrice :
+          a['Actual Purchase Price (LKR)'] !== undefined ? a['Actual Purchase Price (LKR)'] :
+          a['Actual Purchase Price'] !== undefined ? a['Actual Purchase Price'] :
+          a['Purchase Price (LKR)'] !== undefined ? a['Purchase Price (LKR)'] :
+          a['Purchase Price'];
+
+        const parsedBulkPP = parseOptionalPurchasePrice(rawBulkPurchasePrice);
+        if (parsedBulkPP.error) {
+          const e = new Error(parsedBulkPP.error);
+          e.column = 'purchasePrice';
+          e.value = rawBulkPurchasePrice;
+          throw e;
+        }
+
+        const existingPP = existingAsset ? normalizePriceVal(existingAsset.purchasePrice) : null;
+        let bulkPurchasePriceToSave = existingAsset ? existingAsset.purchasePrice : null;
+
+        if (parsedBulkPP.provided && (parsedBulkPP.value !== null || (typeof rawBulkPurchasePrice === 'string' && rawBulkPurchasePrice.trim() !== ''))) {
+          if (parsedBulkPP.value !== existingPP) {
+            if (!canManagePurchasePrice) {
+              const e = new Error('Forbidden: Only administrators or authorized users can set or modify Actual Purchase Price (LKR).');
+              e.column = 'purchasePrice';
+              e.value = rawBulkPurchasePrice;
+              throw e;
+            }
+            bulkPurchasePriceToSave = parsedBulkPP.value;
+          }
+        }
+
         const assetPayload = {
           assetCode: inputCode,
           deviceType: a.deviceType,
@@ -999,6 +1140,13 @@ router.post('/bulk', requirePermission('BULK_IMPORT_ASSETS'), async (req, res) =
           assignmentType: aType === 'IN STORE' ? 'STORE' : aType
         };
 
+        // Never overwrite existing purchasePrice when omitted/empty unless authorized user explicitly supplied it
+        if (canManagePurchasePrice && parsedBulkPP.provided && (parsedBulkPP.value !== null || (typeof rawBulkPurchasePrice === 'string' && rawBulkPurchasePrice.trim() !== ''))) {
+          assetPayload.purchasePrice = bulkPurchasePriceToSave;
+        } else if (!existingAsset) {
+          assetPayload.purchasePrice = null;
+        }
+
         const formattedBulkData = formatAssetPrismaData(assetPayload, !!existingAsset);
 
         if (existingAsset) {
@@ -1023,19 +1171,20 @@ router.post('/bulk', requirePermission('BULK_IMPORT_ASSETS'), async (req, res) =
                 "operatingSystem" = $8,
                 "vendor" = $9,
                 "purchaseDate" = $10,
-                "warrantyStatus" = COALESCE($11, "warrantyStatus"),
-                "warrantyExpiryDate" = $12,
-                "condition" = COALESCE($13, "condition"),
-                "status" = COALESCE($14::"AssetStatus", "status"),
-                "assignmentType" = COALESCE($15::"AssignmentType", "assignmentType"),
-                "macAddress" = $16,
-                "ipAddress" = $17,
-                "locationId" = $18,
-                "departmentId" = $19,
-                "assignedEmployeeId" = $20,
-                "remarks" = $21,
+                "purchasePrice" = $11,
+                "warrantyStatus" = COALESCE($12, "warrantyStatus"),
+                "warrantyExpiryDate" = $13,
+                "condition" = COALESCE($14, "condition"),
+                "status" = COALESCE($15::"AssetStatus", "status"),
+                "assignmentType" = COALESCE($16::"AssignmentType", "assignmentType"),
+                "macAddress" = $17,
+                "ipAddress" = $18,
+                "locationId" = $19,
+                "departmentId" = $20,
+                "assignedEmployeeId" = $21,
+                "remarks" = $22,
                 "updatedAt" = NOW()
-               WHERE "id" = $22`,
+               WHERE "id" = $23`,
               a.deviceType || null,
               a.brand || null,
               a.model || null,
@@ -1046,6 +1195,7 @@ router.post('/bulk', requirePermission('BULK_IMPORT_ASSETS'), async (req, res) =
               a.operatingSystem || null,
               a.vendor || null,
               parseSafeDate(a.purchaseDate),
+              bulkPurchasePriceToSave ?? null,
               a.warrantyStatus || null,
               parseSafeDate(a.warrantyExpiryDate),
               a.condition || null,
@@ -1064,6 +1214,29 @@ router.post('/bulk', requirePermission('BULK_IMPORT_ASSETS'), async (req, res) =
 
           results.updated++;
           results.updatedAssets++;
+
+          if (normalizePriceVal(updated.purchasePrice) !== existingPP) {
+            await logAudit({
+              req,
+              action: 'UPDATE_PURCHASE_PRICE',
+              module: 'ASSETS',
+              entityType: 'ASSET',
+              entityId: updated.id,
+              entityCode: updated.assetCode,
+              oldValue: { purchasePrice: existingPP, formatted: formatPriceForAudit(existingPP) },
+              newValue: { purchasePrice: updated.purchasePrice, formatted: formatPriceForAudit(updated.purchasePrice) },
+              description: `Actual Purchase Price updated via bulk upload for ${updated.assetCode}: ${formatPriceForAudit(existingPP)} -> ${formatPriceForAudit(updated.purchasePrice)}`
+            });
+            await logAssetTimeline({
+              assetId: updated.id,
+              assetCode: updated.assetCode,
+              eventType: 'PURCHASE_PRICE_UPDATED',
+              title: 'Actual Purchase Price Updated (Bulk)',
+              description: `Purchase price updated from ${formatPriceForAudit(existingPP)} to ${formatPriceForAudit(updated.purchasePrice)} by ${req.user.fullName}`,
+              performedById: req.user.id,
+              performedByName: req.user.fullName
+            });
+          }
 
           await logAssetTimeline({
             assetId: updated.id,
@@ -1087,17 +1260,17 @@ router.post('/bulk', requirePermission('BULK_IMPORT_ASSETS'), async (req, res) =
               `INSERT INTO "Asset" (
                 "id", "assetCode", "deviceType", "brand", "model", "serialNumber",
                 "processor", "ram", "storage", "operatingSystem", "vendor",
-                "purchaseDate", "warrantyStatus", "warrantyExpiryDate", "condition",
+                "purchaseDate", "purchasePrice", "warrantyStatus", "warrantyExpiryDate", "condition",
                 "status", "assignmentType", "macAddress", "ipAddress",
                 "locationId", "departmentId", "assignedEmployeeId",
                 "remarks", "accessories", "createdAt", "updatedAt"
               ) VALUES (
                 $1, $2, $3, $4, $5, $6,
                 $7, $8, $9, $10, $11,
-                $12, $13, $14, $15,
-                $16::"AssetStatus", $17::"AssignmentType", $18, $19,
-                $20, $21, $22,
-                $23, $24::jsonb, NOW(), NOW()
+                $12, $13, $14, $15, $16,
+                $17::"AssetStatus", $18::"AssignmentType", $19, $20,
+                $21, $22, $23,
+                $24, $25::jsonb, NOW(), NOW()
               )`,
               newId,
               inputCode,
@@ -1111,6 +1284,7 @@ router.post('/bulk', requirePermission('BULK_IMPORT_ASSETS'), async (req, res) =
               a.operatingSystem || null,
               a.vendor || null,
               parseSafeDate(a.purchaseDate),
+              bulkPurchasePriceToSave ?? null,
               a.warrantyStatus || 'Active',
               parseSafeDate(a.warrantyExpiryDate),
               a.condition || 'GOOD',
@@ -1128,6 +1302,29 @@ router.post('/bulk', requirePermission('BULK_IMPORT_ASSETS'), async (req, res) =
           }
           results.imported++;
           results.createdAssets++;
+
+          if (normalizePriceVal(newAsset.purchasePrice) !== null) {
+            await logAudit({
+              req,
+              action: 'SET_PURCHASE_PRICE',
+              module: 'ASSETS',
+              entityType: 'ASSET',
+              entityId: newAsset.id,
+              entityCode: newAsset.assetCode,
+              oldValue: { purchasePrice: null, formatted: 'Not Recorded' },
+              newValue: { purchasePrice: newAsset.purchasePrice, formatted: formatPriceForAudit(newAsset.purchasePrice) },
+              description: `Actual Purchase Price recorded via bulk upload for ${newAsset.assetCode}: ${formatPriceForAudit(newAsset.purchasePrice)}`
+            });
+            await logAssetTimeline({
+              assetId: newAsset.id,
+              assetCode: newAsset.assetCode,
+              eventType: 'PURCHASE_PRICE_UPDATED',
+              title: 'Actual Purchase Price Recorded (Bulk)',
+              description: `Purchase price set to ${formatPriceForAudit(newAsset.purchasePrice)} by ${req.user.fullName}`,
+              performedById: req.user.id,
+              performedByName: req.user.fullName
+            });
+          }
 
           assetCodeToAsset.set(newAsset.assetCode.toUpperCase(), newAsset);
           if (finalSerial) serialToAsset.set(finalSerial.toUpperCase(), newAsset);
@@ -1244,6 +1441,31 @@ router.put('/:id', requirePermission('EDIT_ASSETS'), async (req, res) => {
       payload.assignedEmployeeId = null;
     }
 
+    // Enforce Actual Purchase Price (LKR) permission & preserve existing price when omitted
+    const oldPurchasePrice = normalizePriceVal(oldRecord.purchasePrice);
+    const hasPurchasePriceField = Object.prototype.hasOwnProperty.call(payload, 'purchasePrice');
+    let finalPurchasePrice = oldRecord.purchasePrice ?? null;
+
+    if (hasPurchasePriceField) {
+      const ppParsed = parseOptionalPurchasePrice(payload.purchasePrice);
+      if (ppParsed.error) {
+        return res.status(400).json({ error: ppParsed.error, field: 'purchasePrice' });
+      }
+      if (ppParsed.value !== oldPurchasePrice) {
+        const allowedPurchasePrice = await userHasPermission(prisma, req.user, 'MANAGE_PURCHASE_PRICE');
+        if (!allowedPurchasePrice) {
+          return res.status(403).json({
+            error: 'Forbidden: Only administrators or authorized users can enter or modify Actual Purchase Price (LKR).',
+            field: 'purchasePrice'
+          });
+        }
+        finalPurchasePrice = ppParsed.value;
+        payload.purchasePrice = ppParsed.value;
+      } else {
+        delete payload.purchasePrice;
+      }
+    }
+
     let record;
     // PRIMARY: Always use direct SQL UPDATE — works regardless of Prisma Client version on Render
     try {
@@ -1259,20 +1481,21 @@ router.put('/:id', requirePermission('EDIT_ASSETS'), async (req, res) => {
           "operatingSystem"  = $8,
           "vendor"           = $9,
           "purchaseDate"     = $10,
-          "warrantyStatus"   = COALESCE($11, "warrantyStatus"),
-          "warrantyExpiryDate" = $12,
-          "condition"        = COALESCE($13, "condition"),
-          "status"           = COALESCE($14::"AssetStatus", "status"),
-          "assignmentType"   = COALESCE($15::"AssignmentType", "assignmentType"),
-          "macAddress"       = $16,
-          "ipAddress"        = $17,
-          "locationId"       = $18,
-          "departmentId"     = $19,
-          "assignedEmployeeId" = $20,
-          "remarks"          = $21,
-          "accessories"      = $22::jsonb,
+          "purchasePrice"    = $11,
+          "warrantyStatus"   = COALESCE($12, "warrantyStatus"),
+          "warrantyExpiryDate" = $13,
+          "condition"        = COALESCE($14, "condition"),
+          "status"           = COALESCE($15::"AssetStatus", "status"),
+          "assignmentType"   = COALESCE($16::"AssignmentType", "assignmentType"),
+          "macAddress"       = $17,
+          "ipAddress"        = $18,
+          "locationId"       = $19,
+          "departmentId"     = $20,
+          "assignedEmployeeId" = $21,
+          "remarks"          = $22,
+          "accessories"      = $23::jsonb,
           "updatedAt"        = NOW()
-         WHERE "id" = $23`,
+         WHERE "id" = $24`,
         payload.deviceType || oldRecord.deviceType,
         payload.brand !== undefined ? payload.brand : oldRecord.brand,
         payload.model !== undefined ? payload.model : oldRecord.model,
@@ -1283,6 +1506,7 @@ router.put('/:id', requirePermission('EDIT_ASSETS'), async (req, res) => {
         payload.operatingSystem !== undefined ? payload.operatingSystem : oldRecord.operatingSystem,
         payload.vendor !== undefined ? payload.vendor : oldRecord.vendor,
         payload.purchaseDate ? new Date(payload.purchaseDate) : (payload.purchaseDate === null ? null : oldRecord.purchaseDate),
+        finalPurchasePrice,
         payload.warrantyStatus || oldRecord.warrantyStatus,
         payload.warrantyExpiryDate ? new Date(payload.warrantyExpiryDate) : (payload.warrantyExpiryDate === null ? null : oldRecord.warrantyExpiryDate),
         payload.condition || oldRecord.condition,
@@ -1370,7 +1594,34 @@ router.put('/:id', requirePermission('EDIT_ASSETS'), async (req, res) => {
       });
     }
 
+    const newPurchasePrice = normalizePriceVal(record.purchasePrice);
+    if (oldPurchasePrice !== newPurchasePrice) {
+      const prevFmt = formatPriceForAudit(oldPurchasePrice);
+      const nextFmt = formatPriceForAudit(newPurchasePrice);
+      await logAudit({
+        req,
+        action: 'UPDATE_PURCHASE_PRICE',
+        module: 'ASSETS',
+        entityType: 'ASSET',
+        entityId: record.id,
+        entityCode: record.assetCode,
+        oldValue: { purchasePrice: oldPurchasePrice, formatted: prevFmt },
+        newValue: { purchasePrice: newPurchasePrice, formatted: nextFmt },
+        description: `Actual Purchase Price changed for ${record.assetCode}: ${prevFmt} -> ${nextFmt}`
+      });
+      await logAssetTimeline({
+        assetId: record.id,
+        assetCode: record.assetCode,
+        eventType: 'PURCHASE_PRICE_UPDATED',
+        title: 'Actual Purchase Price Updated',
+        description: `Actual Purchase Price changed from ${prevFmt} to ${nextFmt} by ${req.user.fullName}`,
+        performedById: req.user.id,
+        performedByName: req.user.fullName
+      });
+    }
+
     memoryCache.delPrefix('assets');
+    memoryCache.delPrefix('employees');
     memoryCache.delPrefix('dashboard');
     res.json(record);
   } catch (err) {

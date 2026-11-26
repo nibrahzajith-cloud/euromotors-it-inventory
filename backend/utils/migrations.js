@@ -76,6 +76,42 @@ async function applyMigrations() {
     console.warn('[MIGRATION] Asset valuation columns notice:', err.message);
   }
 
+  try {
+    await prisma.$executeRawUnsafe(`ALTER TYPE "Role" ADD VALUE IF NOT EXISTS 'PORTAL_ACCESS';`);
+  } catch (err) {
+    console.warn('[MIGRATION] PORTAL_ACCESS role notice:', err.message);
+  }
+
+  try {
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE "HelpDeskSettings"
+        ADD COLUMN IF NOT EXISTS "portalConfig" JSONB;
+      ALTER TABLE "SupportTicket"
+        ADD COLUMN IF NOT EXISTS "submittedByUserId" TEXT,
+        ADD COLUMN IF NOT EXISTS "submittedByName" TEXT,
+        ADD COLUMN IF NOT EXISTS "submittedByRole" TEXT;
+      CREATE TABLE IF NOT EXISTS "PortalSession" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "employeeId" TEXT NOT NULL REFERENCES "Employee"("id") ON DELETE CASCADE,
+        "userId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+        "portalAccountId" TEXT,
+        "verificationMethod" TEXT,
+        "rememberDevice" BOOLEAN NOT NULL DEFAULT false,
+        "expiresAt" TIMESTAMP(3) NOT NULL,
+        "lastActivityAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "revokedAt" TIMESTAMP(3),
+        "ipAddress" TEXT,
+        "userAgent" TEXT,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS "PortalSession_employeeId_idx" ON "PortalSession"("employeeId");
+      CREATE INDEX IF NOT EXISTS "PortalSession_userId_idx" ON "PortalSession"("userId");
+      CREATE INDEX IF NOT EXISTS "PortalSession_expiresAt_idx" ON "PortalSession"("expiresAt");
+    `);
+  } catch (err) {
+    console.warn('[MIGRATION] Portal schema notice:', err.message);
+  }
+
   // 6. High-performance enterprise indexes
   const indexQueries = [
     'CREATE INDEX IF NOT EXISTS idx_asset_status ON "Asset"("status")',

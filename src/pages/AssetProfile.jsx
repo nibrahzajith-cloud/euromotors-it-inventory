@@ -2,8 +2,10 @@ import CreatableSelect from '../components/CreatableSelect';
 import AccessoriesSection from '../components/AccessoriesSection';
 import { useEffect, useState, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
+import { resolveAssetValuation, resolveActualPurchasePrice } from '../utils/marketValuation';
 import {
   ArrowLeft, Printer, Download, MonitorSmartphone, Wrench, UserCheck,
   CheckCircle2, Loader2, AlertCircle, History, Calendar, User, ArrowRight,
@@ -36,6 +38,8 @@ const API_URL = _rawApi.endsWith('/api') ? _rawApi : `${_rawApi.replace(/\/$/, '
 export default function AssetProfile() {
   const { id: assetCode } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const canManagePurchasePrice = user?.role === 'ADMIN' || user?.role === 'HEAD_OF_IT' || !!user?.permissions?.MANAGE_PURCHASE_PRICE;
 
   const handleBack = () => {
     if (window.history.state && window.history.state.idx > 0) {
@@ -78,6 +82,20 @@ export default function AssetProfile() {
   const [activeTab, setActiveTab] = useState('details');
   const [auditLogs, setAuditLogs] = useState([]);
   const [auditLoading, setAuditLoading] = useState(false);
+  const [supportHistory, setSupportHistory] = useState({ tickets: [], maintenanceLogs: [] });
+
+  const fetchAssetSupportHistory = async (assetId) => {
+    if (!assetId) return;
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/helpdesk/asset-history/${assetId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setSupportHistory(await res.json());
+      }
+    } catch (_) {}
+  };
 
   const fetchAssetAuditLogs = async (assetId) => {
     if (!assetId) return;
@@ -125,6 +143,7 @@ export default function AssetProfile() {
       const data = await res.json();
       setAsset(data);
       fetchAssetAuditLogs(data.id);
+      fetchAssetSupportHistory(data.id);
       if (data.imageUrl || data.imageStorageKey) {
         setMediaView('photo');
       } else {
@@ -165,6 +184,8 @@ export default function AssetProfile() {
       storage: asset.storage || '',
       operatingSystem: asset.operatingSystem || '',
       vendor: asset.vendor || '',
+      purchaseDate: asset.purchaseDate ? asset.purchaseDate.split('T')[0] : '',
+      purchasePrice: (asset.purchasePrice !== null && asset.purchasePrice !== undefined && Number(asset.purchasePrice) > 0) ? String(asset.purchasePrice) : '',
       condition: asset.condition || '',
       warrantyStatus: asset.warrantyStatus || '',
       warrantyExpiryDate: asset.warrantyExpiryDate ? asset.warrantyExpiryDate.split('T')[0] : '',
@@ -208,6 +229,21 @@ export default function AssetProfile() {
       // Convert date string
       if (payload.warrantyExpiryDate) {
         payload.warrantyExpiryDate = new Date(payload.warrantyExpiryDate).toISOString();
+      }
+      if (payload.purchaseDate) {
+        payload.purchaseDate = new Date(payload.purchaseDate).toISOString();
+      }
+
+      if (!canManagePurchasePrice) {
+        delete payload.purchasePrice;
+      } else if (payload.purchasePrice !== null && payload.purchasePrice !== undefined) {
+        const parsedPrice = Number(payload.purchasePrice);
+        if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+          showToast('Actual Purchase Price (LKR) must be a valid positive number.', 'error');
+          setSaving(false);
+          return;
+        }
+        payload.purchasePrice = parsedPrice === 0 ? null : parsedPrice;
       }
 
       const res = await fetch(`${API_URL}/assets/${asset.id}`, {
@@ -255,7 +291,7 @@ export default function AssetProfile() {
   const renderEditableField = (label, field, type = 'text', options) => {
     if (!isEditing) {
       let displayVal = asset[field] || '-';
-      if (field === 'warrantyExpiryDate' && asset[field]) {
+      if ((field === 'warrantyExpiryDate' || field === 'purchaseDate') && asset[field]) {
         displayVal = new Date(asset[field]).toLocaleDateString();
       }
       if (field === 'locationId') displayVal = asset.location?.name || 'Unassigned';
@@ -424,6 +460,13 @@ export default function AssetProfile() {
             <ShieldCheck className="w-4 h-4" />
             Lifecycle Audit ({auditLogs.length})
           </button>
+          <button
+            onClick={() => setActiveTab('support')}
+            className={`px-6 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 ${activeTab === 'support' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+          >
+            <Wrench className="w-4 h-4" />
+            Support & Maintenance History ({(supportHistory.tickets?.length || 0) + (supportHistory.maintenanceLogs?.length || 0)})
+          </button>
         </div>
 
         {activeTab === 'details' ? (
@@ -528,6 +571,81 @@ export default function AssetProfile() {
 
             {/* Right Column: Asset Details */}
             <div className="lg:col-span-2 space-y-6">
+              {/* Financial Valuation & Purchase Price Breakdown */}
+              {(() => {
+                const estValuation = resolveAssetValuation(asset);
+                const actualPurchase = resolveActualPurchasePrice(asset);
+                return (
+                  <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6">
+                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-3 mb-4">
+                      <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+                        <Tag className="w-5 h-5 text-emerald-600" />
+                        Asset Valuation & Purchase Record
+                      </h3>
+                      <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                        Separate estimated vs. procurement cost
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="p-4 rounded-xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/50">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className="text-xs font-semibold text-blue-700 dark:text-blue-300 uppercase tracking-wider">
+                            Asset Value (LKR)
+                          </span>
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300">
+                            {estValuation.source}
+                          </span>
+                        </div>
+                        <p className="text-lg font-extrabold font-mono text-slate-900 dark:text-white">
+                          {estValuation.formattedValue}
+                        </p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                          Automatic market / hardware benchmark valuation
+                        </p>
+                      </div>
+
+                      <div className="p-4 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/50">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 uppercase tracking-wider">
+                            Actual Purchase Price (LKR)
+                          </span>
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300">
+                            {canManagePurchasePrice ? 'Authorized Editable' : 'Admin Only'}
+                          </span>
+                        </div>
+                        {isEditing && canManagePurchasePrice ? (
+                          <div>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              placeholder="Optional (Not Recorded if blank)"
+                              className="w-full mt-1 bg-white dark:bg-slate-700 border border-emerald-300 dark:border-emerald-700 text-slate-900 dark:text-white rounded-lg px-3 py-1.5 text-sm font-mono outline-none focus:ring-2 focus:ring-emerald-500"
+                              value={editData.purchasePrice ?? ''}
+                              onChange={(e) => handleFieldChange('purchasePrice', e.target.value)}
+                            />
+                            <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+                              Clear field to set &quot;Not Recorded&quot;. Logged in audit trail.
+                            </p>
+                          </div>
+                        ) : (
+                          <>
+                            <p className={`text-lg font-extrabold font-mono ${actualPurchase.isRecorded ? 'text-slate-900 dark:text-white' : 'text-slate-400 dark:text-slate-500 italic'}`}>
+                              {actualPurchase.formattedPurchasePrice}
+                            </p>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                              {actualPurchase.isRecorded
+                                ? 'Verified procurement purchase amount'
+                                : 'Historical invoice price unavailable'}
+                            </p>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6">
                 <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 pb-3 mb-4">
                   <MonitorSmartphone className="w-5 h-5 text-blue-600" />
@@ -598,6 +716,7 @@ export default function AssetProfile() {
                   {renderEditableField("Department", "departmentId", "select", departments.map(d => ({ value: d.id, label: d.name })))}
                   {renderEditableField("Warranty Status", "warrantyStatus", "select", STANDARD_WARRANTY_STATUSES)}
                   {renderEditableField("Warranty Expiry", "warrantyExpiryDate", "date")}
+                  {renderEditableField("Purchase Date", "purchaseDate", "date")}
                   <div className="col-span-2 sm:col-span-3">
                     {renderEditableField("Remarks", "remarks", isEditing ? 'textarea' : 'text')}
                     {!isEditing && !asset.remarks && (
@@ -615,11 +734,13 @@ export default function AssetProfile() {
             </div>
           </div>
         ) : (
-          <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 max-w-3xl mx-auto w-full">
+          <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 max-w-5xl mx-auto w-full">
             {activeTab === 'timeline' ? (
               <AssetTimeline timeline={timeline} />
-            ) : (
+            ) : activeTab === 'audit' ? (
               <AssetAuditTrail auditLogs={auditLogs} loading={auditLoading} />
+            ) : (
+              <AssetSupportMaintenanceHistory supportHistory={supportHistory} navigate={navigate} />
             )}
           </div>
         )}
@@ -788,6 +909,90 @@ function AssetTimeline({ timeline }) {
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+function AssetSupportMaintenanceHistory({ supportHistory, navigate }) {
+  const tickets = supportHistory?.tickets || [];
+  const maintenanceLogs = supportHistory?.maintenanceLogs || [];
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
+        <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+          <div>
+            <h3 className="font-bold text-slate-800 dark:text-white">IT Help Desk Support History</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Support tickets linked to this asset for failure & repair-vs-replacement evaluation.
+            </p>
+          </div>
+          <span className="text-xs font-bold px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+            {tickets.length} Ticket(s)
+          </span>
+        </div>
+
+        {tickets.length === 0 ? (
+          <div className="p-10 text-center text-sm text-slate-500">No Help Desk support tickets recorded for this asset yet.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 dark:bg-slate-900/70 text-[10px] font-bold uppercase text-slate-500 border-b border-slate-200 dark:border-slate-700">
+                <tr>
+                  <th className="px-4 py-3">Ticket #</th>
+                  <th className="px-4 py-3">Reported Issue</th>
+                  <th className="px-4 py-3">Reported Date</th>
+                  <th className="px-4 py-3">IT Officer</th>
+                  <th className="px-4 py-3">Investigation Details</th>
+                  <th className="px-4 py-3">Action Taken</th>
+                  <th className="px-4 py-3">Repair / Replace</th>
+                  <th className="px-4 py-3">Resolution Date</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Cost (LKR)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                {tickets.map((t) => (
+                  <tr key={t.id} onClick={() => navigate(`/helpdesk/tickets/${t.id}`)} className="hover:bg-slate-50 dark:hover:bg-slate-700/40 cursor-pointer">
+                    <td className="px-4 py-3 font-mono font-bold text-blue-600 dark:text-blue-400 whitespace-nowrap">{t.ticketCode}</td>
+                    <td className="px-4 py-3 font-semibold text-slate-800 dark:text-white">{t.subject}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">{new Date(t.createdAt).toLocaleDateString()}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">{t.assignedTo?.fullName || 'Unassigned'}</td>
+                    <td className="px-4 py-3 max-w-xs">{t.investigationDetails || '—'}</td>
+                    <td className="px-4 py-3 max-w-xs">{t.actionTaken || '—'}</td>
+                    <td className="px-4 py-3 max-w-xs">{t.repairOrReplacementDetails || '—'}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">{t.resolvedAt ? new Date(t.resolvedAt).toLocaleDateString() : '—'}</td>
+                    <td className="px-4 py-3 font-bold whitespace-nowrap">{t.status}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">{t.repairCost != null ? t.repairCost.toFixed(2) : '0.00'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {maintenanceLogs.length > 0 && (
+        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
+          <div className="p-6 border-b border-slate-100 dark:border-slate-700">
+            <h3 className="font-bold text-slate-800 dark:text-white">Hardware Maintenance Logs ({maintenanceLogs.length})</h3>
+          </div>
+          <div className="divide-y divide-slate-100 dark:divide-slate-700">
+            {maintenanceLogs.map((m) => (
+              <div key={m.id} className="p-4 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <p className="font-bold text-slate-800 dark:text-white">{m.issueDescription}</p>
+                  <p className="text-slate-500 mt-0.5">Action: {m.repairAction || '—'} • Vendor: {m.vendor || 'Internal'}</p>
+                </div>
+                <div className="text-right">
+                  <span className="font-bold">{m.status}</span>
+                  <p className="text-slate-400">{m.repairCost != null ? `LKR ${m.repairCost.toFixed(2)}` : ''}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

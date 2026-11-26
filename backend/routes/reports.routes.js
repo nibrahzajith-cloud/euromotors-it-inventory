@@ -1,11 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prismaClient');
-const { authenticate, authorize } = require('../middleware/auth.middleware');
+const { authenticate, authorize, requireModule } = require('../middleware/auth.middleware');
 const ExcelJS = require('exceljs');
+const { resolveAssetValuation, resolveActualPurchasePrice } = require('../utils/marketValuation');
 
-// Helper to check for ADMIN role strictly for Reports
-const requireAdmin = authorize(['ADMIN']);
+const requireAdmin = [requireModule('MANAGEMENT_REPORTS'), authorize(['ADMIN', 'HEAD_OF_IT', 'IT_MANAGER'])];
 
 // 1. Fetch Assets for Reports
 router.get('/assets', authenticate, requireAdmin, async (req, res) => {
@@ -126,6 +126,8 @@ router.get('/download-all', authenticate, requireAdmin, async (req, res) => {
             { header: 'status', key: 'status', width: 20 },
             { header: 'brand', key: 'brand', width: 20 },
             { header: 'condition', key: 'condition', width: 20 },
+            { header: 'estimatedAssetValueLKR', key: 'estimatedAssetValueLKR', width: 25 },
+            { header: 'actualPurchasePriceLKR', key: 'actualPurchasePriceLKR', width: 25 },
             { header: 'remarks', key: 'remarks', width: 40 }
         ];
 
@@ -146,6 +148,8 @@ router.get('/download-all', authenticate, requireAdmin, async (req, res) => {
                 deptName = asset.department?.name || '';
             }
 
+            const estVal = resolveAssetValuation(asset);
+            const actualPurchase = resolveActualPurchasePrice(asset);
             const rowData = {
                 assignmentType: asset.assignmentType || '',
                 locationName: locName,
@@ -170,6 +174,8 @@ router.get('/download-all', authenticate, requireAdmin, async (req, res) => {
                 status: asset.status || '',
                 brand: asset.brand || '',
                 condition: asset.condition || '',
+                estimatedAssetValueLKR: estVal.formattedValue,
+                actualPurchasePriceLKR: actualPurchase.formattedPurchasePrice,
                 remarks: asset.remarks || ''
             };
             worksheet.addRow(rowData);

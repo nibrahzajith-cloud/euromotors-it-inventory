@@ -1,18 +1,22 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Monitor, Users, LayoutDashboard, Settings, Wrench, FileText, QrCode } from 'lucide-react';
+import { Search, Monitor, Users, LayoutDashboard, Settings, Wrench, FileText, QrCode, LifeBuoy, PlusCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
+import { hasModuleAccess, isHelpDeskManager } from '../utils/helpdeskApi';
 
 const COMMANDS = [
-  { id: 'dash', name: 'Go to Dashboard', icon: LayoutDashboard, path: '/' },
-  { id: 'assets', name: 'Manage Assets', icon: Monitor, path: '/assets' },
-  { id: 'add-asset', name: 'Register New Asset', icon: Monitor, path: '/assets/new' },
-  { id: 'employees', name: 'Manage Employees', icon: Users, path: '/employees' },
-  { id: 'maintenance', name: 'Maintenance & Diagnostics', icon: Wrench, path: '/maintenance' },
-  { id: 'reports', name: 'Analytics & Reports', icon: FileText, path: '/reports' },
-  { id: 'qrcode', name: 'QR Code Center', icon: QrCode, path: '/qr-code' },
-  { id: 'settings', name: 'System Settings', icon: Settings, path: '/settings' },
+  { id: 'hd-emp', name: 'Help Desk Employee Dashboard', icon: LifeBuoy, path: '/helpdesk/employee', moduleKey: 'HELP_DESK_EMPLOYEE_DASHBOARD' },
+  { id: 'hd-new', name: 'Create Support Request', icon: PlusCircle, path: '/helpdesk/new', moduleKey: 'IT_HELP_DESK' },
+  { id: 'hd-mgmt', name: 'Help Desk Management Dashboard', icon: LifeBuoy, path: '/helpdesk/management', moduleKey: 'HELP_DESK_MANAGEMENT_DASHBOARD' },
+  { id: 'dash', name: 'Go to Inventory Dashboard', icon: LayoutDashboard, path: '/', moduleKey: 'INVENTORY_DASHBOARD' },
+  { id: 'assets', name: 'Manage Assets', icon: Monitor, path: '/assets', moduleKey: 'IT_INVENTORY' },
+  { id: 'add-asset', name: 'Register New Asset', icon: Monitor, path: '/assets/add', moduleKey: 'ASSET_MANAGEMENT' },
+  { id: 'employees', name: 'Manage Employees', icon: Users, path: '/employees', moduleKey: 'IT_INVENTORY' },
+  { id: 'maintenance', name: 'Maintenance & Diagnostics', icon: Wrench, path: '/maintenance', moduleKey: 'ASSET_MANAGEMENT' },
+  { id: 'reports', name: 'Analytics & Reports', icon: FileText, path: '/reports', moduleKey: 'MANAGEMENT_REPORTS' },
+  { id: 'qrcode', name: 'QR Code Center', icon: QrCode, path: '/qr-code', moduleKey: 'ASSET_MANAGEMENT' },
+  { id: 'settings', name: 'System Settings', icon: Settings, path: '/settings', moduleKey: 'SYSTEM_SETTINGS' },
 ];
 
 export default function CommandPalette() {
@@ -59,8 +63,8 @@ export default function CommandPalette() {
   }, [isOpen, query]);
 
   const filteredCommands = COMMANDS.filter((cmd) => {
-    if (cmd.id === 'reports' && user?.role !== 'ADMIN') return false;
-    if (cmd.id === 'settings' && user?.role !== 'ADMIN') return false;
+    if (cmd.id === 'hd-mgmt' && !isHelpDeskManager(user)) return false;
+    if (cmd.moduleKey && !hasModuleAccess(user, cmd.moduleKey)) return false;
     return cmd.name.toLowerCase().includes(query.toLowerCase());
   });
 

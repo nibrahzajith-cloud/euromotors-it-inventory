@@ -3,64 +3,47 @@ const router = express.Router();
 const prisma = require('../prismaClient');
 const { authenticate, authorize } = require('../middleware/auth.middleware');
 const { logAudit } = require('../utils/logger');
+const { DEFAULT_GRANULAR_BY_ROLE, isAdminOrHeadOfIT } = require('../utils/rbac');
 
-// GET /api/permissions
-// Get the entire permission matrix for all roles
-router.get('/', authenticate, authorize(['ADMIN']), async (req, res) => {
+const SUPPORTED_ROLES = ['ADMIN', 'HEAD_OF_IT', 'IT_MANAGER', 'IT_OFFICER', 'EMPLOYEE', 'VIEWER', 'PORTAL_ACCESS'];
+
+router.get('/', authenticate, authorize(['ADMIN', 'HEAD_OF_IT']), async (req, res) => {
   try {
-    const roles = ['ADMIN', 'IT_OFFICER', 'VIEWER'];
     const dbPermissions = await prisma.rolePermission.findMany();
-    
-    const fullPermissions = {
-      VIEW_ASSETS: true, CREATE_ASSETS: true, EDIT_ASSETS: true, DELETE_ASSETS: true,
-      ASSIGN_ASSETS: true, TRANSFER_ASSETS: true, 
-      UPLOAD_ASSET_IMAGES: true, REPLACE_ASSET_IMAGES: true, DELETE_ASSET_IMAGES: true,
-      UPLOAD_ASSET_DOCUMENTS: true, DOWNLOAD_ASSET_DOCUMENTS: true, DELETE_ASSET_DOCUMENTS: true,
-      BULK_IMPORT_ASSETS: true, EXPORT_REPORTS: true, VIEW_STORAGE_STATS: true,
-      MANAGE_EMPLOYEES: true, MANAGE_DEPARTMENTS: true, MANAGE_LOCATIONS: true,
-      MANAGE_USERS: true, MANAGE_ROLES: true, VIEW_AUDIT_LOG: true, EXPORT_AUDIT_LOG: true, CONFIGURE_SYSTEM: true
-    };
-    const defaultPermissions = {
-      ADMIN: fullPermissions,
-      IT_OFFICER: fullPermissions,
-      VIEWER: fullPermissions
-    };
-
     const matrix = {};
-    for (const role of roles) {
-      const stored = dbPermissions.find(p => p.role === role);
-      matrix[role] = stored ? stored.permissions : defaultPermissions[role];
+    for (const role of SUPPORTED_ROLES) {
+      const stored = dbPermissions.find((p) => p.role === role);
+      const defaults = DEFAULT_GRANULAR_BY_ROLE[role] || DEFAULT_GRANULAR_BY_ROLE.EMPLOYEE;
+      matrix[role] = stored ? { ...defaults, ...stored.permissions } : defaults;
     }
-
     res.json(matrix);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// PUT /api/permissions/:role
-// Update permissions for a specific role
-router.put('/:role', authenticate, authorize(['ADMIN']), async (req, res) => {
+router.put('/:role', authenticate, authorize(['ADMIN', 'HEAD_OF_IT']), async (req, res) => {
   try {
     const { role } = req.params;
     const { permissions } = req.body;
 
-    if (!['ADMIN', 'IT_OFFICER', 'VIEWER'].includes(role)) {
+    if (!SUPPORTED_ROLES.includes(role)) {
       return res.status(400).json({ error: 'Invalid role' });
     }
 
-    // Ensure ADMIN always retains critical permissions
-    if (role === 'ADMIN') {
+    if (isAdminOrHeadOfIT(role)) {
       permissions.MANAGE_USERS = true;
       permissions.MANAGE_ROLES = true;
       permissions.VIEW_AUDIT_LOG = true;
       permissions.CONFIGURE_SYSTEM = true;
+      permissions.MANAGE_PURCHASE_PRICE = true;
+      permissions.VIEW_FINANCIAL_VALUATION = true;
     }
 
     const updated = await prisma.rolePermission.upsert({
       where: { role },
       update: { permissions },
-      create: { role, permissions }
+      create: { role, permissions },
     });
 
     await logAudit({
@@ -71,7 +54,7 @@ router.put('/:role', authenticate, authorize(['ADMIN']), async (req, res) => {
       entityId: role,
       severity: 'CRITICAL',
       newValue: permissions,
-      description: `Security role permissions modified for: ${role}`
+      description: `Security role permissions modified for: ${role}`,
     });
 
     res.json(updated);

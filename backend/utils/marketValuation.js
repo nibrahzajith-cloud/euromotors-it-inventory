@@ -103,19 +103,7 @@ function resolveAssetValuation(asset) {
     };
   }
 
-  // Rule 1: Actual Purchase Price in procurement / invoice records
-  if (asset.purchasePrice && Number(asset.purchasePrice) > 0) {
-    const val = Number(asset.purchasePrice);
-    return {
-      valueLKR: val,
-      formattedValue: `LKR ${val.toLocaleString('en-LK')}`,
-      source: 'Purchase Cost',
-      valuationDate: asset.purchaseDate ? new Date(asset.purchaseDate).toISOString() : (asset.valuationDate || new Date().toISOString()),
-      isPending: false
-    };
-  }
-
-  // Rule 2: Explicitly recorded valuation updated by IT Admin
+  // Rule 1: Explicitly recorded estimated valuation updated by IT Admin
   if (asset.estimatedValue && Number(asset.estimatedValue) > 0) {
     const val = Number(asset.estimatedValue);
     return {
@@ -199,11 +187,81 @@ function resolveAssetValuation(asset) {
 }
 
 /**
+ * Resolves the separate Actual Purchase Price (LKR) stored on an asset.
+ * Never alters or falls back to the automatic/estimated valuation.
+ * Returns "Not Recorded" whenever purchasePrice is absent, null, or <= 0.
+ *
+ * @param {Object} asset - Asset record
+ * @returns {Object} Purchase price display & numeric details
+ */
+function resolveActualPurchasePrice(asset = {}) {
+  const raw = asset?.purchasePrice;
+  if (raw !== null && raw !== undefined && raw !== '' && Number.isFinite(Number(raw)) && Number(raw) > 0) {
+    const val = Number(raw);
+    return {
+      purchasePriceLKR: val,
+      formattedPurchasePrice: `LKR ${val.toLocaleString('en-LK')}`,
+      isRecorded: true,
+    };
+  }
+
+  return {
+    purchasePriceLKR: null,
+    formattedPurchasePrice: 'Not Recorded',
+    isRecorded: false,
+  };
+}
+
+/**
+ * Resolves the asset value used for the Employee IT Asset Handover & Acknowledgment Form.
+ * Priority:
+ * 1. Actual Purchase Price (LKR), if recorded
+ * 2. Estimated Market Value (LKR), if Actual Purchase Price is unavailable
+ * Never double-counts both values for the same asset.
+ *
+ * @param {Object} asset - Asset record
+ * @returns {Object} Handover valuation value & explicit basis indicator
+ */
+function resolveHandoverAssetValue(asset = {}) {
+  const actualPurchase = resolveActualPurchasePrice(asset);
+  if (actualPurchase.isRecorded) {
+    return {
+      valueLKR: actualPurchase.purchasePriceLKR,
+      formattedValue: actualPurchase.formattedPurchasePrice,
+      source: 'Actual Purchase Price',
+      basis: 'ACTUAL_PURCHASE_PRICE',
+      isPending: false,
+    };
+  }
+
+  const estimatedValuation = resolveAssetValuation(asset);
+  if (!estimatedValuation.isPending && estimatedValuation.valueLKR > 0) {
+    return {
+      valueLKR: estimatedValuation.valueLKR,
+      formattedValue: estimatedValuation.formattedValue,
+      source: 'Estimated Market Value',
+      basis: 'ESTIMATED_MARKET_VALUE',
+      isPending: false,
+    };
+  }
+
+  return {
+    valueLKR: null,
+    formattedValue: 'Valuation Pending',
+    source: 'Valuation Pending',
+    basis: 'PENDING',
+    isPending: true,
+  };
+}
+
+/**
  * Calculates employee-level total valuation summary across all currently assigned hardware.
  * 
  * Rules:
  * - Excludes returned assets and prevents duplicate counting.
  * - If some assets lack values, shows "Known Total" and clearly notes incomplete valuation.
+ * - Keeps Estimated Asset Value (LKR) and Actual Purchase Price (LKR) strictly separate.
+ * - Also computes totalHandoverValueLKR using Actual Purchase Price priority (fallback to Estimated Market Value).
  * 
  * @param {Array} assignedAssets - List of active assigned assets for employee
  * @returns {Object} Comprehensive valuation summary
@@ -213,18 +271,51 @@ function computeEmployeeValuationSummary(assignedAssets = []) {
   let totalValueLKR = 0;
   let valuedCount = 0;
   let pendingCount = 0;
+  let totalPurchasePriceLKR = 0;
+  let purchasePriceRecordedCount = 0;
+  let purchasePriceUnrecordedCount = 0;
+
+  let totalHandoverValueLKR = 0;
+  let handoverValuedCount = 0;
+  let handoverPendingCount = 0;
+  let actualPriceUsedCount = 0;
+  let estimatedValueUsedCount = 0;
 
   const enrichedAssets = assets.map(asset => {
     const valuation = resolveAssetValuation(asset);
+    const actualPurchase = resolveActualPurchasePrice(asset);
+    const handoverValuation = resolveHandoverAssetValue(asset);
+
     if (!valuation.isPending && valuation.valueLKR > 0) {
       totalValueLKR += valuation.valueLKR;
       valuedCount++;
     } else {
       pendingCount++;
     }
+    if (actualPurchase.isRecorded) {
+      totalPurchasePriceLKR += actualPurchase.purchasePriceLKR;
+      purchasePriceRecordedCount++;
+    } else {
+      purchasePriceUnrecordedCount++;
+    }
+
+    if (!handoverValuation.isPending && handoverValuation.valueLKR > 0) {
+      totalHandoverValueLKR += handoverValuation.valueLKR;
+      handoverValuedCount++;
+      if (handoverValuation.basis === 'ACTUAL_PURCHASE_PRICE') {
+        actualPriceUsedCount++;
+      } else if (handoverValuation.basis === 'ESTIMATED_MARKET_VALUE') {
+        estimatedValueUsedCount++;
+      }
+    } else {
+      handoverPendingCount++;
+    }
+
     return {
       ...asset,
-      valuation
+      valuation,
+      actualPurchase,
+      handoverValuation
     };
   });
 
@@ -239,12 +330,41 @@ function computeEmployeeValuationSummary(assignedAssets = []) {
     totalLabel = 'VALUATION PENDING';
   }
 
+  const isCompleteHandoverValuation = handoverPendingCount === 0 && assets.length > 0;
+  const hasPartialHandoverValuation = handoverPendingCount > 0 && handoverValuedCount > 0;
+  const isAllHandoverPending = assets.length > 0 && handoverValuedCount === 0;
+
+  let handoverTotalLabel = 'TOTAL IT ASSET VALUE';
+  if (hasPartialHandoverValuation) {
+    handoverTotalLabel = 'KNOWN ASSET VALUE (PARTIAL)';
+  } else if (isAllHandoverPending) {
+    handoverTotalLabel = 'VALUATION PENDING';
+  }
+
   return {
     totalAssignedAssets: assets.length,
     valuedCount,
     pendingCount,
     totalValueLKR,
     formattedTotalLKR: totalValueLKR > 0 ? `LKR ${totalValueLKR.toLocaleString('en-LK')}` : (isAllPending ? 'Pending' : 'LKR 0'),
+    totalPurchasePriceLKR,
+    purchasePriceRecordedCount,
+    purchasePriceUnrecordedCount,
+    formattedTotalPurchasePriceLKR: purchasePriceRecordedCount > 0
+      ? `LKR ${totalPurchasePriceLKR.toLocaleString('en-LK')}`
+      : 'Not Recorded',
+    totalHandoverValueLKR,
+    formattedTotalHandoverLKR: totalHandoverValueLKR > 0
+      ? `LKR ${totalHandoverValueLKR.toLocaleString('en-LK')}`
+      : (isAllHandoverPending ? 'Pending' : 'LKR 0'),
+    handoverValuedCount,
+    handoverPendingCount,
+    actualPriceUsedCount,
+    estimatedValueUsedCount,
+    handoverTotalLabel,
+    isCompleteHandoverValuation,
+    hasPartialHandoverValuation,
+    isAllHandoverPending,
     totalLabel,
     isCompleteValuation,
     hasPartialValuation,
@@ -257,5 +377,7 @@ function computeEmployeeValuationSummary(assignedAssets = []) {
 module.exports = {
   SRI_LANKA_HARDWARE_BENCHMARKS,
   resolveAssetValuation,
+  resolveActualPurchasePrice,
+  resolveHandoverAssetValue,
   computeEmployeeValuationSummary
 };

@@ -492,6 +492,7 @@ export default function Settings() {
                      <li>Select the correct <strong>assignmentType</strong> (EMPLOYEE, DEPARTMENT, LOCATION, SHARED, STORE).</li>
                      <li>Ensure the <strong>Asset Code</strong> is unique for every row.</li>
                      <li>If a <strong>Serial Number</strong> is available, it must be unique across all records.</li>
+                     <li>Optional <strong>purchasePrice</strong> (Actual Purchase Price in LKR): administrators/authorized users can include numeric LKR values; leave blank if unavailable (&quot;Not Recorded&quot;) so existing recorded purchase prices are never overwritten.</li>
                      <li>Save the file as a CSV or Excel (.xlsx) file.</li>
                      <li>Click "Select File" below to upload.</li>
                      <li>Review any validation errors and correct them in your file before re-uploading.</li>

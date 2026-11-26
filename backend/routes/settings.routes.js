@@ -1,12 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prismaClient');
-const { authenticate, authorize } = require('../middleware/auth.middleware');
+const { authenticate, authorize, requireModule, requireAnyModule } = require('../middleware/auth.middleware');
 const { logAudit } = require('../utils/logger');
 
 router.use(authenticate);
 
-router.get('/', authorize(['ADMIN', 'IT_OFFICER']), async (req, res) => {
+router.get('/', requireAnyModule(['IT_INVENTORY', 'SYSTEM_SETTINGS']), authorize(['ADMIN', 'HEAD_OF_IT', 'IT_MANAGER', 'IT_OFFICER']), async (req, res) => {
   try {
     let settings = await prisma.systemSettings.findUnique({ where: { id: 'global' } });
     if (!settings) {
@@ -18,7 +18,7 @@ router.get('/', authorize(['ADMIN', 'IT_OFFICER']), async (req, res) => {
   }
 });
 
-router.put('/', authorize(['ADMIN']), async (req, res) => {
+router.put('/', requireModule('SYSTEM_SETTINGS'), authorize(['ADMIN', 'HEAD_OF_IT']), async (req, res) => {
   try {
     const { assetCodePrefix, warrantyPeriod } = req.body;
     let oldSettings = await prisma.systemSettings.findUnique({ where: { id: 'global' } });

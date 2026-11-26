@@ -1,14 +1,77 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prismaClient');
-const { authenticate } = require('../middleware/auth.middleware');
+const { authenticate, requireModule } = require('../middleware/auth.middleware');
 const memoryCache = require('../utils/cache');
+const { resolveAssetValuation, resolveActualPurchasePrice } = require('../utils/marketValuation');
+const { userHasPermission } = require('../utils/rbac');
 
-router.get('/summary', authenticate, async (req, res) => {
+async function computeFinancialSummary() {
+  const allAssets = await prisma.asset.findMany({
+    select: {
+      deviceType: true,
+      brand: true,
+      model: true,
+      processor: true,
+      purchasePrice: true,
+      estimatedValue: true,
+      valuationSource: true,
+      valuationDate: true,
+      purchaseDate: true,
+    }
+  });
+
+  let totalEstimatedValueLKR = 0;
+  let estimatedValuedCount = 0;
+  let estimatedPendingCount = 0;
+  let totalActualPurchasePriceLKR = 0;
+  let purchasePriceRecordedCount = 0;
+  let purchasePriceUnrecordedCount = 0;
+
+  for (const ast of allAssets) {
+    const est = resolveAssetValuation(ast);
+    if (!est.isPending && est.valueLKR > 0) {
+      totalEstimatedValueLKR += est.valueLKR;
+      estimatedValuedCount++;
+    } else {
+      estimatedPendingCount++;
+    }
+
+    const actual = resolveActualPurchasePrice(ast);
+    if (actual.isRecorded) {
+      totalActualPurchasePriceLKR += actual.purchasePriceLKR;
+      purchasePriceRecordedCount++;
+    } else {
+      purchasePriceUnrecordedCount++;
+    }
+  }
+
+  return {
+    totalAssets: allAssets.length,
+    totalEstimatedValueLKR,
+    formattedTotalEstimatedValueLKR: totalEstimatedValueLKR > 0 ? `LKR ${totalEstimatedValueLKR.toLocaleString('en-LK')}` : 'Pending',
+    estimatedValuedCount,
+    estimatedPendingCount,
+    totalActualPurchasePriceLKR,
+    formattedTotalActualPurchasePriceLKR: purchasePriceRecordedCount > 0 ? `LKR ${totalActualPurchasePriceLKR.toLocaleString('en-LK')}` : 'Not Recorded',
+    purchasePriceRecordedCount,
+    purchasePriceUnrecordedCount,
+  };
+}
+
+router.use(authenticate);
+router.use(requireModule('INVENTORY_DASHBOARD'));
+
+router.get('/summary', async (req, res) => {
   try {
+    const canViewFinancial = await userHasPermission(prisma, req.user, 'VIEW_FINANCIAL_VALUATION');
     if (req.query.refresh !== 'true') {
       const cached = memoryCache.get('dashboard:summary');
-      if (cached) return res.json(cached);
+      if (cached) {
+        const out = { ...cached };
+        if (!canViewFinancial) delete out.financialSummary;
+        return res.json(out);
+      }
     }
     const now = new Date();
     const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -102,21 +165,29 @@ router.get('/summary', authenticate, async (req, res) => {
         locations: distributionLoc.map(l => ({ name: l.name, id: l.id, count: l._count.assets }))
       },
       maintenance: repairingAssets,
-      warrantyAlerts: expiringSoon
+      warrantyAlerts: expiringSoon,
+      financialSummary: await computeFinancialSummary()
     };
 
     memoryCache.set('dashboard:summary', responseData, 20);
-    res.json(responseData);
+    const out = { ...responseData };
+    if (!canViewFinancial) delete out.financialSummary;
+    res.json(out);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.get('/advanced', authenticate, async (req, res) => {
+router.get('/advanced', async (req, res) => {
   try {
+    const canViewFinancial = await userHasPermission(prisma, req.user, 'VIEW_FINANCIAL_VALUATION');
     if (req.query.refresh !== 'true') {
       const cached = memoryCache.get('dashboard:advanced');
-      if (cached) return res.json(cached);
+      if (cached) {
+        const out = { ...cached };
+        if (!canViewFinancial) delete out.financialSummary;
+        return res.json(out);
+      }
     }
     const now = new Date();
     const todayStart = new Date(now.setHours(0, 0, 0, 0));
@@ -323,11 +394,14 @@ router.get('/advanced', authenticate, async (req, res) => {
         database: 'Connected',
         server: 'Optimal',
         backup: 'Completed 2h ago'
-      }
+      },
+      financialSummary: await computeFinancialSummary()
     };
 
     memoryCache.set('dashboard:advanced', advancedPayload, 20);
-    res.json(advancedPayload);
+    const out = { ...advancedPayload };
+    if (!canViewFinancial) delete out.financialSummary;
+    res.json(out);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

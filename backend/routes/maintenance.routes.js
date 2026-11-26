@@ -1,10 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prismaClient');
-const { authenticate, authorize } = require('../middleware/auth.middleware');
+const { authenticate, authorize, requireAnyModule } = require('../middleware/auth.middleware');
 const { logAudit, logAssetTimeline } = require('../utils/logger');
 
 router.use(authenticate);
+router.use(requireAnyModule(['IT_INVENTORY', 'ASSET_MANAGEMENT']));
 
 router.get('/', async (req, res) => {
   try {

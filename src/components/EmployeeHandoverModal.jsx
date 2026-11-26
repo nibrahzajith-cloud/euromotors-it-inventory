@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Printer, Download, X, CheckSquare, Square, Loader2, ShieldCheck, AlertCircle, Laptop } from 'lucide-react';
 import { downloadEmployeeHandoverPdf } from '../utils/pdfGenerator';
-import { computeEmployeeValuationSummary } from '../utils/marketValuation';
+import { computeEmployeeValuationSummary, resolveHandoverAssetValue } from '../utils/marketValuation';
 
 const _rawApi = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) || '/api';
 const API_URL = _rawApi.endsWith('/api') ? _rawApi : `${_rawApi.replace(/\/$/, '')}/api`;
@@ -432,10 +432,11 @@ export default function EmployeeHandoverModal({ employeeId, initialEmployee, ini
                           <th className="py-2 px-2">Asset Code</th>
                           <th className="py-2 px-2">Category</th>
                           <th className="py-2 px-2">Make & Model</th>
-                          <th className="py-2 px-2">Serial Number</th>
+                          <th className="py-2 px-2 whitespace-nowrap min-w-[130px]">Serial Number</th>
                           <th className="py-2 px-2 text-center">Condition</th>
-                          <th className="py-2 px-2 text-center">Assigned Date</th>
-                          <th className="py-2 px-2 text-right">Asset Value (LKR)</th>
+                          <th className="py-2 px-2 text-center whitespace-nowrap">Assigned Date</th>
+                          <th className="py-2 px-2 text-right whitespace-nowrap">Asset Value (LKR)</th>
+                          <th className="py-2 px-2 text-right whitespace-nowrap">Actual Purchase Price</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200">
@@ -444,30 +445,44 @@ export default function EmployeeHandoverModal({ employeeId, initialEmployee, ini
                             ? new Date(ast.assignedDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
                             : '—';
                           
-                          const valObj = ast.valuation || {};
-                          const formattedVal = valObj.formattedValue || (ast.estimatedValue ? `LKR ${Number(ast.estimatedValue).toLocaleString('en-LK')}` : 'Valuation Pending');
-                          const valSource = valObj.source || ast.valuationSource || 'Recorded Value';
+                          const calcVal = ast.handoverValuation || resolveHandoverAssetValue(ast);
+                          const formattedVal = calcVal.formattedValue || 'Valuation Pending';
+                          const valSource = calcVal.source || 'Estimated Market Value';
+                          const actualObj = ast.actualPurchase || {};
+                          const formattedPurchase = actualObj.formattedPurchasePrice || (
+                            ast.purchasePrice !== null && ast.purchasePrice !== undefined && Number(ast.purchasePrice) > 0
+                              ? `LKR ${Number(ast.purchasePrice).toLocaleString('en-LK')}`
+                              : 'Not Recorded'
+                          );
+                          const hasRecordedPurchase = actualObj.isRecorded ?? Boolean(ast.purchasePrice && Number(ast.purchasePrice) > 0);
 
                           return (
                             <tr key={ast.id || idx} className="hover:bg-slate-50/50 page-break-inside-avoid">
-                              <td className="py-2.5 px-2 text-center text-slate-500 font-mono text-[11px]">{idx + 1}</td>
-                              <td className="py-2.5 px-2 font-mono font-bold text-slate-900 whitespace-nowrap">{ast.assetCode}</td>
-                              <td className="py-2.5 px-2 text-slate-800 font-medium whitespace-nowrap">{ast.deviceType}</td>
-                              <td className="py-2.5 px-2 text-slate-800 font-medium">{ast.brand} {ast.model}</td>
-                              <td className="py-2.5 px-2 font-mono text-slate-700 text-[11px] whitespace-nowrap">{ast.serialNumber || 'N/A'}</td>
-                              <td className="py-2.5 px-2 text-center">
+                              <td className="py-2.5 px-2 text-center align-middle text-slate-500 font-mono text-[11px]">{idx + 1}</td>
+                              <td className="py-2.5 px-2 align-middle font-mono font-bold text-slate-900 whitespace-nowrap">{ast.assetCode}</td>
+                              <td className="py-2.5 px-2 align-middle text-slate-800 font-medium whitespace-nowrap">{ast.deviceType}</td>
+                              <td className="py-2.5 px-2 align-middle text-slate-800 font-medium">{ast.brand} {ast.model}</td>
+                              <td className="py-2.5 px-2 align-middle font-mono text-slate-700 text-[10.5px] whitespace-nowrap">{ast.serialNumber || 'N/A'}</td>
+                              <td className="py-2.5 px-2 align-middle text-center">
                                 <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-800 border border-slate-200">
                                   {ast.condition || 'Good'}
                                 </span>
                               </td>
-                              <td className="py-2.5 px-2 text-center text-slate-600 text-[11px] whitespace-nowrap">{asgDate}</td>
-                              <td className="py-2.5 px-2 text-right whitespace-nowrap">
+                              <td className="py-2.5 px-2 align-middle text-center text-slate-600 text-[11px] whitespace-nowrap">{asgDate}</td>
+                              <td className="py-2.5 px-2 align-middle text-right whitespace-nowrap">
                                 <span className="font-bold text-slate-900 font-mono text-xs">{formattedVal}</span>
-                                {valObj.isPending ? (
+                                {calcVal.isPending ? (
                                   <span className="block text-[9px] text-amber-600 font-medium">Pending Review</span>
+                                ) : calcVal.basis === 'ACTUAL_PURCHASE_PRICE' ? (
+                                  <span className="block text-[9px] text-emerald-700 font-semibold">(Actual Purchase Price)</span>
                                 ) : (
-                                  <span className="block text-[9px] text-slate-400 font-normal">({valSource})</span>
+                                  <span className="block text-[9px] text-blue-600 font-medium">({valSource})</span>
                                 )}
+                              </td>
+                              <td className="py-2.5 px-2 align-middle text-right whitespace-nowrap">
+                                <span className={`font-mono text-xs ${hasRecordedPurchase ? 'font-bold text-slate-900' : 'text-slate-400 italic'}`}>
+                                  {formattedPurchase}
+                                </span>
                               </td>
                             </tr>
                           );
@@ -479,34 +494,48 @@ export default function EmployeeHandoverModal({ employeeId, initialEmployee, ini
               </div>
 
               {/* Section 2B: TOTAL IT ASSET VALUE ALLOCATED TO EMPLOYEE */}
-              <div className="border-2 border-slate-900/20 bg-slate-50 rounded-xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 page-break-inside-avoid shadow-sm">
-                <div>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
-                    TOTAL IT ASSET VALUE ALLOCATED TO EMPLOYEE
-                  </h4>
-                  <p className="text-[11px] text-slate-600 mt-0.5">
-                    Employee: <strong>{emp.fullName || 'N/A'}</strong> ({emp.employeeCode || 'N/A'}) • Total Assigned Hardware: <strong>{assets.length}</strong>
-                  </p>
-                  {valSummary.pendingCount > 0 ? (
-                    <p className="text-[10px] text-amber-700 font-semibold mt-1 flex items-center gap-1">
-                      <span>⚠️ Incomplete Valuation: {valSummary.pendingCount} asset(s) pending valuation. Shown amount is Known Total.</span>
-                    </p>
-                  ) : (
-                    <p className="text-[10px] text-emerald-700 font-medium mt-1">
-                      ✓ Valuation Status: Complete & Verified as of {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                    </p>
-                  )}
-                </div>
+              {(() => {
+                const liveSummary = computeEmployeeValuationSummary(assets);
+                const pendingCnt = valSummary.handoverPendingCount ?? liveSummary.handoverPendingCount;
+                const actualCnt = valSummary.actualPriceUsedCount ?? liveSummary.actualPriceUsedCount;
+                const estCnt = valSummary.estimatedValueUsedCount ?? liveSummary.estimatedValueUsedCount;
+                const displayTotalLKR = valSummary.formattedTotalHandoverLKR || liveSummary.formattedTotalHandoverLKR || 'LKR 0';
+                const displayTotalLabel = valSummary.handoverTotalLabel || liveSummary.handoverTotalLabel || 'TOTAL IT ASSET VALUE';
 
-                <div className="text-left sm:text-right shrink-0 bg-white sm:bg-transparent p-3 sm:p-0 rounded-lg border sm:border-none border-slate-200 w-full sm:w-auto">
-                  <span className="block text-[10px] uppercase font-bold tracking-wider text-slate-500">
-                    {valSummary.totalLabel || 'Total Asset Value (LKR)'}
-                  </span>
-                  <span className="text-lg sm:text-xl font-black text-slate-950 font-mono">
-                    {valSummary.formattedTotalLKR || (valSummary.totalValueLKR ? `LKR ${Number(valSummary.totalValueLKR).toLocaleString('en-LK')}` : 'LKR 0')}
-                  </span>
-                </div>
-              </div>
+                return (
+                  <div className="border-2 border-slate-900/20 bg-slate-50 rounded-xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 page-break-inside-avoid shadow-sm">
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                        TOTAL IT ASSET VALUE ALLOCATED TO EMPLOYEE
+                      </h4>
+                      <p className="text-[11px] text-slate-600 mt-0.5">
+                        Employee: <strong>{emp.fullName || 'N/A'}</strong> ({emp.employeeCode || 'N/A'}) • Total Assigned Hardware: <strong>{assets.length}</strong>
+                      </p>
+                      <p className="text-[10px] text-slate-600 mt-0.5">
+                        Basis: {actualCnt} Actual Purchase Price • {estCnt} Estimated Market Value (Actual Purchase Price takes priority when recorded)
+                      </p>
+                      {pendingCnt > 0 ? (
+                        <p className="text-[10px] text-amber-700 font-semibold mt-1 flex items-center gap-1">
+                          <span>⚠️ Incomplete Valuation: {pendingCnt} asset(s) pending valuation. Shown amount is Known Total.</span>
+                        </p>
+                      ) : (
+                        <p className="text-[10px] text-emerald-700 font-medium mt-1">
+                          ✓ Valuation Status: Complete & Verified as of {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="text-left sm:text-right shrink-0 bg-white sm:bg-transparent p-3 sm:p-0 rounded-lg border sm:border-none border-slate-200 w-full sm:w-auto">
+                      <span className="block text-[10px] uppercase font-bold tracking-wider text-slate-500">
+                        {displayTotalLabel}
+                      </span>
+                      <span className="text-lg sm:text-xl font-black text-slate-950 font-mono">
+                        {displayTotalLKR}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Section 3: Consolidated Accessories Checklist */}
               {assets.length > 0 && (

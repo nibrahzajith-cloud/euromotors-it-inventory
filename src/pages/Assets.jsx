@@ -10,6 +10,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { exportToCSV, exportToPDF } from '../utils/exportUtils';
+import { resolveAssetValuation, resolveActualPurchasePrice } from '../utils/marketValuation';
 import CopyButton from '../components/CopyButton';
 import AssetUsageHistoryModal from '../components/AssetUsageHistoryModal';
 import { safeSetItem, safeGetItem, purgeBulkyCaches } from '../utils/storage';
@@ -441,6 +442,9 @@ export default function Assets() {
         ? (previousAssignment?.employee ? `${previousAssignment.employee.fullName} (${previousAssignment.employee.employeeCode || 'EMP'})` : 'No Previous Assignment')
         : (employees.find(e => e.id === a.assignedEmployeeId)?.fullName || 'None');
 
+      const estVal = resolveAssetValuation(a);
+      const actualPurchase = resolveActualPurchasePrice(a);
+
       return {
         'Asset Code': a.assetCode,
         'Device Category': getDeviceCategoryKey(a.deviceType),
@@ -454,6 +458,8 @@ export default function Assets() {
         'IP Address': a.ipAddress || 'DHCP/None',
         'MAC Address': a.macAddress || 'N/A',
         'Purchase Date': a.purchaseDate ? new Date(a.purchaseDate).toLocaleDateString() : 'N/A',
+        'Estimated Asset Value (LKR)': estVal.formattedValue,
+        'Actual Purchase Price (LKR)': actualPurchase.formattedPurchasePrice,
         'Location': locations.find(l => l.id === a.locationId)?.name || 'Unmapped',
         'Department': departments.find(d => d.id === a.departmentId)?.name || 'Not Scoped'
       };

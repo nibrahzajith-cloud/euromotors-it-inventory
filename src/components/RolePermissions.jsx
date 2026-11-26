@@ -8,6 +8,7 @@ const API_URL = _rawApi.endsWith('/api') ? _rawApi : `${_rawApi.replace(/\/$/, '
 
 const PERMISSION_GROUPS = {
   'Asset Management': ['VIEW_ASSETS', 'CREATE_ASSETS', 'EDIT_ASSETS', 'DELETE_ASSETS', 'ASSIGN_ASSETS', 'TRANSFER_ASSETS'],
+  'Financial & Valuation': ['VIEW_FINANCIAL_VALUATION', 'MANAGE_PURCHASE_PRICE'],
   'Asset Media & Documents': ['UPLOAD_ASSET_IMAGES', 'REPLACE_ASSET_IMAGES', 'DELETE_ASSET_IMAGES', 'UPLOAD_ASSET_DOCUMENTS', 'DOWNLOAD_ASSET_DOCUMENTS', 'DELETE_ASSET_DOCUMENTS'],
   'System Data': ['BULK_IMPORT_ASSETS', 'EXPORT_REPORTS', 'VIEW_STORAGE_STATS'],
   'Organization': ['MANAGE_EMPLOYEES', 'MANAGE_DEPARTMENTS', 'MANAGE_LOCATIONS'],
@@ -94,7 +95,10 @@ export default function RolePermissions() {
 
   const roleConfigs = [
     { id: 'ADMIN', name: 'Administrator', desc: 'Full access to all system modules, configurations, and exports.' },
-    { id: 'IT_OFFICER', name: 'IT Support', desc: 'Can manage assets, log maintenance, and assign equipment.' },
+    { id: 'HEAD_OF_IT', name: 'Head of IT', desc: 'Complete administrative access across IT Inventory and IT Help Desk.' },
+    { id: 'IT_MANAGER', name: 'IT Manager', desc: 'Manage all Help Desk tickets, SLA deadlines, officer assignments, and reports.' },
+    { id: 'IT_OFFICER', name: 'IT Officer / Technician', desc: 'Investigate assigned tickets, manage assets, log maintenance, and assign equipment.' },
+    { id: 'EMPLOYEE', name: 'Employee', desc: 'Help Desk self-service access only (own support requests and assigned assets).' },
     { id: 'VIEWER', name: 'Viewer', desc: 'Read-only access to Dashboards and Reports.' }
   ];
 
