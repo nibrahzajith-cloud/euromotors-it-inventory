@@ -174,6 +174,7 @@ async function applyMigrations() {
       ADD COLUMN IF NOT EXISTS "departmentId" TEXT,
       ADD COLUMN IF NOT EXISTS "locationId" TEXT,
       ADD COLUMN IF NOT EXISTS "assetId" TEXT,
+      ADD COLUMN IF NOT EXISTS "assignedToId" TEXT,
       ADD COLUMN IF NOT EXISTS "assignedById" TEXT,
       ADD COLUMN IF NOT EXISTS "assignedAt" TIMESTAMP(3),
       ADD COLUMN IF NOT EXISTS "investigationDetails" TEXT,
@@ -200,6 +201,7 @@ async function applyMigrations() {
       ADD COLUMN IF NOT EXISTS "employeeFeedback" TEXT,
       ADD COLUMN IF NOT EXISTS "satisfactionRating" INTEGER,
       ADD COLUMN IF NOT EXISTS "employeeRemarks" TEXT,
+      ADD COLUMN IF NOT EXISTS "closedAt" TIMESTAMP(3),
       ADD COLUMN IF NOT EXISTS "reopenedAt" TIMESTAMP(3),
       ADD COLUMN IF NOT EXISTS "reopenCount" INTEGER NOT NULL DEFAULT 0;`,
     `CREATE TABLE IF NOT EXISTS "TicketStatusHistory" (
@@ -362,6 +364,6 @@ async function applyMigrations() {
   console.log('[MIGRATION] Database migrations and performance indexing complete.');
 }
 
-applyMigrations.MIGRATION_VERSION = '2026.11.26-helpdesk-v1.0';
+applyMigrations.MIGRATION_VERSION = '2026.11.26-helpdesk-v1.1';
 
 module.exports = applyMigrations;

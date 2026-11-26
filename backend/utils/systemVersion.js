@@ -72,6 +72,10 @@ const REQUIRED_COLUMNS = [
   { table: 'User', column: 'modulePermissions' },
   { table: 'HelpDeskSettings', column: 'portalConfig' },
   { table: 'SupportTicket', column: 'submittedByUserId' },
+  { table: 'SupportTicket', column: 'assignedToId' },
+  { table: 'SupportTicket', column: 'closedAt' },
+  { table: 'SupportTicket', column: 'categoryId' },
+  { table: 'SupportTicket', column: 'slaStatus' },
 ];
 
 async function getDatabaseSchemaStatus(prisma) {
